@@ -15,7 +15,7 @@ export default function Home() {
           </div>
           <div className="flex items-center space-x-4">
             <Link 
-              href="/auth/login"
+              href="/auth/signup"
               className="text-foreground hover:text-primary transition-colors"
             >
               Sign In
