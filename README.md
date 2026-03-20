@@ -1,4 +1,4 @@
-# AI Career Navigator
+# AI Career Navigator-2026
 
 Your personal AI-powered career mentor that reads your real GitHub, LeetCode, LinkedIn, and Resume profiles to provide personalized career guidance.
 
