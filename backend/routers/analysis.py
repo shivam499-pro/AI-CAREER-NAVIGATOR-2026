@@ -1,96 +1,204 @@
-from fastapi import APIRouter, HTTPException, Header
+"""
+Analysis Router
+Handles AI analysis endpoints
+"""
+from fastapi import APIRouter, HTTPException, Header, Depends
 from typing import Optional
 from pydantic import BaseModel
-from services import gemini_service
-import uuid
+from services import github_service, leetcode_service, gemini_service
+from supabase import create_client
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 router = APIRouter()
 
+# Initialize Supabase client
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+supabase = create_client(supabase_url, supabase_key)
+
+
+def get_current_user(authorization: Optional[str] = Header(None)):
+    """Get current user from authorization header."""
+    if not authorization:
+        return None
+    
+    try:
+        # Extract token from "Bearer <token>"
+        token = authorization.replace("Bearer ", "")
+        user = supabase.auth.get_user(token)
+        return user.user
+    except Exception:
+        return None
+
+
+class StartAnalysisRequest(BaseModel):
+    user_id: str
+
+
 @router.post("/start")
 async def start_analysis(
+    request: StartAnalysisRequest,
     authorization: Optional[str] = Header(None)
 ):
     """
     Start the AI analysis process for the user's profiles.
+    1. Get user profile data from Supabase
+    2. Fetch GitHub data
+    3. Fetch LeetCode data  
+    4. Run AI analysis
+    5. Save results to database
     """
     try:
-        # Generate analysis ID
-        analysis_id = str(uuid.uuid4())
+        user_id = request.user_id
         
-        # In production, this would trigger the full analysis pipeline
-        # For now, return the analysis ID
+        # Get user's profile from Supabase
+        profile_response = supabase.table("profiles").select("*").eq("user_id", user_id).execute()
         
-        return {
-            "analysis_id": analysis_id,
-            "status": "started",
-            "message": "Analysis started. Use the analysis_id to check status."
+        if not profile_response.data:
+            raise HTTPException(status_code=404, detail="User profile not found")
+        
+        profile = profile_response.data[0]
+        github_username = profile.get("github_username")
+        leetcode_username = profile.get("leetcode_username")
+        
+        # Fetch GitHub data
+        github_data = {}
+        if github_username:
+            github_data = await github_service.get_full_github_data(github_username)
+        
+        # Fetch LeetCode data
+        leetcode_data = {}
+        if leetcode_username:
+            leetcode_data = await leetcode_service.get_full_leetcode_data(leetcode_username)
+        
+        # Normalize github_data — handle both list and dict formats
+        if isinstance(github_data, list):
+            github_data = github_data[0] if github_data else {}
+        if not isinstance(github_data, dict):
+            github_data = {}
+        
+        # Normalize leetcode_data — handle both list and dict formats
+        if isinstance(leetcode_data, list):
+            leetcode_data = leetcode_data[0] if leetcode_data else {}
+        if not isinstance(leetcode_data, dict):
+            leetcode_data = {}
+        
+        # Run AI analysis
+        analysis = gemini_service.analyze_profile(github_data, leetcode_data)
+        
+        # Generate career paths
+        career_paths = gemini_service.generate_career_paths(analysis, github_data, leetcode_data)
+        
+        # Get top career path for skill gaps and roadmap
+        target_career = "Full Stack Developer"  # Default
+        if career_paths and isinstance(career_paths, list) and len(career_paths) > 0:
+            if isinstance(career_paths[0], dict):
+                target_career = career_paths[0].get("name", target_career)
+        
+        # Generate skill gaps
+        skill_gaps = gemini_service.generate_skill_gaps(analysis, target_career, github_data)
+        
+        # Generate roadmap
+        roadmap = gemini_service.generate_roadmap(analysis, target_career)
+        
+        # Save to database
+        analysis_record = {
+            "user_id": user_id,
+            "github_data": github_data,
+            "leetcode_data": leetcode_data,
+            "analysis": analysis,
+            "career_paths": career_paths,
+            "skill_gaps": skill_gaps,
+            "roadmap": roadmap,
+            "experience_level": analysis.get("experience_level", "Intermediate"),
+            "strengths": analysis.get("strengths", []),
         }
         
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/{analysis_id}")
-async def get_analysis(
-    analysis_id: str,
-    authorization: Optional[str] = Header(None)
-):
-    """
-    Get the results of an analysis.
-    """
-    try:
-        # In production, fetch from database
-        # For now, return mock data
+        # Insert or update analysis
+        # First check if exists
+        existing = supabase.table("analyses").select("id").eq("user_id", user_id).execute()
+        
+        if existing.data:
+            # Update existing
+            supabase.table("analyses").update(analysis_record).eq("user_id", user_id).execute()
+        else:
+            # Insert new
+            supabase.table("analyses").insert(analysis_record).execute()
         
         return {
-            "analysis_id": analysis_id,
             "status": "completed",
-            "strengths": [
-                "Strong JavaScript/TypeScript skills",
-                "Good project portfolio",
-                "Active GitHub contributions"
-            ],
-            "weaknesses": [
-                "Limited cloud experience",
-                "No DevOps certifications"
-            ],
-            "experience_level": "Intermediate",
-            "career_paths": [
-                {
-                    "name": "Full Stack Developer",
-                    "match_percentage": 85,
-                    "reason": "Strong frontend skills with growing backend experience"
-                },
-                {
-                    "name": "Data Scientist",
-                    "match_percentage": 60,
-                    "reason": "Good analytical skills, needs more Python/Math background"
-                }
-            ],
-            "skill_gap": [
-                {"skill": "AWS", "have": False, "priority": 1, "resources": []},
-                {"skill": "Docker", "have": True, "priority": 2, "resources": []},
-                {"skill": "PostgreSQL", "have": True, "priority": 3, "resources": []}
-            ]
+            "analysis": analysis,
+            "career_paths": career_paths,
+            "skill_gaps": skill_gaps,
+            "roadmap": roadmap,
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+@router.get("/results/{user_id}")
+async def get_analysis_results(
+    user_id: str,
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Get saved analysis results for a user.
+    """
+    try:
+        response = supabase.table("analyses").select("*").eq("user_id", user_id).execute()
+        
+        if not response.data:
+            return {
+                "status": "no_analysis",
+                "message": "No analysis found. Please run analysis first."
+            }
+        
+        analysis = response.data[0]
+        
+        return {
+            "status": "found",
+            "analysis": analysis.get("analysis"),
+            "career_paths": analysis.get("career_paths"),
+            "skill_gaps": analysis.get("skill_gaps"),
+            "roadmap": analysis.get("roadmap"),
+            "experience_level": analysis.get("experience_level"),
+            "strengths": analysis.get("strengths"),
         }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/roadmap")
-async def generate_roadmap(
-    target_career: str,
+
+@router.get("/status/{user_id}")
+async def check_analysis_status(
+    user_id: str,
     authorization: Optional[str] = Header(None)
 ):
     """
-    Generate a career roadmap for the target career path.
+    Check if analysis exists for a user.
     """
     try:
-        roadmap = gemini_service.generate_roadmap(analysis={}, target_career=target_career)
+        response = supabase.table("analyses").select("id, experience_level, created_at").eq("user_id", user_id).execute()
+        
+        if response.data:
+            return {
+                "status": "completed",
+                "exists": True,
+                "experience_level": response.data[0].get("experience_level"),
+                "created_at": response.data[0].get("created_at"),
+            }
         
         return {
-            "target_career": target_career,
-            "roadmap": roadmap
+            "status": "not_started",
+            "exists": False,
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"status": "error", "exists": False}

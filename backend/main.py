@@ -1,13 +1,12 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
 
-# Import routers
-from routers import profile, analysis, jobs, auth
-
-# Load environment variables
+# Load environment variables FIRST — before any local imports
 load_dotenv()
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from routers import profile, analysis, jobs, auth
 
 # Create FastAPI app
 app = FastAPI(

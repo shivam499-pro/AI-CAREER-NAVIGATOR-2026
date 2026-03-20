@@ -4,6 +4,10 @@ Aggregates job listings from various sources
 """
 import httpx
 import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 async def search_jobs(query: str, location: str = None) -> list:
     """
