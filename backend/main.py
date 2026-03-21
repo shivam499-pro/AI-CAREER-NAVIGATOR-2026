@@ -6,7 +6,7 @@ load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import profile, analysis, jobs, auth, resume, profile_enhanced
+from routers import profile, analysis, jobs, auth, resume, profile_enhanced, interview
 
 # Create FastAPI app
 app = FastAPI(
@@ -33,6 +33,7 @@ app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
 app.include_router(resume.router, prefix="/api/resume", tags=["Resume"])
 app.include_router(profile_enhanced.router, prefix="/api/profile", tags=["Profile Enhanced"])
+app.include_router(interview.router, prefix="/api/interview", tags=["Interview"])
 
 @app.get("/")
 async def root():

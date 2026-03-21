@@ -235,3 +235,81 @@ def generate_roadmap(analysis: dict, career_path: str, duration_months: int = 6,
         "duration_months": duration_months,
         "milestones": []
     }
+
+
+def generate_interview_questions(profile: dict, career_path: str, difficulty: str, resume_text: str = "") -> list:
+    prompt = f"""You are an expert technical interviewer.
+    
+Generate exactly 5 interview questions for a candidate applying for: {career_path}
+Difficulty level: {difficulty}
+
+Candidate profile:
+- Skills: {profile.get('extra_skills', [])}
+- Experience: {profile.get('experience', [])}
+- Projects from resume: {resume_text[:500] if resume_text else 'Not provided'}
+
+Return ONLY a JSON array with exactly 5 objects. Each object must have these exact keys:
+"id" (number 1-5), "question" (string), "type" (one of: technical, behavioral, dsa, system_design, project_based), "difficulty" (string), "hint" (string)
+
+Example format:
+[
+  {{"id": 1, "question": "Explain OOP concepts", "type": "technical", "difficulty": "{difficulty}", "hint": "Think about the 4 pillars"}}
+]
+
+Return ONLY the JSON array, no other text."""
+
+    try:
+        text = _generate(prompt)
+        print(f"Raw Groq response: {text[:300]}")
+        questions = json.loads(_clean_json(text))
+        print(f"Parsed questions count: {len(questions)}")
+        if isinstance(questions, list) and len(questions) > 0:
+            return questions
+        return []
+    except Exception as e:
+        print(f"Error generating questions: {e}")
+        return [
+            {"id": 1, "question": f"Tell me about your experience with {career_path}", "type": "behavioral", "difficulty": difficulty, "hint": "Focus on specific projects"},
+            {"id": 2, "question": "What are the SOLID principles?", "type": "technical", "difficulty": difficulty, "hint": "There are 5 principles"},
+            {"id": 3, "question": "Explain your most challenging project", "type": "project_based", "difficulty": difficulty, "hint": "Mention the problem, solution, and outcome"},
+            {"id": 4, "question": "How would you design a URL shortener?", "type": "system_design", "difficulty": difficulty, "hint": "Think about scalability"},
+            {"id": 5, "question": "Reverse a linked list", "type": "dsa", "difficulty": difficulty, "hint": "Think about iterative vs recursive approach"}
+        ]
+
+
+def evaluate_interview_answer(question: str, answer: str, career_path: str) -> dict:
+    """
+    Evaluate a user's interview answer and provide feedback.
+    """
+    prompt = f"""
+    You are an expert interviewer evaluating a candidate answer for {career_path} role.
+    
+    QUESTION: {question}
+    
+    CANDIDATE ANSWER: {answer}
+    
+    Evaluate the answer and provide structured feedback:
+    - Score: 1-10 (how good is the answer)
+    - Good points: What the candidate did well (array of strings)
+    - Missing points: What was missing or could be improved (array of strings)
+    - Model answer: A better example answer (2-3 sentences)
+    - Tip: One actionable tip for improvement
+    
+    Return ONLY valid JSON like:
+    {{"score": 7, "good_points": ["point1", "point2"], "missing_points": ["point1"], "model_answer": "...", "tip": "..."}}
+    """
+    
+    try:
+        result = json.loads(_clean_json(_generate(prompt)))
+        # Ensure score is in valid range
+        if isinstance(result, dict):
+            result["score"] = max(1, min(10, result.get("score", 5)))
+        return result
+    except Exception as e:
+        return {
+            "score": 5,
+            "good_points": ["You attempted the question"],
+            "missing_points": ["Could not evaluate properly"],
+            "model_answer": "Failed to generate model answer",
+            "tip": "Try to structure your answers better" if answer else "Provide an answer to get feedback"
+        }
