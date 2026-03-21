@@ -60,11 +60,11 @@ export default function JobsPage() {
       if (analysisData) {
         setAnalysis(analysisData)
         
-        // Extract target career from career paths
+        // Extract target career from career paths - check nested structure
         const careerPaths = analysisData.career_paths || []
         if (Array.isArray(careerPaths) && careerPaths.length > 0) {
           const topPath = careerPaths[0]
-          const careerName = topPath.name || topPath.career_name || 'Full Stack Developer'
+          const careerName = topPath?.name || topPath?.career_name || 'Full Stack Developer'
           setTargetCareer(careerName)
         }
       }
@@ -207,10 +207,33 @@ export default function JobsPage() {
               {targetCareer}
             </div>
             <p className="text-white/80">
-              Based on your skills and career goals
+              Based on your analysis, you are best matched for: {targetCareer}
             </p>
           </div>
         </div>
+
+        {/* Career Paths from Analysis */}
+        {analysis?.career_paths && analysis.career_paths.length > 0 && (
+          <div className="mb-10">
+            <h3 className="text-xl font-bold text-foreground mb-4">Your Recommended Career Paths</h3>
+            <div className="grid md:grid-cols-4 gap-4">
+              {analysis.career_paths.slice(0, 4).map((path: any, i: number) => (
+                <div 
+                  key={i}
+                  className={`bg-card rounded-xl p-4 border-2 ${
+                    i === 0 ? 'border-[#6C3FC8]' : 'border-gray-200'
+                  }`}
+                >
+                  {i === 0 && (
+                    <span className="text-xs font-bold text-[#6C3FC8] mb-1 block">BEST MATCH</span>
+                  )}
+                  <h4 className="font-bold text-foreground">{path.name || path.career_name}</h4>
+                  <p className="text-sm text-primary font-semibold">{path.match_percentage}% match</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Section 1: Top Tech Companies */}
         <section className="mb-10">
@@ -330,7 +353,7 @@ export default function JobsPage() {
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Experience Level</p>
                   <p className="font-medium text-foreground">
-                    {analysis?.experience_level || 'Not analyzed yet'}
+                    {analysis?.analysis?.experience_level || analysis?.experience_level || 'Not analyzed yet'}
                   </p>
                 </div>
               </div>
