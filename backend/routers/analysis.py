@@ -64,6 +64,7 @@ async def start_analysis(
         profile = profile_response.data[0]
         github_username = profile.get("github_username")
         leetcode_username = profile.get("leetcode_username")
+        resume_text = profile.get("resume_text", "")
         
         # Fetch GitHub data
         github_data = {}
@@ -88,10 +89,10 @@ async def start_analysis(
             leetcode_data = {}
         
         # Run AI analysis
-        analysis = gemini_service.analyze_profile(github_data, leetcode_data)
+        analysis = gemini_service.analyze_profile(github_data, leetcode_data, resume_text)
         
         # Generate career paths
-        career_paths = gemini_service.generate_career_paths(analysis, github_data, leetcode_data)
+        career_paths = gemini_service.generate_career_paths(analysis, github_data, leetcode_data, resume_text)
         
         # Get top career path for skill gaps and roadmap
         target_career = "Full Stack Developer"  # Default
@@ -100,10 +101,10 @@ async def start_analysis(
                 target_career = career_paths[0].get("name", target_career)
         
         # Generate skill gaps
-        skill_gaps = gemini_service.generate_skill_gaps(analysis, target_career, github_data)
+        skill_gaps = gemini_service.generate_skill_gaps(analysis, target_career, github_data, resume_text)
         
         # Generate roadmap
-        roadmap = gemini_service.generate_roadmap(analysis, target_career)
+        roadmap = gemini_service.generate_roadmap(analysis, target_career, 6, resume_text)
         
         # Save to database
         analysis_record = {

@@ -53,7 +53,15 @@ def _generate(prompt: str) -> str:
     return response.choices[0].message.content
 
 
-def analyze_profile(github_data: dict, leetcode_data: dict) -> dict:
+def analyze_profile(github_data: dict, leetcode_data: dict, resume_text: str = "") -> dict:
+    # Build resume section if available
+    resume_section = ""
+    if resume_text:
+        resume_section = f"""
+    RESUME DATA:
+    {resume_text[:2000]}
+    """
+    
     prompt = f"""
     You are an expert career analyst. Analyze the following profile data and provide career insights.
     
@@ -62,6 +70,7 @@ def analyze_profile(github_data: dict, leetcode_data: dict) -> dict:
     
     LEETCODE DATA:
     {json.dumps(leetcode_data, indent=2)}
+    {resume_section}
     
     Provide a JSON response with:
     1. "strengths": Array of 5-7 key technical strengths
@@ -83,7 +92,15 @@ def analyze_profile(github_data: dict, leetcode_data: dict) -> dict:
         }
 
 
-def generate_career_paths(analysis: dict, github_data: dict, leetcode_data: dict) -> list:
+def generate_career_paths(analysis: dict, github_data: dict, leetcode_data: dict, resume_text: str = "") -> list:
+    # Build resume section if available
+    resume_section = ""
+    if resume_text:
+        resume_section = f"""
+    RESUME DATA:
+    {resume_text[:2000]}
+    """
+    
     prompt = f"""
     You are an expert career counselor. Recommend career paths based on this profile.
     
@@ -92,6 +109,7 @@ def generate_career_paths(analysis: dict, github_data: dict, leetcode_data: dict
     
     GITHUB DATA:
     {json.dumps(github_data, indent=2)}
+    {resume_section}
     
     Recommend 3-5 career paths. For each provide:
     - "name": Career path name
@@ -109,18 +127,27 @@ def generate_career_paths(analysis: dict, github_data: dict, leetcode_data: dict
         return [{"error": f"Failed to generate career paths: {str(e)}"}]
 
 
-def generate_skill_gaps(analysis: dict, career_path: str, github_data: dict) -> list:
+def generate_skill_gaps(analysis: dict, career_path: str, github_data: dict, resume_text: str = "") -> list:
     current_skills = []
     if isinstance(github_data, dict):
         lang_stats = github_data.get("language_stats", {})
         current_skills = list(lang_stats.keys())[:10]
 
+    # Build resume section if available
+    resume_section = ""
+    if resume_text:
+        resume_section = f"""
+    RESUME DATA:
+    {resume_text[:2000]}
+    """
+    
     prompt = f"""
     You are an expert tech recruiter. Analyze skill gaps for someone wanting to become a {career_path}.
     
     CURRENT SKILLS: {current_skills}
     USER ANALYSIS: {json.dumps(analysis, indent=2)}
     TARGET CAREER: {career_path}
+    {resume_section}
     
     Provide a JSON array of skills with:
     - "skill": Skill name
@@ -136,13 +163,22 @@ def generate_skill_gaps(analysis: dict, career_path: str, github_data: dict) -> 
         return [{"error": f"Failed to generate skill gaps: {str(e)}"}]
 
 
-def generate_roadmap(analysis: dict, career_path: str, duration_months: int = 6) -> dict:
+def generate_roadmap(analysis: dict, career_path: str, duration_months: int = 6, resume_text: str = "") -> dict:
+    # Build resume section if available
+    resume_section = ""
+    if resume_text:
+        resume_section = f"""
+    RESUME DATA:
+    {resume_text[:2000]}
+    """
+    
     prompt = f"""
     You are an expert career coach. Create a roadmap for someone to become a {career_path}.
     
     USER ANALYSIS: {json.dumps(analysis, indent=2)}
     TARGET CAREER: {career_path}
     DURATION: {duration_months} months
+    {resume_section}
     
     Provide JSON with:
     - "target_career": The career path

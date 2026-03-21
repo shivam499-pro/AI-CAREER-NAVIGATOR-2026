@@ -88,8 +88,8 @@ export default function AnalysisPage() {
       console.log('API Response (GET /results):', JSON.stringify(data, null, 2))
 
       if (data.status === 'found') {
-        // Extract strengths - nested at data.analysis.analysis.strengths
-        let strengths = data.analysis?.analysis?.strengths || data.strengths || []
+        // Extract strengths - from both possible locations
+        let strengths = data.analysis?.analysis?.strengths || data.analysis?.strengths || data.strengths || []
         if (typeof strengths === 'string') {
           strengths = [strengths]
         }
@@ -151,8 +151,8 @@ export default function AnalysisPage() {
       if (data.status === 'completed') {
         console.log('API Response (POST /start):', JSON.stringify(data, null, 2))
         
-        // Extract strengths - from data.analysis (not nested further for POST response)
-        let strengths = data.analysis?.strengths || data.strengths || []
+        // Extract strengths - from both possible locations
+        let strengths = data.analysis?.analysis?.strengths || data.analysis?.strengths || data.strengths || []
         if (typeof strengths === 'string') {
           strengths = [strengths]
         }
