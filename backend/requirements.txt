@@ -6,9 +6,8 @@ python-multipart==0.0.6
 # Supabase
 supabase==2.28.2
 
-# AI / Claude
-google-generativeai
-supabase
+# AI / Groq (free inference using Llama 3.1)
+groq>=0.4.0
 
 # PDF parsing
 pymupdf==1.27.2

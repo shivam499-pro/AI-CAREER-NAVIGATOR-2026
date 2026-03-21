@@ -88,31 +88,25 @@ export default function AnalysisPage() {
       console.log('API Response (GET /results):', JSON.stringify(data, null, 2))
 
       if (data.status === 'found') {
-        // Extract strengths - filter out error messages
-        let strengths = data.strengths || data.analysis?.strengths || []
+        // Extract strengths - nested at data.analysis.analysis.strengths
+        let strengths = data.analysis?.analysis?.strengths || data.strengths || []
         if (typeof strengths === 'string') {
           strengths = [strengths]
         }
         // Filter out error messages
         strengths = strengths.filter((s: string) => !s.toLowerCase().includes('error'))
         
-        // Extract career paths
-        let careerPaths = data.career_paths || data.analysis?.career_paths || []
-        if (typeof careerPaths === 'object' && careerPaths.career_paths) {
-          careerPaths = careerPaths.career_paths
-        }
+        // Extract career paths - at data.career_paths
+        let careerPaths = data.career_paths || []
         
-        // Extract skill gaps
-        let skillGaps = data.skill_gaps || data.analysis?.skill_gaps || []
-        if (typeof skillGaps === 'object' && skillGaps.skill_gaps) {
-          skillGaps = skillGaps.skill_gaps
-        }
+        // Extract skill gaps - at data.skill_gaps
+        let skillGaps = data.skill_gaps || []
         
-        // Extract roadmap
-        let roadmap = data.roadmap || data.analysis?.roadmap || { target_career: '', duration_months: 6, milestones: [] }
+        // Extract roadmap - at data.roadmap
+        let roadmap = data.roadmap || { target_career: '', duration_months: 6, milestones: [] }
         
-        // Extract experience level
-        const experienceLevel = data.experience_level || data.analysis?.experience_level || 'Intermediate'
+        // Extract experience level - nested at data.analysis.analysis.experience_level
+        const experienceLevel = data.analysis?.analysis?.experience_level || data.experience_level || 'Intermediate'
         
         setAnalysis({
           experience_level: experienceLevel,
@@ -157,7 +151,7 @@ export default function AnalysisPage() {
       if (data.status === 'completed') {
         console.log('API Response (POST /start):', JSON.stringify(data, null, 2))
         
-        // Extract strengths - filter out error messages
+        // Extract strengths - from data.analysis (not nested further for POST response)
         let strengths = data.analysis?.strengths || data.strengths || []
         if (typeof strengths === 'string') {
           strengths = [strengths]
@@ -167,15 +161,9 @@ export default function AnalysisPage() {
         
         // Extract career paths
         let careerPaths = data.career_paths || []
-        if (typeof careerPaths === 'object' && careerPaths.career_paths) {
-          careerPaths = careerPaths.career_paths
-        }
         
         // Extract skill gaps
         let skillGaps = data.skill_gaps || []
-        if (typeof skillGaps === 'object' && skillGaps.skill_gaps) {
-          skillGaps = skillGaps.skill_gaps
-        }
         
         // Extract roadmap
         const roadmap = data.roadmap || { target_career: '', duration_months: 6, milestones: [] }
