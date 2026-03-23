@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
+import Navbar from '@/components/Navbar'
 import { 
   Brain, Briefcase, Loader2, ArrowRight, Building2,
   Globe, Search, GraduationCap, TrendingUp, ExternalLink
@@ -178,23 +179,7 @@ export default function JobsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/dashboard" className="flex items-center space-x-2">
-            <div className="w-10 h-10 rounded-lg bg-[#1E3A5F] flex items-center justify-center">
-              <Brain className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-xl font-bold text-[#1E3A5F]">AI Career Navigator</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link href="/analysis">
-              <Button variant="outline">View Analysis</Button>
-            </Link>
-          </div>
-        </div>
-      </header>
-
+      <Navbar />
       <main className="container mx-auto px-4 py-8">
         {/* Hero Banner */}
         <div className="mb-10">

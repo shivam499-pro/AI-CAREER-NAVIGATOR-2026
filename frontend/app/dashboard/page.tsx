@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
+import Navbar from '@/components/Navbar'
 import { Brain, LogOut, ChevronRight, Sparkles, Target, TrendingUp } from 'lucide-react'
 
 export default function DashboardPage() {
@@ -60,28 +61,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Link href="/dashboard" className="flex items-center space-x-2">
-              <div className="w-10 h-10 rounded-lg gradient-primary flex items-center justify-center">
-                <Brain className="w-6 h-6 text-white" />
-              </div>
-              <span className="text-xl font-bold text-primary">AI Career Navigator</span>
-            </Link>
-          </div>
-          <div className="flex items-center space-x-4">
-            <span className="text-muted-foreground hidden sm:block">{user?.email}</span>
-            <Button variant="outline" size="sm" onClick={handleLogout}>
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main content */}
+      <Navbar />
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
           {/* Welcome */}

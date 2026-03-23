@@ -260,14 +260,11 @@ Return ONLY the JSON array, no other text."""
 
     try:
         text = _generate(prompt)
-        print(f"Raw Groq response: {text[:300]}")
         questions = json.loads(_clean_json(text))
-        print(f"Parsed questions count: {len(questions)}")
         if isinstance(questions, list) and len(questions) > 0:
             return questions
         return []
     except Exception as e:
-        print(f"Error generating questions: {e}")
         return [
             {"id": 1, "question": f"Tell me about your experience with {career_path}", "type": "behavioral", "difficulty": difficulty, "hint": "Focus on specific projects"},
             {"id": 2, "question": "What are the SOLID principles?", "type": "technical", "difficulty": difficulty, "hint": "There are 5 principles"},

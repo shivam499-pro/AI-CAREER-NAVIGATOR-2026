@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
+import Navbar from '@/components/Navbar'
 import { 
   Brain, ChevronRight, Loader2, Sparkles, 
   TrendingUp, Target, Code, CheckCircle, XCircle,
@@ -257,18 +258,7 @@ export default function AnalysisPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/dashboard" className="flex items-center space-x-2">
-            <div className="w-10 h-10 rounded-lg gradient-primary flex items-center justify-center">
-              <Brain className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-xl font-bold text-primary">AI Career Navigator</span>
-          </Link>
-        </div>
-      </header>
-
+      <Navbar />
       <main className="container mx-auto px-4 py-8">
         {/* Experience Level */}
         <div className="mb-8">
@@ -290,7 +280,7 @@ export default function AnalysisPage() {
         <div className="mb-8">
           <h3 className="text-xl font-bold text-foreground mb-4">Your Strengths</h3>
           <div className="flex flex-wrap gap-2">
-            {analysis.strengths && analysis.strengths.length > 0 && !analysis.strengths[0]?.toLowerCase().includes('error') ? (
+            {analysis.strengths && analysis.strengths.length > 0 ? (
               analysis.strengths.map((strength, i) => (
                 <span 
                   key={i}
@@ -300,7 +290,7 @@ export default function AnalysisPage() {
                 </span>
               ))
             ) : (
-              <p className="text-muted-foreground">Analysis pending...</p>
+              <p className="text-muted-foreground">No data available</p>
             )}
           </div>
         </div>

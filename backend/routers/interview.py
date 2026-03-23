@@ -47,8 +47,6 @@ async def generate_questions(request: GenerateQuestionsRequest):
     """
     Generate 5 personalized interview questions based on user profile.
     """
-    print(f"Generate questions request: {request}")
-    
     try:
         # Fetch user data
         profile_response = supabase.table("profiles").select("*").eq("user_id", request.user_id).execute()
@@ -91,8 +89,6 @@ async def generate_questions(request: GenerateQuestionsRequest):
             request.difficulty,
             full_profile.get("resume_text", "")
         )
-        
-        print(f"Questions generated: {questions}")
         
         return {"questions": questions}
         
