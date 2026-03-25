@@ -1,30 +1,24 @@
 """
-AI Service using Groq (replaces Gemini)
-Fast, free inference using Llama 3.1
+AI Service using Anthropic Claude
+Handles all AI-powered analysis using Claude Haiku 3
 """
 import os
 import json
-from groq import Groq
+import anthropic
 from dotenv import load_dotenv
 
 load_dotenv()
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-MODEL = "llama-3.1-8b-instant"
+client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+MODEL = "claude-haiku-4-5"
 
 
 def _clean_json(text: str) -> str:
     import re
     text = text.strip()
-    # Remove markdown code fences
     text = re.sub(r'```json\s*', '', text)
     text = re.sub(r'```\s*', '', text)
-    # Find the first complete JSON object or array
-    # Try to extract just the JSON part
-    text = text.strip()
-    # Find start of JSON
     if text.startswith('['):
-        # Find matching closing bracket
         depth = 0
         for i, c in enumerate(text):
             if c == '[': depth += 1
@@ -44,24 +38,15 @@ def _clean_json(text: str) -> str:
 
 
 def _generate(prompt: str) -> str:
-    response = client.chat.completions.create(
+    message = client.messages.create(
         model=MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.7,
         max_tokens=2048,
+        messages=[{"role": "user", "content": prompt}]
     )
-    return response.choices[0].message.content
+    return message.content[0].text
 
 
 def analyze_profile(github_data: dict, leetcode_data: dict, resume_text: str = "") -> dict:
-    # Build resume section if available
-    resume_section = ""
-    if resume_text:
-        resume_section = f"""
-    RESUME DATA:
-    {resume_text[:2000]}
-    """
-    
     prompt = f"""
     You are an expert career analyst. Analyze the following profile data and provide career insights.
     
@@ -70,7 +55,8 @@ def analyze_profile(github_data: dict, leetcode_data: dict, resume_text: str = "
     
     LEETCODE DATA:
     {json.dumps(leetcode_data, indent=2)}
-    {resume_section}
+    
+    {f"RESUME DATA:{resume_text[:2000]}" if resume_text else ""}
     
     Provide a JSON response with:
     1. "strengths": Array of 5-7 key technical strengths
@@ -93,14 +79,6 @@ def analyze_profile(github_data: dict, leetcode_data: dict, resume_text: str = "
 
 
 def generate_career_paths(analysis: dict, github_data: dict, leetcode_data: dict, resume_text: str = "") -> list:
-    # Build resume section if available
-    resume_section = ""
-    if resume_text:
-        resume_section = f"""
-    RESUME DATA:
-    {resume_text[:2000]}
-    """
-    
     prompt = f"""
     You are an expert career counselor. Recommend career paths based on this profile.
     
@@ -109,7 +87,8 @@ def generate_career_paths(analysis: dict, github_data: dict, leetcode_data: dict
     
     GITHUB DATA:
     {json.dumps(github_data, indent=2)}
-    {resume_section}
+    
+    {f"RESUME DATA:{resume_text[:2000]}" if resume_text else ""}
     
     Recommend 3-5 career paths. For each provide:
     - "name": Career path name
@@ -133,21 +112,13 @@ def generate_skill_gaps(analysis: dict, career_path: str, github_data: dict, res
         lang_stats = github_data.get("language_stats", {})
         current_skills = list(lang_stats.keys())[:10]
 
-    # Build resume section if available
-    resume_section = ""
-    if resume_text:
-        resume_section = f"""
-    RESUME DATA:
-    {resume_text[:2000]}
-    """
-    
     prompt = f"""
     You are an expert tech recruiter. Analyze skill gaps for someone wanting to become a {career_path}.
     
     CURRENT SKILLS: {current_skills}
     USER ANALYSIS: {json.dumps(analysis, indent=2)}
     TARGET CAREER: {career_path}
-    {resume_section}
+    {f"RESUME DATA:{resume_text[:1000]}" if resume_text else ""}
     
     Provide a JSON array of skills with:
     - "skill": Skill name
@@ -164,21 +135,13 @@ def generate_skill_gaps(analysis: dict, career_path: str, github_data: dict, res
 
 
 def generate_roadmap(analysis: dict, career_path: str, duration_months: int = 6, resume_text: str = "") -> dict:
-    # Build resume section if available
-    resume_section = ""
-    if resume_text:
-        resume_section = f"""
-    RESUME DATA:
-    {resume_text[:2000]}
-    """
-    
     prompt = f"""
     You are an expert career coach. Create a roadmap for someone to become a {career_path}.
     
     USER ANALYSIS: {json.dumps(analysis, indent=2)}
     TARGET CAREER: {career_path}
     DURATION: {duration_months} months
-    {resume_section}
+    {f"RESUME DATA:{resume_text[:1000]}" if resume_text else ""}
     
     Provide JSON with:
     - "target_career": The career path
@@ -191,70 +154,41 @@ def generate_roadmap(analysis: dict, career_path: str, duration_months: int = 6,
       - "skills": Array of skills to learn
       - "deliverable": What to build/achieve
     
-    Important: In the milestones array, ensure all strings are properly quoted and there are no special characters or apostrophes in the text. Use simple English without contractions.
+    Important: Use simple English without apostrophes or special characters.
     Return ONLY valid JSON, no markdown formatting.
     """
-    
-    # Try with retry logic
-    for attempt in range(2):
-        try:
-            response_text = _generate(prompt)
-            roadmap = json.loads(_clean_json(response_text))
-            
-            # Validate roadmap has required fields
-            if not isinstance(roadmap, dict):
-                raise ValueError("Response is not a JSON object")
-            
-            if "duration_months" not in roadmap:
-                roadmap["duration_months"] = duration_months
-            if "total_weeks" not in roadmap:
-                roadmap["total_weeks"] = duration_months * 4
-            return roadmap
-        except Exception as e:
-            # If first attempt failed, try with simpler prompt
-            if attempt == 0:
-                simple_prompt = f"""
-                Create a simple {duration_months} month roadmap to become a {career_path}. 
-                Output ONLY valid JSON with this exact structure, no markdown:
-                {{"target_career": "{career_path}", "duration_months": {duration_months}, "total_weeks": {duration_months * 4}, "milestones": [{{"week": 1, "title": "Title", "description": "Description", "skills": ["skill1"], "deliverable": "Deliverable"}}]}}
-                """
-                prompt = simple_prompt
-                continue
-            else:
-                # Second attempt also failed
-                return {
-                    "error": f"Failed to generate roadmap: {str(e)}",
-                    "target_career": career_path,
-                    "duration_months": duration_months,
-                    "milestones": []
-                }
-    
-    # Fallback (should not reach here)
-    return {
-        "target_career": career_path,
-        "duration_months": duration_months,
-        "milestones": []
-    }
+    try:
+        roadmap = json.loads(_clean_json(_generate(prompt)))
+        if "duration_months" not in roadmap:
+            roadmap["duration_months"] = duration_months
+        if "total_weeks" not in roadmap:
+            roadmap["total_weeks"] = duration_months * 4
+        return roadmap
+    except Exception as e:
+        return {
+            "error": f"Failed to generate roadmap: {str(e)}",
+            "target_career": career_path,
+            "duration_months": duration_months,
+            "milestones": []
+        }
 
 
 def generate_interview_questions(profile: dict, career_path: str, difficulty: str, resume_text: str = "") -> list:
     prompt = f"""You are an expert technical interviewer.
-    
+
 Generate exactly 5 interview questions for a candidate applying for: {career_path}
 Difficulty level: {difficulty}
 
 Candidate profile:
 - Skills: {profile.get('extra_skills', [])}
 - Experience: {profile.get('experience', [])}
-- Projects from resume: {resume_text[:500] if resume_text else 'Not provided'}
+- College: {profile.get('college_name', 'Not specified')}
+- Career Goal: {profile.get('career_goal', career_path)}
+{f"- Resume highlights: {resume_text[:500]}" if resume_text else ""}
 
-Return ONLY a JSON array with exactly 5 objects. Each object must have these exact keys:
+Generate personalized questions that reference their actual background.
+Return ONLY a JSON array with exactly 5 objects. Each object must have:
 "id" (number 1-5), "question" (string), "type" (one of: technical, behavioral, dsa, system_design, project_based), "difficulty" (string), "hint" (string)
-
-Example format:
-[
-  {{"id": 1, "question": "Explain OOP concepts", "type": "technical", "difficulty": "{difficulty}", "hint": "Think about the 4 pillars"}}
-]
 
 Return ONLY the JSON array, no other text."""
 
@@ -275,38 +209,27 @@ Return ONLY the JSON array, no other text."""
 
 
 def evaluate_interview_answer(question: str, answer: str, career_path: str) -> dict:
-    """
-    Evaluate a user's interview answer and provide feedback.
-    """
-    prompt = f"""
-    You are an expert interviewer evaluating a candidate answer for {career_path} role.
-    
-    QUESTION: {question}
-    
-    CANDIDATE ANSWER: {answer}
-    
-    Evaluate the answer and provide structured feedback:
-    - Score: 1-10 (how good is the answer)
-    - Good points: What the candidate did well (array of strings)
-    - Missing points: What was missing or could be improved (array of strings)
-    - Model answer: A better example answer (2-3 sentences)
-    - Tip: One actionable tip for improvement
-    
-    Return ONLY valid JSON like:
-    {{"score": 7, "good_points": ["point1", "point2"], "missing_points": ["point1"], "model_answer": "...", "tip": "..."}}
-    """
-    
+    prompt = f"""You are an expert technical interviewer evaluating a candidate for {career_path}.
+
+Question: {question}
+Candidate's Answer: {answer}
+
+Evaluate the answer and provide JSON with:
+- "score": number from 1-10
+- "good_points": array of 2-3 things done well
+- "missing_points": array of 2-3 things missing or could improve
+- "model_answer": a brief model answer (2-3 sentences)
+- "tip": one specific tip for improvement
+
+Return ONLY valid JSON, no markdown formatting."""
+
     try:
-        result = json.loads(_clean_json(_generate(prompt)))
-        # Ensure score is in valid range
-        if isinstance(result, dict):
-            result["score"] = max(1, min(10, result.get("score", 5)))
-        return result
+        return json.loads(_clean_json(_generate(prompt)))
     except Exception as e:
         return {
             "score": 5,
-            "good_points": ["You attempted the question"],
+            "good_points": ["Attempted the question"],
             "missing_points": ["Could not evaluate properly"],
-            "model_answer": "Failed to generate model answer",
-            "tip": "Try to structure your answers better" if answer else "Provide an answer to get feedback"
+            "model_answer": "Please try again",
+            "tip": "Be more specific in your answers"
         }
