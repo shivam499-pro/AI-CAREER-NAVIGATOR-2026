@@ -2,8 +2,10 @@
 Resume Router
 Handles resume PDF upload and text extraction
 """
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Request
 from fastapi.responses import JSONResponse
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from supabase import create_client
 import os
 import fitz  # PyMuPDF
@@ -11,6 +13,8 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter()
 
@@ -25,7 +29,9 @@ MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
 
 @router.post("/upload")
+@limiter.limit("10/minute")
 async def upload_resume(
+    request: Request,
     user_id: str = Form(...),
     file: UploadFile = File(...)
 ):

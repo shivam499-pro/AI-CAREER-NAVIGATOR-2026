@@ -4,9 +4,12 @@ import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
 
-export const metadata: Metadata = {
+export const metadata = {
   title: 'AI Career Navigator - Your Personal AI Career Mentor',
-  description: 'Get personalized career guidance powered by AI. Analyze your GitHub, LeetCode, LinkedIn, and Resume to discover your ideal career path.',
+  description: 'Get personalized career analysis, skill gap insights, and AI interview coaching.',
+  icons: {
+    icon: '/favicon.ico',
+  },
 }
 
 export default function RootLayout({

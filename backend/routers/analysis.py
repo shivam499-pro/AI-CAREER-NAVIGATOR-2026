@@ -2,7 +2,9 @@
 Analysis Router
 Handles AI analysis endpoints
 """
-from fastapi import APIRouter, HTTPException, Header, Depends
+from fastapi import APIRouter, HTTPException, Header, Depends, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from typing import Optional
 from pydantic import BaseModel
 from services import github_service, leetcode_service, gemini_service
@@ -12,6 +14,8 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter()
 
@@ -40,8 +44,10 @@ class StartAnalysisRequest(BaseModel):
 
 
 @router.post("/start")
+@limiter.limit("5/minute")
 async def start_analysis(
-    request: StartAnalysisRequest,
+    request: Request,
+    body: StartAnalysisRequest,
     authorization: Optional[str] = Header(None)
 ):
     """
