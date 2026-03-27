@@ -1,20 +1,23 @@
 """
-AI Service using Anthropic Claude
-Handles all AI-powered analysis using Claude Haiku 3
+AI Service using Google Gemini 1.5 Flash (Free Tier)
+Handles all AI-powered analysis
 """
 import os
 import json
-import anthropic
+import re
+from google import genai
 from dotenv import load_dotenv
 
 load_dotenv()
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-MODEL = "claude-haiku-4-5"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    raise ValueError("GEMINI_API_KEY is missing from .env file")
+
+client_genai = genai.Client(api_key=GEMINI_API_KEY)
 
 
 def _clean_json(text: str) -> str:
-    import re
     text = text.strip()
     text = re.sub(r'```json\s*', '', text)
     text = re.sub(r'```\s*', '', text)
@@ -38,12 +41,11 @@ def _clean_json(text: str) -> str:
 
 
 def _generate(prompt: str) -> str:
-    message = client.messages.create(
-        model=MODEL,
-        max_tokens=2048,
-        messages=[{"role": "user", "content": prompt}]
+    response = client_genai.models.generate_content(
+        model="gemini-2.0-flash-lite",
+        contents=prompt
     )
-    return message.content[0].text
+    return response.text
 
 
 def analyze_profile(github_data: dict, leetcode_data: dict, resume_text: str = "") -> dict:
@@ -152,9 +154,9 @@ def generate_roadmap(analysis: dict, career_path: str, duration_months: int = 6,
       - "title": Short milestone title
       - "description": What to accomplish
       - "skills": Array of skills to learn
-      - "deliverable": What to build/achieve
+      - "deliverable": What to build or achieve
     
-    Important: Use simple English without apostrophes or special characters.
+    Use simple English without special characters.
     Return ONLY valid JSON, no markdown formatting.
     """
     try:
@@ -186,12 +188,10 @@ Candidate profile:
 - Career Goal: {profile.get('career_goal', career_path)}
 {f"- Resume highlights: {resume_text[:500]}" if resume_text else ""}
 
-Generate personalized questions that reference their actual background.
 Return ONLY a JSON array with exactly 5 objects. Each object must have:
 "id" (number 1-5), "question" (string), "type" (one of: technical, behavioral, dsa, system_design, project_based), "difficulty" (string), "hint" (string)
 
 Return ONLY the JSON array, no other text."""
-
     try:
         text = _generate(prompt)
         questions = json.loads(_clean_json(text))
@@ -212,9 +212,9 @@ def evaluate_interview_answer(question: str, answer: str, career_path: str) -> d
     prompt = f"""You are an expert technical interviewer evaluating a candidate for {career_path}.
 
 Question: {question}
-Candidate's Answer: {answer}
+Candidate Answer: {answer}
 
-Evaluate the answer and provide JSON with:
+Evaluate and provide JSON with:
 - "score": number from 1-10
 - "good_points": array of 2-3 things done well
 - "missing_points": array of 2-3 things missing or could improve
@@ -222,7 +222,6 @@ Evaluate the answer and provide JSON with:
 - "tip": one specific tip for improvement
 
 Return ONLY valid JSON, no markdown formatting."""
-
     try:
         return json.loads(_clean_json(_generate(prompt)))
     except Exception as e:

@@ -59,7 +59,7 @@ async def start_analysis(
     5. Save results to database
     """
     try:
-        user_id = request.user_id
+        user_id = body.user_id
         
         # Get user's profile from Supabase
         profile_response = supabase.table("profiles").select("*").eq("user_id", user_id).execute()
