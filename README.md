@@ -5,19 +5,21 @@ Your personal AI-powered career mentor that reads your real GitHub, LeetCode, Li
 ## Features
 
 - **Profile Reading Engine**: Reads real user profiles (GitHub, LeetCode, LinkedIn, Resume)
-- **AI Analysis Engine**: Analyzes skills, experience level, and career interests
-- **Career Path Recommender**: Suggests personalized career paths
+- **AI Analysis Engine**: Analyzes skills, experience level, and career interests using **Google Gemini 2.5 Flash**
+- **Career Path Recommender**: Suggests personalized career paths with match percentages
 - **Skill Gap Analyzer**: Visual breakdown of skills you have vs. need
-- **Roadmap Generator**: Personalized, time-bound action plan
-- **Job Suggestions**: Matched job and internship opportunities
+- **Roadmap Generator**: Personalized, time-bound action plan (weekly milestones)
+- **Job Suggestions**: Real-time matched job and internship opportunities
+- **Interview Prep**: AI-generated interview questions and answer evaluation
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14 (React) + Tailwind CSS + TypeScript
+- **Frontend**: Next.js 14 (App Router) + Tailwind CSS + TypeScript + Framer Motion
 - **Backend**: Python FastAPI
 - **Database**: Supabase (PostgreSQL)
-- **AI**: Claude API (claude-sonnet-4-20250514)
+- **AI**: **Google Gemini 2.5 Flash** (Free Tier)
 - **Authentication**: Supabase Auth
+- **Package Manager**: pnpm
 
 ## Project Structure
 
@@ -26,13 +28,14 @@ career-navigator/
 ├── frontend/                    # Next.js frontend
 │   ├── app/                     # Next.js App Router pages
 │   ├── components/              # React components
-│   │   └── ui/                  # shadcn/ui components
 │   ├── lib/                     # Utilities and API clients
 │   └── public/                  # Static assets
 ├── backend/                     # FastAPI backend
 │   ├── routers/                 # API route handlers
-│   ├── services/                # Business logic
-│   └── models/                 # Data models
+│   ├── services/                # Business logic & AI prompts
+│   ├── models/                  # Pydantic data models
+│   └── lib/                     # Shared libraries (Auth, etc.)
+├── project_summary.md          # Comprehensive technical overview
 └── README.md
 ```
 
@@ -40,9 +43,10 @@ career-navigator/
 
 ### Prerequisites
 
-- Node.js 18+ and npm
-- Python 3.9+
+- Node.js 18+ and **pnpm**
+- Python 3.10+
 - Supabase account
+- Google AI Studio API Key (for Gemini)
 
 ### 1. Clone the Repository
 
@@ -54,7 +58,7 @@ cd career-navigator
 
 ```bash
 cd frontend
-npm install
+pnpm install
 ```
 
 Create a `.env.local` file:
@@ -68,7 +72,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 Run the development server:
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 Visit http://localhost:3000
@@ -78,7 +82,11 @@ Visit http://localhost:3000
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+
 pip install -r requirements.txt
 ```
 
@@ -86,9 +94,9 @@ Create a `.env` file:
 
 ```env
 SUPABASE_URL=your_supabase_url
-SUPABASE_KEY=your_supabase_key
+SUPABASE_KEY=your_supabase_service_role_key
 SUPABASE_ANON_KEY=your_supabase_anon_key
-ANTHROPIC_API_KEY=your_claude_api_key
+GEMINI_API_KEY=your_google_gemini_api_key
 GITHUB_TOKEN=your_github_token  # Optional
 SERPAPI_KEY=your_serpapi_key     # Optional
 CORS_ORIGINS=http://localhost:3000
@@ -108,16 +116,20 @@ Once the backend is running, visit:
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
-## Color Palette
+## Color Palette & Design
 
 | Color | Hex Code | Usage |
 |-------|----------|-------|
 | Primary Blue | #1E3A5F | Headers, primary buttons |
 | Accent Blue | #2E6CB8 | Links, highlights |
-| Electric Violet | #6C3FC8 | Accents, badges |
+| Electric Violet | #6C3FC8 | Accents, badges, branding |
 | Success Green | #22C55E | Skills you have |
 | Warning Orange | #F59E0B | Skills to improve |
 | Error Red | #EF4444 | Missing skills |
+
+## Documentation References
+
+For a deep dive into the architecture, logic flows, and known limitations, see [project_summary.md](file:///c:/project-2026/Career-navigator/project_summary.md).
 
 ## License
 
