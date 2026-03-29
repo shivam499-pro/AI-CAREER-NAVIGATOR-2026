@@ -42,7 +42,7 @@ def _clean_json(text: str) -> str:
 
 def _generate(prompt: str) -> str:
     response = client_genai.models.generate_content(
-        model="gemini-2.0-flash-lite",
+        model="gemini-2.5-flash",
         contents=prompt
     )
     return response.text
