@@ -6,6 +6,7 @@ router = APIRouter()
 
 @router.get("/")
 async def get_jobs(
+    query: Optional[str] = Query(None),
     location: Optional[str] = Query(None),
     job_type: Optional[str] = Query(None),
     keywords: Optional[str] = Query(None)
@@ -14,9 +15,17 @@ async def get_jobs(
     Get job suggestions based on user profile and filters.
     """
     try:
-        # In production, this would fetch from job APIs
-        # For now, return mock job data
+        # Use the query provided or fallback to keywords/mock
+        search_query = query or keywords
         
+        if search_query:
+            results = await jobs_service.search_jobs(search_query, location)
+            return {
+                "jobs": results,
+                "count": len(results)
+            }
+        
+        # Fallback to mock job data if no search query
         mock_jobs = [
             {
                 "id": "1",
@@ -47,7 +56,7 @@ async def get_jobs(
             }
         ]
         
-        # Apply filters
+        # Apply filters to mock data
         if location:
             mock_jobs = [j for j in mock_jobs if location.lower() in j["location"].lower()]
         if job_type:

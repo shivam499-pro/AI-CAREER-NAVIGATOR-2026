@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import Navbar from '@/components/Navbar'
-import { 
+import {
   Brain, Briefcase, Loader2, ArrowRight, Building2,
   Globe, Search, GraduationCap, TrendingUp, ExternalLink
 } from 'lucide-react'
@@ -24,6 +24,8 @@ export default function JobsPage() {
   const [profile, setProfile] = useState<any>(null)
   const [analysis, setAnalysis] = useState<any>(null)
   const [targetCareer, setTargetCareer] = useState('Full Stack Developer')
+  const [jobs, setJobs] = useState<any[]>([])
+  const [jobsLoading, setJobsLoading] = useState(false)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -46,7 +48,7 @@ export default function JobsPage() {
         .select('*')
         .eq('user_id', userId)
         .single()
-      
+
       if (profileData) {
         setProfile(profileData)
       }
@@ -57,22 +59,35 @@ export default function JobsPage() {
         .select('*')
         .eq('user_id', userId)
         .single()
-      
+
       if (analysisData) {
         setAnalysis(analysisData)
-        
-        // Extract target career from career paths - check nested structure
         const careerPaths = analysisData.career_paths || []
         if (Array.isArray(careerPaths) && careerPaths.length > 0) {
           const topPath = careerPaths[0]
           const careerName = topPath?.name || topPath?.career_name || 'Full Stack Developer'
           setTargetCareer(careerName)
+          fetchRealJobs(careerName)
         }
       }
     } catch (err) {
       console.error('Error loading user data:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchRealJobs = async (query: string) => {
+    setJobsLoading(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/jobs?query=${encodeURIComponent(query)}`)
+      const data = await response.json()
+      setJobs(data.jobs || [])
+    } catch (err) {
+      console.error("Failed to fetch jobs:", err)
+    } finally {
+      setJobsLoading(false)
     }
   }
 
@@ -203,11 +218,10 @@ export default function JobsPage() {
             <h3 className="text-xl font-bold text-foreground mb-4">Your Recommended Career Paths</h3>
             <div className="grid md:grid-cols-4 gap-4">
               {analysis.career_paths.slice(0, 4).map((path: any, i: number) => (
-                <div 
+                <div
                   key={i}
-                  className={`bg-card rounded-xl p-4 border-2 ${
-                    i === 0 ? 'border-[#6C3FC8]' : 'border-gray-200'
-                  }`}
+                  className={`bg-card rounded-xl p-4 border-2 ${i === 0 ? 'border-[#6C3FC8]' : 'border-gray-200'
+                    }`}
                 >
                   {i === 0 && (
                     <span className="text-xs font-bold text-[#6C3FC8] mb-1 block">BEST MATCH</span>
@@ -219,6 +233,66 @@ export default function JobsPage() {
             </div>
           </div>
         )}
+
+        {/* Section: Live Job Matches */}
+        <section className="mb-10">
+          <h3 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
+            <Search className="w-5 h-5 text-[#6C3FC8]" />
+            Live Job Matches
+          </h3>
+          
+          {jobsLoading ? (
+            <div className="flex items-center justify-center p-12 bg-card rounded-xl border">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              <span className="ml-2 text-muted-foreground">Searching for live opportunities...</span>
+            </div>
+          ) : jobs.length > 0 ? (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {jobs.map((job, i) => (
+                <div 
+                  key={i}
+                  className="bg-card rounded-xl border p-6 hover:shadow-lg transition-shadow border-l-4 border-l-[#6C3FC8]"
+                >
+                  <div className="flex justify-between items-start mb-4">
+                    <h4 className="font-bold text-foreground text-lg leading-tight">
+                      {job.title}
+                    </h4>
+                    <span className="px-2 py-1 bg-green-50 text-green-700 text-[10px] font-bold rounded uppercase">
+                      New
+                    </span>
+                  </div>
+                  
+                  <div className="space-y-2 mb-6">
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <Building2 className="w-4 h-4 mr-2 text-[#1E3A5F]" />
+                      {job.company}
+                    </div>
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <Globe className="w-4 h-4 mr-2 text-[#1E3A5F]" />
+                      {job.location}
+                    </div>
+                  </div>
+                  
+                  <a 
+                    href={job.url || job.apply_link} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="block"
+                  >
+                    <Button className="w-full bg-[#6C3FC8] hover:bg-[#6C3FC8]/90">
+                      Apply Now
+                      <ExternalLink className="ml-2 w-4 h-4" />
+                    </Button>
+                  </a>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-card rounded-xl border p-8 text-center text-muted-foreground">
+              No live matches found for your current profile. Try adjusting your target career path.
+            </div>
+          )}
+        </section>
 
         {/* Section 1: Top Tech Companies */}
         <section className="mb-10">

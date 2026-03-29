@@ -1,0 +1,212 @@
+# AI Career Navigator 2026 — Comprehensive Project Summary
+
+> **Prepared for:** Planning Lead (Gemini)  
+> **Scan date:** 2026-03-29  
+> **Repository:** `shivam499-pro/AI-CAREER-NAVIGATOR-2026`  
+> **Workspace path:** `c:\project-2026\Career-navigator`
+
+---
+
+## 1. Tech Stack
+
+| Layer | Technology | Version / Details |
+|-------|-----------|-------------------|
+| **Frontend Framework** | Next.js (App Router) | `14.2.0` with TypeScript |
+| **Frontend UI** | Tailwind CSS + shadcn/ui (Radix primitives) | Tailwind `3.4.1`, Radix (Dialog, Tabs, Avatar, Dropdown, Progress, Label) |
+| **Animations** | Framer Motion | `^10.18.0` |
+| **Charts** | Recharts | `^2.10.4` |
+| **Icons** | Lucide React | `^0.312.0` |
+| **Package Manager** | pnpm | (confirmed via `pnpm-lock.yaml`) |
+| **Backend / API** | Python FastAPI | `0.109.0`, served by Uvicorn `0.27.0` |
+| **Database** | Supabase (PostgreSQL) | `supabase==2.28.2` (Python), `@supabase/supabase-js ^2.39.0` (JS) |
+| **Authentication** | Supabase Auth | `@supabase/ssr`, `@supabase/auth-helpers-nextjs` |
+| **AI SDK** | Google Gemini (GenAI) | `google-genai >= 1.68.0` — model: **`gemini-2.5-flash`** |
+| **PDF Parsing** | PyMuPDF (fitz) | `pymupdf==1.27.2` |
+| **HTTP Client (Backend)** | httpx | `0.26.0` |
+| **Rate Limiting** | slowapi | `0.1.9` |
+| **Data Validation** | Pydantic | `2.5.3` |
+
+> [!IMPORTANT]
+> The README still references **Claude API (claude-sonnet-4-20250514)** and an **Anthropic API key**. The actual codebase has been fully migrated to **Google Gemini 2.5 Flash**. The README is outdated on this point.
+
+> [!NOTE]
+> No LangChain, Vercel AI SDK, or other orchestration framework is used. The Gemini integration is **direct** — a single `google.genai.Client` call with prompt engineering, no chains or agents.
+
+---
+
+## 2. File Tree (High-Level)
+
+```
+career-navigator/
+├── .gitignore
+├── README.md
+│
+├── backend/                          # Python FastAPI server
+│   ├── main.py                      # App entry point, CORS, router registration
+│   ├── requirements.txt             # Python dependencies
+│   ├── .env / .env.example          # Environment variables
+│   ├── __init__.py
+│   │
+│   ├── models/                      # Pydantic data models
+│   │   ├── user.py                  # UserProfile, ProfileInput
+│   │   └── analysis.py             # CareerPath, SkillGap, Milestone, Roadmap, Job
+│   │
+│   ├── routers/                     # FastAPI route handlers
+│   │   ├── auth.py                  # POST /api/auth — Supabase Auth
+│   │   ├── profile.py               # GET/POST /api/profile — basic profile CRUD
+│   │   ├── profile_enhanced.py      # GET/PUT /api/profile — extended profile fields
+│   │   ├── analysis.py              # POST /api/analysis/start, GET /results, /status
+│   │   ├── resume.py                # POST /api/resume/upload, GET /status
+│   │   ├── jobs.py                  # GET /api/jobs — job listings (mock + SerpAPI)
+│   │   └── interview.py            # POST /api/interview/generate-questions, /evaluate, /save
+│   │
+│   └── services/                    # Business logic & external API integrations
+│       ├── gemini_service.py        # ★ Core AI engine — Gemini 2.5 Flash (355 LOC)
+│       ├── github_service.py        # GitHub REST API — profile, repos, languages
+│       ├── leetcode_service.py      # LeetCode GraphQL API — problems, contests
+│       ├── resume_service.py        # PyMuPDF PDF text extraction + skill matching
+│       └── jobs_service.py          # SerpAPI job search + mock fallback
+│
+└── frontend/                        # Next.js 14 App Router
+    ├── package.json / pnpm-lock.yaml
+    ├── next.config.js / tsconfig.json
+    ├── tailwind.config.js / postcss.config.js
+    ├── middleware.ts                 # Auth middleware (currently pass-through)
+    ├── .env.local / .env.example
+    │
+    ├── app/                         # Next.js App Router pages
+    │   ├── layout.tsx               # Root layout
+    │   ├── page.tsx                  # Landing page (6.8 KB)
+    │   ├── globals.css              # Global styles
+    │   ├── auth/                    # Login/signup pages
+    │   ├── onboarding/              # 4-step profile wizard (GitHub → LeetCode → LinkedIn → Resume)
+    │   ├── dashboard/               # Main dashboard with quick actions
+    │   ├── analysis/                # AI analysis results (experience, paths, skills, roadmap)
+    │   ├── resume/                  # Resume upload with drag-and-drop
+    │   ├── profile/                 # Extended profile editor
+    │   ├── jobs/                    # Job listings page
+    │   └── interview/               # Interview practice page
+    │
+    ├── components/
+    │   ├── Navbar.tsx               # Navigation bar
+    │   └── ui/                      # shadcn/ui component library
+    │
+    └── lib/
+        ├── api.ts                   # API client with typed interfaces
+        ├── supabase.ts              # Supabase client initialization
+        └── utils.ts                 # cn() utility for class merging
+```
+
+---
+
+## 3. Core Logic Flow: Resume Upload → Career Roadmap
+
+The end-to-end user journey from uploading a resume to receiving a personalized career roadmap involves **8 distinct steps** across frontend and backend:
+
+```mermaid
+flowchart TD
+    A["👤 User uploads PDF<br/><b>frontend/app/resume/page.tsx</b>"] --> B["📤 POST /api/resume/upload<br/><b>backend/routers/resume.py</b>"]
+    B --> C["📄 extract_text_from_pdf()<br/><b>PyMuPDF (fitz)</b>"]
+    C --> D["💾 Save resume_text to Supabase<br/><b>profiles table</b>"]
+    D --> E["🔬 POST /api/analysis/start<br/><b>backend/routers/analysis.py</b>"]
+    E --> F["🐙 github_service.get_full_github_data()<br/>🟡 leetcode_service.get_full_leetcode_data()"]
+    F --> G["🧠 gemini_service.run_combined_analysis()<br/><b>Single Gemini 2.5 Flash API call</b>"]
+    G --> H["💾 Save to Supabase<br/><b>analyses table</b>"]
+    H --> I["📊 Render on /analysis page<br/><b>frontend/app/analysis/page.tsx</b>"]
+```
+
+### Step-by-Step Breakdown
+
+| Step | Location | Function / Component | Description |
+|------|----------|---------------------|-------------|
+| **1. Upload** | [resume/page.tsx](file:///c:/project-2026/Career-navigator/frontend/app/resume/page.tsx) | `handleUpload()` | Validates PDF (type + 5MB limit), sends as `FormData` to backend |
+| **2. Parse PDF** | [routers/resume.py](file:///c:/project-2026/Career-navigator/backend/routers/resume.py#L31-L91) | `upload_resume()` → `extract_text_from_pdf()` | PyMuPDF extracts text from all pages |
+| **3. Persist** | [routers/resume.py:80](file:///c:/project-2026/Career-navigator/backend/routers/resume.py#L80) | `supabase.table("profiles").update()` | Stores `resume_text` and `resume_filename` in user's profile row |
+| **4. Trigger Analysis** | [analysis/page.tsx](file:///c:/project-2026/Career-navigator/frontend/app/analysis/page.tsx#L132-L189) | `runAnalysis()` | Frontend POSTs to `/api/analysis/start` with `user_id` |
+| **5. Fetch External Data** | [routers/analysis.py:76-83](file:///c:/project-2026/Career-navigator/backend/routers/analysis.py#L76-L83) | `github_service.get_full_github_data()` + `leetcode_service.get_full_leetcode_data()` | Parallel async calls to GitHub REST API + LeetCode GraphQL API |
+| **6. AI Analysis** | [gemini_service.py:55-173](file:///c:/project-2026/Career-navigator/backend/services/gemini_service.py#L55-L173) | `_run_combined_analysis()` | **Single Gemini API call** combining all data into one structured prompt. Returns JSON with: `analysis`, `career_paths`, `skill_gaps`, `roadmap` |
+| **7. Cache & Persist** | [gemini_service.py:176-199](file:///c:/project-2026/Career-navigator/backend/services/gemini_service.py#L176-L199) + [analysis.py:114-135](file:///c:/project-2026/Career-navigator/backend/routers/analysis.py#L114-L135) | `_get_cached_analysis()` + Supabase upsert | In-memory cache for session deduplication. Results saved to `analyses` table |
+| **8. Render** | [analysis/page.tsx:259-418](file:///c:/project-2026/Career-navigator/frontend/app/analysis/page.tsx#L259-L418) | React components | Displays: Experience Level badge, Strengths chips, Career Paths cards (with match %), Skill Gaps table (have/need), and week-by-week Roadmap timeline |
+
+### Key Architecture Details
+
+- **Single AI Call Pattern**: The `gemini_service` consolidates what were originally 6 separate API calls (analyze, career paths, skill gaps, roadmap, etc.) into **1 combined prompt** that returns a single structured JSON. Individual functions (`analyze_profile`, `generate_career_paths`, `generate_skill_gaps`, `generate_roadmap`) all read from the same cached result.
+
+- **In-Memory Cache**: `_analysis_cache` dictionary keyed on `str(github_data) + str(leetcode_data) + str(resume_text[:100])`. This means the same analysis is not re-run within a server session.
+
+- **Flexible Field Parsing**: The frontend `analysis/page.tsx` handles multiple possible field names from the AI (e.g., `name`/`career_name`/`title` for career paths) due to non-deterministic Gemini JSON output.
+
+---
+
+## 4. The "Last Mile" Status
+
+### 4.1 — Three Most Recent Features (from Git History)
+
+| # | Commit | Feature | Details |
+|---|--------|---------|---------|
+| **1** | `e719a14` | **Gemini 2.5 Flash Upgrade** | Upgraded AI model from Gemini 2.0 Flash → 2.5 Flash for improved analysis quality. Changed model string in `gemini_service.py` |
+| **2** | `b31d2d2` | **Claude → Gemini Migration** | Full migration from Anthropic Claude API to Google Gemini 2.0 Flash. Replaced API client, prompt format, and env vars |
+| **3** | `a83bd6b` | **Pre-deploy Fixes** | Navbar refinements, rate limiting with `slowapi`, Supabase RLS (Row Level Security) policies, favicon, and UX polish |
+
+> [!NOTE]
+> Prior to these, the major features were: Resume text fed into AI analysis (`8127b5d`), Resume upload working (`9ed7b31`), Interview prep feature (`interview.py` router + `generate_interview_questions` / `evaluate_interview_answer` in gemini_service).
+
+---
+
+### 4.2 — TODO Comments
+
+| File | Line | TODO |
+|------|------|------|
+| [profile.py](file:///c:/project-2026/Career-navigator/backend/routers/profile.py#L24) | 24 | `user_id = "temp_user_id"  # TODO: Extract from auth token` |
+
+> [!WARNING]
+> The `profile.py` router (the **basic** one) hardcodes `user_id = "temp_user_id"` instead of extracting it from the auth token. This is a **security gap** — the `profile_enhanced.py` router correctly uses Supabase-provided `user_id`, but this older file does not. Both are mounted on `/api/profile`.
+
+---
+
+### 4.3 — Known Bugs & Architectural Concerns
+
+| Severity | Issue | Location | Details |
+|----------|-------|----------|---------|
+| 🔴 **High** | Hardcoded `user_id` | [profile.py:24](file:///c:/project-2026/Career-navigator/backend/routers/profile.py#L24) | `"temp_user_id"` is used instead of real auth token extraction |
+| 🔴 **High** | Duplicate route prefix collision | [main.py:39,43](file:///c:/project-2026/Career-navigator/backend/main.py#L39-L43) | Both `profile.py` and `profile_enhanced.py` are mounted on `/api/profile` — potential route conflicts |
+| 🟡 **Medium** | Interview router uses `request.user_id` instead of `body.user_id` | [interview.py:57,65](file:///c:/project-2026/Career-navigator/backend/routers/interview.py#L57-L65) | `generate_questions()` accesses `request.user_id` (the HTTP Request object) instead of `body.user_id` (the Pydantic model). This will crash at runtime with `AttributeError` |
+| 🟡 **Medium** | Jobs endpoint returns only **mock data** | [jobs.py:20-48](file:///c:/project-2026/Career-navigator/backend/routers/jobs.py#L20-L48) | `GET /api/jobs` is hardcoded mock jobs. Real SerpAPI integration exists in `jobs_service.py` but isn't wired into the main endpoint |
+| 🟡 **Medium** | `generate_skill_gaps()` drops `leetcode_data` | [gemini_service.py:257](file:///c:/project-2026/Career-navigator/backend/services/gemini_service.py#L257) | Passes `leetcode_data={}` to `_get_cached_analysis()`, so if skill gaps are requested independently, it generates a cache miss and makes a new (incomplete) API call |
+| 🟡 **Medium** | `generate_roadmap()` drops both `github_data` and `leetcode_data` | [gemini_service.py:271-274](file:///c:/project-2026/Career-navigator/backend/services/gemini_service.py#L271-L274) | Passes `github_data={}, leetcode_data={}` — same cache-miss issue as above |
+| 🟢 **Low** | In-memory cache not bounded | [gemini_service.py:21](file:///c:/project-2026/Career-navigator/backend/services/gemini_service.py#L21) | `_analysis_cache = {}` grows indefinitely, no TTL or LRU eviction |
+| 🟢 **Low** | Next.js middleware is a no-op | [middleware.ts](file:///c:/project-2026/Career-navigator/frontend/middleware.ts) | `middleware.ts` simply calls `NextResponse.next()` — no auth protection at the middleware level. Auth checks are done per-page instead |
+| 🟢 **Low** | `lib/api.ts` not used by pages | [api.ts](file:///c:/project-2026/Career-navigator/frontend/lib/api.ts) | Pages make direct `fetch()` calls instead of using the typed `api` client. The `api.ts` module appears to be unused dead code |
+| 🟢 **Low** | Outdated README | [README.md:19](file:///c:/project-2026/Career-navigator/README.md#L19) | References Claude API, Anthropic key, and missing env vars for Gemini |
+
+---
+
+### 4.4 — Supabase Tables (Inferred from Code)
+
+| Table | Used By | Key Columns |
+|-------|---------|-------------|
+| `profiles` | `resume.py`, `analysis.py`, `profile_enhanced.py`, `interview.py` | `user_id`, `github_username`, `leetcode_username`, `linkedin_url`, `resume_text`, `resume_filename`, `college_name`, `degree`, `branch`, `extra_skills`, `career_goal`, `hackathon_wins` |
+| `analyses` | `analysis.py`, `interview.py` | `user_id`, `github_data`, `leetcode_data`, `analysis`, `career_paths`, `skill_gaps`, `roadmap`, `experience_level`, `strengths` |
+| `interview_sessions` | `interview.py` | `user_id`, `career_path`, `questions`, `answers`, `scores`, `total_score`, `created_at` |
+
+---
+
+## 5. Summary for Planning
+
+### What's Working ✅
+- Full user flow: Auth → Onboarding → Profile save → Resume upload → AI Analysis → Results display
+- GitHub API integration (REST, real data)
+- LeetCode API integration (GraphQL, real data)
+- Resume PDF parsing with PyMuPDF
+- Gemini 2.5 Flash AI analysis (single combined call, efficient)
+- Interview question generation + answer evaluation
+- Rate limiting on key endpoints
+- Supabase auth + database persistence
+
+### What Needs Attention ⚠️
+1. **Interview router runtime bug** (`request.user_id` → `body.user_id`)
+2. **Route collision** between `profile.py` and `profile_enhanced.py` on `/api/profile`
+3. **Jobs page** is entirely mock data — needs real API wiring
+4. **`lib/api.ts`** typed client is dead code — either adopt it or remove it
+5. **README** needs updating to reflect Gemini migration
+6. **Cache strategy** needs TTL/LRU bounds for production

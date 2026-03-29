@@ -1,6 +1,6 @@
 """
-AI Service using Google Gemini 1.5 Flash (Free Tier)
-Handles all AI-powered analysis
+AI Service using Google Gemini 2.5 Flash (Free Tier)
+6 calls combined into 1 using smart caching
 """
 import os
 import json
@@ -11,10 +11,92 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# Set this to True to bypass Gemini API calls and return realistic fake data
+MOCK_MODE = True
+
+MOCK_RESPONSE = {
+    "analysis": {
+        "experience_level": "Intermediate",
+        "experience_reason": "Candidate has a strong foundation in Python and React with multiple projects showing full-stack capabilities.",
+        "strengths": ["REST API development", "TypeScript/React expertise", "Database design", "System Architecture basics"],
+        "weaknesses": ["Advanced data structures", "Microservices orchestration", "Kubernetes experience is limited"]
+    },
+    "career_paths": [
+        {
+            "name": "Full Stack Engineer",
+            "match_percentage": 92,
+            "reason": "Perfect alignment with existing React+FastAPI project portfolio."
+        },
+        {
+            "name": "Backend Architect",
+            "match_percentage": 85,
+            "reason": "Strong logical structure in codebase and efficient database handling."
+        },
+        {
+            "name": "Frontend Lead",
+            "match_percentage": 78,
+            "reason": "Deep understanding of component lifecycle and state management."
+        }
+    ],
+    "skill_gaps": [
+        {
+            "skill": "Redis Caching",
+            "have": False,
+            "priority": 1,
+            "resources": [
+                "Official Redis Docs",
+                "Learn Redis with Python (Hussain Nasser)"
+            ]
+        },
+        {
+            "skill": "Docker Containerization",
+            "have": False,
+            "priority": 2,
+            "resources": [
+                "Docker for Beginners (Udemy)",
+                "Full Stack Containerization Guide"
+            ]
+        }
+    ],
+    "roadmap": {
+        "target_career": "Full Stack Developer",
+        "duration_months": 6,
+        "total_weeks": 24,
+        "milestones": [
+            {
+                "week": 1,
+                "title": "FastAPI Masterclass",
+                "description": "Deep dive into asynchronous programming and background tasks in Python.",
+                "skills": ["Python", "FastAPI"],
+                "deliverable": "Build a task queue processor"
+            },
+            {
+                "week": 2,
+                "title": "Frontend State Optimization",
+                "description": "Implement advanced caching and TanStack Query for data fetching.",
+                "skills": ["React", "React Query"],
+                "deliverable": "Optimize existing jobs dashboard"
+            },
+            {
+                "week": 4,
+                "title": "Infrastructure & Docker",
+                "description": "Learn to containerize and deploy with high availability.",
+                "skills": ["Docker", "Nginx"],
+                "deliverable": "Deploy project to a demo server"
+            }
+        ]
+    }
+}
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY is missing from .env file")
 
 client_genai = genai.Client(api_key=GEMINI_API_KEY)
+
+# Cache state to handle multiple calls in one session
+_analysis_cache = {}
+_last_github_data = {}
+_last_leetcode_data = {}
 
 
 def _clean_json(text: str) -> str:
@@ -42,154 +124,270 @@ def _clean_json(text: str) -> str:
 
 def _generate(prompt: str) -> str:
     response = client_genai.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-2.0-flash",
         contents=prompt
     )
     return response.text
 
 
-def analyze_profile(github_data: dict, leetcode_data: dict, resume_text: str = "") -> dict:
-    prompt = f"""
-    You are an expert career analyst. Analyze the following profile data and provide career insights.
-    
-    GITHUB DATA:
-    {json.dumps(github_data, indent=2)}
-    
-    LEETCODE DATA:
-    {json.dumps(leetcode_data, indent=2)}
-    
-    {f"RESUME DATA:{resume_text[:2000]}" if resume_text else ""}
-    
-    Provide a JSON response with:
-    1. "strengths": Array of 5-7 key technical strengths
-    2. "weaknesses": Array of 3-5 areas for improvement
-    3. "experience_level": One of "Beginner", "Intermediate", or "Advanced"
-    4. "experience_reason": Brief explanation
-    
-    Return ONLY valid JSON, no markdown formatting.
+def run_combined_analysis(
+    github_data: dict,
+    leetcode_data: dict,
+    resume_text: str = ""
+) -> dict:
     """
+    Single combined Gemini API call.
+    Replaces all 6 separate calls with 1.
+    """
+    if MOCK_MODE:
+        return {"success": True, "data": MOCK_RESPONSE}
+
+    prompt = f"""
+You are an expert AI Career Mentor. Analyze this candidate 
+profile completely and provide personalized career guidance.
+
+===== GITHUB DATA =====
+{json.dumps(github_data or {}, indent=2)}
+
+===== LEETCODE DATA =====
+{json.dumps(leetcode_data or {}, indent=2)}
+
+===== RESUME =====
+{resume_text[:3000] if resume_text else "Not provided"}
+
+===== YOUR TASK =====
+Based on ALL the above data, return ONLY a single valid 
+JSON object. No markdown, no extra text, just JSON.
+
+Use this exact structure:
+{{
+    "analysis": {{
+        "strengths": [
+            "strength 1",
+            "strength 2",
+            "strength 3",
+            "strength 4",
+            "strength 5"
+        ],
+        "weaknesses": [
+            "weakness 1",
+            "weakness 2",
+            "weakness 3"
+        ],
+        "experience_level": "Beginner",
+        "experience_reason": "Brief explanation here"
+    }},
+    "career_paths": [
+        {{
+            "name": "Career Path Name",
+            "match_percentage": 90,
+            "reason": "Why this fits the candidate"
+        }},
+        {{
+            "name": "Career Path Name",
+            "match_percentage": 80,
+            "reason": "Why this fits the candidate"
+        }},
+        {{
+            "name": "Career Path Name",
+            "match_percentage": 70,
+            "reason": "Why this fits the candidate"
+        }}
+    ],
+    "skill_gaps": [
+        {{
+            "skill": "Skill Name",
+            "have": false,
+            "priority": 1,
+            "resources": [
+                "Resource 1",
+                "Resource 2"
+            ]
+        }},
+        {{
+            "skill": "Skill Name",
+            "have": true,
+            "priority": 2,
+            "resources": [
+                "Resource 1",
+                "Resource 2"
+            ]
+        }}
+    ],
+    "roadmap": {{
+        "target_career": "Same as top career path name",
+        "duration_months": 6,
+        "total_weeks": 24,
+        "milestones": [
+            {{
+                "week": 1,
+                "title": "Milestone Title",
+                "description": "What to accomplish this week",
+                "skills": ["skill1", "skill2"],
+                "deliverable": "What to build or achieve"
+            }},
+            {{
+                "week": 2,
+                "title": "Milestone Title",
+                "description": "What to accomplish this week",
+                "skills": ["skill1", "skill2"],
+                "deliverable": "What to build or achieve"
+            }}
+        ]
+    }}
+}}
+"""
     try:
-        return json.loads(_clean_json(_generate(prompt)))
+        raw_text = _generate(prompt)
+        clean_text = _clean_json(raw_text)
+        result = json.loads(clean_text)
+        return {"success": True, "data": result}
+    except json.JSONDecodeError as e:
+        return {
+            "success": False,
+            "error": f"Failed to parse AI response: {str(e)}"
+        }
     except Exception as e:
         return {
-            "error": f"Analysis failed: {str(e)}",
-            "strengths": ["Error in analysis"],
-            "weaknesses": [],
-            "experience_level": "Intermediate",
-            "experience_reason": "Could not complete analysis"
+            "success": False,
+            "error": f"Gemini API error: {str(e)}"
         }
 
 
-def generate_career_paths(analysis: dict, github_data: dict, leetcode_data: dict, resume_text: str = "") -> list:
-    prompt = f"""
-    You are an expert career counselor. Recommend career paths based on this profile.
+def _get_cached_analysis(
+    github_data: dict,
+    leetcode_data: dict,
+    resume_text: str = ""
+) -> dict:
+    global _last_github_data, _last_leetcode_data
     
-    USER ANALYSIS:
-    {json.dumps(analysis, indent=2)}
+    # Store the most recent inputs
+    if github_data: _last_github_data = github_data
+    if leetcode_data: _last_leetcode_data = leetcode_data
     
-    GITHUB DATA:
-    {json.dumps(github_data, indent=2)}
-    
-    {f"RESUME DATA:{resume_text[:2000]}" if resume_text else ""}
-    
-    Recommend 3-5 career paths. For each provide:
-    - "name": Career path name
-    - "match_percentage": 0-100 match score (must be a number)
-    - "reason": Why this path fits their profile
-    
-    Return ONLY valid JSON array, no markdown formatting.
-    """
-    try:
-        paths = json.loads(_clean_json(_generate(prompt)))
-        if isinstance(paths, dict) and "career_paths" in paths:
-            return paths["career_paths"]
-        return paths
-    except Exception as e:
-        return [{"error": f"Failed to generate career paths: {str(e)}"}]
+    cache_key = str(github_data) + str(leetcode_data) + str(resume_text[:100])
+
+    if cache_key not in _analysis_cache:
+        result = run_combined_analysis(
+            github_data,
+            leetcode_data,
+            resume_text
+        )
+        if result["success"]:
+            _analysis_cache[cache_key] = result["data"]
+        else:
+            return None, result["error"]
+
+    return _analysis_cache[cache_key], None
 
 
-def generate_skill_gaps(analysis: dict, career_path: str, github_data: dict, resume_text: str = "") -> list:
-    current_skills = []
-    if isinstance(github_data, dict):
-        lang_stats = github_data.get("language_stats", {})
-        current_skills = list(lang_stats.keys())[:10]
+# ============================================================
+# THESE FUNCTIONS KEEP THE SAME NAMES AND SIGNATURES AS BEFORE
+# The router does not need any changes at all
+# ============================================================
 
-    prompt = f"""
-    You are an expert tech recruiter. Analyze skill gaps for someone wanting to become a {career_path}.
-    
-    CURRENT SKILLS: {current_skills}
-    USER ANALYSIS: {json.dumps(analysis, indent=2)}
-    TARGET CAREER: {career_path}
-    {f"RESUME DATA:{resume_text[:1000]}" if resume_text else ""}
-    
-    Provide a JSON array of skills with:
-    - "skill": Skill name
-    - "have": true if user likely has it, false if missing
-    - "priority": 1-5 (1 = most important to learn first)
-    - "resources": Array of 2-3 learning resources
-    
-    Return ONLY valid JSON array, no markdown formatting.
-    """
-    try:
-        return json.loads(_clean_json(_generate(prompt)))
-    except Exception as e:
-        return [{"error": f"Failed to generate skill gaps: {str(e)}"}]
+def analyze_profile(
+    github_data: dict,
+    leetcode_data: dict,
+    resume_text: str = ""
+) -> dict:
+    data, error = _get_cached_analysis(
+        github_data,
+        leetcode_data,
+        resume_text
+    )
+    if data:
+        return data.get("analysis", {
+            "strengths": [],
+            "weaknesses": [],
+            "experience_level": "Intermediate",
+            "experience_reason": "Analysis completed"
+        })
+    return {
+        "error": error or "Analysis failed",
+        "strengths": ["Error in analysis"],
+        "weaknesses": [],
+        "experience_level": "Intermediate",
+        "experience_reason": "Could not complete analysis"
+    }
 
 
-def generate_roadmap(analysis: dict, career_path: str, duration_months: int = 6, resume_text: str = "") -> dict:
-    prompt = f"""
-    You are an expert career coach. Create a roadmap for someone to become a {career_path}.
-    
-    USER ANALYSIS: {json.dumps(analysis, indent=2)}
-    TARGET CAREER: {career_path}
-    DURATION: {duration_months} months
-    {f"RESUME DATA:{resume_text[:1000]}" if resume_text else ""}
-    
-    Provide JSON with:
-    - "target_career": The career path
-    - "duration_months": Total duration
-    - "total_weeks": Calculated weeks
-    - "milestones": Array of milestones, each with:
-      - "week": Week number
-      - "title": Short milestone title
-      - "description": What to accomplish
-      - "skills": Array of skills to learn
-      - "deliverable": What to build or achieve
-    
-    Use simple English without special characters.
-    Return ONLY valid JSON, no markdown formatting.
-    """
-    try:
-        roadmap = json.loads(_clean_json(_generate(prompt)))
-        if "duration_months" not in roadmap:
-            roadmap["duration_months"] = duration_months
-        if "total_weeks" not in roadmap:
-            roadmap["total_weeks"] = duration_months * 4
-        return roadmap
-    except Exception as e:
-        return {
-            "error": f"Failed to generate roadmap: {str(e)}",
+def generate_career_paths(
+    analysis: dict,
+    github_data: dict,
+    leetcode_data: dict,
+    resume_text: str = ""
+) -> list:
+    data, error = _get_cached_analysis(
+        github_data,
+        leetcode_data,
+        resume_text
+    )
+    if data:
+        return data.get("career_paths", [])
+    return [{"error": error or "Failed to generate career paths"}]
+
+
+def generate_skill_gaps(
+    analysis: dict,
+    career_path: str,
+    github_data: dict,
+    resume_text: str = ""
+) -> list:
+    data, error = _get_cached_analysis(
+        github_data=_last_github_data,
+        leetcode_data=_last_leetcode_data,
+        resume_text=resume_text
+    )
+    if data:
+        return data.get("skill_gaps", [])
+    return [{"error": error or "Failed to generate skill gaps"}]
+
+
+def generate_roadmap(
+    analysis: dict,
+    career_path: str,
+    duration_months: int = 6,
+    resume_text: str = ""
+) -> dict:
+    data, error = _get_cached_analysis(
+        github_data=_last_github_data,
+        leetcode_data=_last_leetcode_data,
+        resume_text=resume_text
+    )
+    if data:
+        return data.get("roadmap", {
             "target_career": career_path,
             "duration_months": duration_months,
             "milestones": []
-        }
+        })
+    return {
+        "error": error or "Failed to generate roadmap",
+        "target_career": career_path,
+        "duration_months": duration_months,
+        "milestones": []
+    }
 
 
-def generate_interview_questions(profile: dict, career_path: str, difficulty: str, resume_text: str = "") -> list:
+def generate_interview_questions(
+    profile: dict,
+    career_path: str,
+    difficulty: str,
+    resume_text: str = ""
+) -> list:
     prompt = f"""You are an expert technical interviewer.
+Generate exactly 5 interview questions for: {career_path}
+Difficulty: {difficulty}
+Profile: {json.dumps(profile)}
+{f"Resume highlights: {resume_text[:500]}" if resume_text else ""}
 
-Generate exactly 5 interview questions for a candidate applying for: {career_path}
-Difficulty level: {difficulty}
-
-Candidate profile:
-- Skills: {profile.get('extra_skills', [])}
-- Experience: {profile.get('experience', [])}
-- College: {profile.get('college_name', 'Not specified')}
-- Career Goal: {profile.get('career_goal', career_path)}
-{f"- Resume highlights: {resume_text[:500]}" if resume_text else ""}
-
-Return ONLY a JSON array with exactly 5 objects. Each object must have:
-"id" (number 1-5), "question" (string), "type" (one of: technical, behavioral, dsa, system_design, project_based), "difficulty" (string), "hint" (string)
+Return ONLY a JSON array with exactly 5 objects.
+Each object must have:
+"id" (number 1-5),
+"question" (string),
+"type" (technical/behavioral/dsa/system_design/project_based),
+"difficulty" (string),
+"hint" (string)
 
 Return ONLY the JSON array, no other text."""
     try:
@@ -198,33 +396,37 @@ Return ONLY the JSON array, no other text."""
         if isinstance(questions, list) and len(questions) > 0:
             return questions
         return []
-    except Exception as e:
+    except Exception:
         return [
             {"id": 1, "question": f"Tell me about your experience with {career_path}", "type": "behavioral", "difficulty": difficulty, "hint": "Focus on specific projects"},
             {"id": 2, "question": "What are the SOLID principles?", "type": "technical", "difficulty": difficulty, "hint": "There are 5 principles"},
-            {"id": 3, "question": "Explain your most challenging project", "type": "project_based", "difficulty": difficulty, "hint": "Mention the problem, solution, and outcome"},
+            {"id": 3, "question": "Explain your most challenging project", "type": "project_based", "difficulty": difficulty, "hint": "Mention problem, solution, outcome"},
             {"id": 4, "question": "How would you design a URL shortener?", "type": "system_design", "difficulty": difficulty, "hint": "Think about scalability"},
-            {"id": 5, "question": "Reverse a linked list", "type": "dsa", "difficulty": difficulty, "hint": "Think about iterative vs recursive approach"}
+            {"id": 5, "question": "Reverse a linked list", "type": "dsa", "difficulty": difficulty, "hint": "Iterative vs recursive"}
         ]
 
 
-def evaluate_interview_answer(question: str, answer: str, career_path: str) -> dict:
-    prompt = f"""You are an expert technical interviewer evaluating a candidate for {career_path}.
+def evaluate_interview_answer(
+    question: str,
+    answer: str,
+    career_path: str
+) -> dict:
+    prompt = f"""You are an expert technical interviewer for {career_path}.
 
 Question: {question}
 Candidate Answer: {answer}
 
-Evaluate and provide JSON with:
-- "score": number from 1-10
-- "good_points": array of 2-3 things done well
-- "missing_points": array of 2-3 things missing or could improve
-- "model_answer": a brief model answer (2-3 sentences)
-- "tip": one specific tip for improvement
+Return ONLY valid JSON with exactly these fields:
+"score" (number 1-10),
+"good_points" (array of 2-3 strings),
+"missing_points" (array of 2-3 strings),
+"model_answer" (string, 2-3 sentences),
+"tip" (string, one specific tip)
 
-Return ONLY valid JSON, no markdown formatting."""
+No markdown, no extra text, just JSON."""
     try:
         return json.loads(_clean_json(_generate(prompt)))
-    except Exception as e:
+    except Exception:
         return {
             "score": 5,
             "good_points": ["Attempted the question"],

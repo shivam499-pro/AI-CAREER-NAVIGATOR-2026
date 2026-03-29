@@ -2,7 +2,7 @@
 Interview Router
 Handles AI interview practice functionality
 """
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from pydantic import BaseModel
@@ -54,15 +54,15 @@ async def generate_questions(request: Request, body: GenerateQuestionsRequest):
     """
     try:
         # Fetch user data
-        profile_response = supabase.table("profiles").select("*").eq("user_id", request.user_id).execute()
-        
+        profile_response = supabase.table("profiles").select("*").eq("user_id", body.user_id).execute()
+
         if not profile_response.data:
             raise HTTPException(status_code=404, detail="Profile not found")
         
         profile = profile_response.data[0]
         
         # Fetch analysis data for strengths
-        analysis_response = supabase.table("analyses").select("*").eq("user_id", request.user_id).execute()
+        analysis_response = supabase.table("analyses").select("*").eq("user_id", body.user_id).execute()
         
         analysis_data = {}
         if analysis_response.data:
@@ -88,10 +88,12 @@ async def generate_questions(request: Request, body: GenerateQuestionsRequest):
         
         # Import and call gemini service
         from services import gemini_service
+        
+        # FIX: Use 'body' instead of 'request' to access your Pydantic data
         questions = gemini_service.generate_interview_questions(
             full_profile, 
-            request.career_path, 
-            request.difficulty,
+            body.career_path,  # Changed from request.career_path
+            body.difficulty,   # Changed from request.difficulty
             full_profile.get("resume_text", "")
         )
         
@@ -106,16 +108,16 @@ async def generate_questions(request: Request, body: GenerateQuestionsRequest):
 
 
 @router.post("/evaluate-answer")
-async def evaluate_answer(request: EvaluateAnswerRequest):
+async def evaluate_answer(body : EvaluateAnswerRequest):
     """
     Evaluate a user's interview answer.
     """
     try:
         from services import gemini_service
         result = gemini_service.evaluate_interview_answer(
-            request.question,
-            request.answer,
-            request.career_path
+            body.question,
+            body.answer,
+            body.career_path
         )
         
         return result
@@ -125,21 +127,21 @@ async def evaluate_answer(request: EvaluateAnswerRequest):
 
 
 @router.post("/save-session")
-async def save_session(request: SaveSessionRequest):
+async def save_session(body: SaveSessionRequest):
     """
     Save an interview session to the database.
     """
     try:
         session_data = {
-            "user_id": request.user_id,
-            "career_path": request.career_path,
-            "questions": request.questions,
-            "answers": request.answers,
-            "scores": request.scores,
-            "total_score": request.total_score
+            "user_id": body.user_id,
+            "career_path": body.career_path,
+            "questions": body.questions,
+            "answers": body.answers,
+            "scores": body.scores,
+            "total_score": body.total_score
         }
         
-        response = supabase.table("interview_sessions").insert(session_data).execute()
+        supabase.table("interview_sessions").insert(session_data).execute()
         
         return {"success": True, "message": "Session saved successfully"}
         

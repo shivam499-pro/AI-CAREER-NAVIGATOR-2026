@@ -11,6 +11,7 @@ from services import github_service, leetcode_service, gemini_service
 from supabase import create_client
 import os
 from dotenv import load_dotenv
+from lib.auth import get_current_user
 
 # Load environment variables
 load_dotenv()
@@ -25,18 +26,7 @@ supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
 supabase = create_client(supabase_url, supabase_key)
 
 
-def get_current_user(authorization: Optional[str] = Header(None)):
-    """Get current user from authorization header."""
-    if not authorization:
-        return None
-    
-    try:
-        # Extract token from "Bearer <token>"
-        token = authorization.replace("Bearer ", "")
-        user = supabase.auth.get_user(token)
-        return user.user
-    except Exception:
-        return None
+# Auth dependency is now imported from lib.auth
 
 
 class StartAnalysisRequest(BaseModel):
@@ -94,23 +84,24 @@ async def start_analysis(
         if not isinstance(leetcode_data, dict):
             leetcode_data = {}
         
-        # Run AI analysis
-        analysis = gemini_service.analyze_profile(github_data, leetcode_data, resume_text)
+        # Single combined AI call - replaces 4 separate calls
+        combined_result = gemini_service.run_combined_analysis(
+            github_data, leetcode_data, resume_text
+        )
+        if not combined_result.get("success"):
+            raise HTTPException(status_code=500, detail=combined_result.get("error", "AI analysis failed"))
         
-        # Generate career paths
-        career_paths = gemini_service.generate_career_paths(analysis, github_data, leetcode_data, resume_text)
+        data = combined_result.get("data", {})
+        analysis = data.get("analysis", {})
+        career_paths = data.get("career_paths", [])
+        skill_gaps = data.get("skill_gaps", [])
+        roadmap = data.get("roadmap", {})
         
-        # Get top career path for skill gaps and roadmap
-        target_career = "Full Stack Developer"  # Default
+        # Get top career path
+        target_career = "Full Stack Developer"
         if career_paths and isinstance(career_paths, list) and len(career_paths) > 0:
             if isinstance(career_paths[0], dict):
                 target_career = career_paths[0].get("name", target_career)
-        
-        # Generate skill gaps
-        skill_gaps = gemini_service.generate_skill_gaps(analysis, target_career, github_data, resume_text)
-        
-        # Generate roadmap
-        roadmap = gemini_service.generate_roadmap(analysis, target_career, 6, resume_text)
         
         # Save to database
         analysis_record = {
@@ -121,21 +112,26 @@ async def start_analysis(
             "career_paths": career_paths,
             "skill_gaps": skill_gaps,
             "roadmap": roadmap,
-            "experience_level": analysis.get("experience_level", "Intermediate"),
-            "strengths": analysis.get("strengths", []),
+            "experience_level": (analysis or {}).get("experience_level", "Beginner"),
+            "strengths": (analysis or {}).get("strengths", []),
         }
         
         # Insert or update analysis
         # First check if exists
-        existing = supabase.table("analyses").select("id").eq("user_id", user_id).execute()
-        
-        if existing.data:
-            # Update existing
-            supabase.table("analyses").update(analysis_record).eq("user_id", user_id).execute()
-        else:
-            # Insert new
-            supabase.table("analyses").insert(analysis_record).execute()
-        
+        try:
+            existing = supabase.table("analyses").select("id").eq("user_id", user_id).execute()
+           
+            if existing.data:
+                # Update existing
+                supabase.table("analyses").update(analysis_record).eq("user_id", user_id).execute()
+            else:
+                # Insert new
+                supabase.table("analyses").insert(analysis_record).execute()
+        except Exception as db_error:
+            print(f"Database Error: {db_error}")
+            raise HTTPException(status_code=500, detail=f"Database save failed: {str(db_error)}")
+
+
         return {
             "status": "completed",
             "analysis": analysis,

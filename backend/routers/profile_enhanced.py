@@ -2,7 +2,8 @@
 Enhanced Profile Router
 Handles enhanced profile data (academic, skills, experience, achievements, goals)
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from lib.auth import get_current_user
 from pydantic import BaseModel
 from typing import Optional, List, Any
 from supabase import create_client
@@ -39,12 +40,13 @@ class EnhancedProfile(BaseModel):
     hackathon_wins: Optional[int] = None
 
 
-@router.get("/enhanced/{user_id}")
-async def get_enhanced_profile(user_id: str):
+@router.get("/enhanced")
+async def get_enhanced_profile(user: Any = Depends(get_current_user)):
     """
-    Get enhanced profile data for a user.
+    Get enhanced profile data for the current authenticated user.
     """
     try:
+        user_id = user.id
         response = supabase.table("profiles").select("*").eq("user_id", user_id).execute()
         
         if not response.data:
@@ -75,12 +77,13 @@ async def get_enhanced_profile(user_id: str):
         return {"error": str(e)}
 
 
-@router.post("/enhanced/{user_id}")
-async def save_enhanced_profile(user_id: str, profile: EnhancedProfile):
+@router.post("/enhanced")
+async def save_enhanced_profile(profile: EnhancedProfile, user: Any = Depends(get_current_user)):
     """
-    Save enhanced profile data for a user.
+    Save enhanced profile data for the current authenticated user.
     """
     try:
+        user_id = user.id
         profile_data = profile.dict(exclude_unset=True)
         
         # Update profile in Supabase
