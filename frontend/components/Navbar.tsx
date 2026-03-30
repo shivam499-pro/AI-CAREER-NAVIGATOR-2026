@@ -5,9 +5,9 @@ import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
-import { 
-  Menu, X, LayoutDashboard, Brain, Mic, User, 
-  FileText, Briefcase, LogOut 
+import {
+  Menu, X, LayoutDashboard, Brain, Mic, User,
+  FileText, Briefcase, LogOut
 } from 'lucide-react'
 
 const navLinks = [
@@ -50,11 +50,10 @@ export default function Navbar() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive
                       ? 'bg-[#6C3FC8] text-white'
                       : 'text-gray-200 hover:bg-white/10 hover:text-white'
-                  }`}
+                    }`}
                 >
                   <Icon className="h-4 w-4" />
                   {link.label}
@@ -95,11 +94,10 @@ export default function Navbar() {
                   key={link.href}
                   href={link.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium ${
-                    isActive
+                  className={`flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium ${isActive
                       ? 'bg-[#6C3FC8] text-white'
                       : 'text-gray-200 hover:bg-white/10 hover:text-white'
-                  }`}
+                    }`}
                 >
                   <Icon className="h-5 w-5" />
                   {link.label}
