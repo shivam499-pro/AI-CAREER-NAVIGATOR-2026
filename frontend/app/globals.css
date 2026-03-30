@@ -4,23 +4,39 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 216 55% 24%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --background: 222 100% 18%;
+    /* Navy Blue - 60% dominant */
+    --foreground: 0 0% 100%;
+    /* White text */
+    --card: 222 100% 22%;
+    /* Slightly lighter Navy for cards */
+    --card-foreground: 0 0% 100%;
+    /* White text on cards */
+    --primary: 51 100% 50%;
+    /* Gold - accent */
+    --primary-foreground: 222 100% 18%;
+    /* Navy text on Gold buttons */
+    --secondary: 222 100% 25%;
+    /* Lighter Navy */
+    --secondary-foreground: 0 0% 100%;
+    /* White */
+    --muted: 222 100% 25%;
+    /* Muted Navy */
+    --muted-foreground: 0 0% 80%;
+    /* Light grey text */
+    --accent: 51 100% 50%;
+    /* Gold accent */
+    --accent-foreground: 222 100% 18%;
+    /* Navy on Gold */
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Keep red for errors */
+    --destructive-foreground: 0 0% 100%;
+    --border: 51 100% 50%;
+    /* Gold border */
+    --input: 222 100% 25%;
+    /* Navy input */
+    --ring: 51 100% 50%;
+    /* Gold focus ring */
     --radius: 0.75rem;
   }
 }
@@ -29,22 +45,23 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }
 }
 
-/* Custom gradient backgrounds */
+/* Updated gradients - Navy + Gold theme */
 .gradient-primary {
-  background: linear-gradient(135deg, #1E3A5F 0%, #2E6CB8 50%, #6C3FC8 100%);
+  background: linear-gradient(135deg, #001F5B 0%, #002d8a 50%, #003580 100%);
 }
 
 .gradient-hero {
-  background: linear-gradient(180deg, #F8FAFC 0%, #EEF2FF 100%);
+  background: linear-gradient(180deg, #001F5B 0%, #002470 100%);
 }
 
 .gradient-card {
-  background: linear-gradient(145deg, #FFFFFF 0%, #F8FAFC 100%);
+  background: linear-gradient(145deg, #002470 0%, #001F5B 100%);
 }
 
 /* Animation classes */
@@ -53,25 +70,35 @@
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling - Gold theme */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #F1F5F9;
+  background: #001F5B;
+  /* Navy track */
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
+  background: #FFD700;
+  /* Gold thumb */
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8;
+  background: #FFC200;
+  /* Darker Gold on hover */
 }
