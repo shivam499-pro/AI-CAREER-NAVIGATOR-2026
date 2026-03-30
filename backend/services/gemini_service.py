@@ -13,7 +13,7 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Set this to True to bypass Gemini API calls and return realistic fake data
-MOCK_MODE = True
+MOCK_MODE = False
 
 MOCK_RESPONSE = {
     "analysis": {
@@ -124,7 +124,7 @@ def _clean_json(text: str) -> str:
 
 def _generate(prompt: str) -> str:
     response = client_genai.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         contents=prompt
     )
     return response.text

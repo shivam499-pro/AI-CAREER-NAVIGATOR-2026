@@ -1,5 +1,5 @@
 'use client'
-
+import CareerRoadmap from '@/components/CareerRoadmap'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import Navbar from '@/components/Navbar'
 import {
   Brain, Briefcase, Loader2, ArrowRight, Building2,
-  Globe, Search, GraduationCap, TrendingUp, ExternalLink
+  Globe, Search, GraduationCap, TrendingUp, ExternalLink, RefreshCw
 } from 'lucide-react'
 
 interface CareerPath {
@@ -230,6 +230,11 @@ export default function JobsPage() {
                   <p className="text-sm text-primary font-semibold">{path.match_percentage}% match</p>
                 </div>
               ))}
+              {analysis?.roadmap && (
+                <div className="mb-10">
+                  <CareerRoadmap roadmap={analysis.roadmap} />
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -283,6 +288,14 @@ export default function JobsPage() {
                       Apply Now
                       <ExternalLink className="ml-2 w-4 h-4" />
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => fetchRealJobs(targetCareer)}
+                      className="ml-2"
+                    >
+                      Refresh Jobs
+                    </Button> 
                   </a>
                 </div>
               ))}
