@@ -56,29 +56,29 @@ def get_mock_jobs(query: str, location: str = None) -> list:
     return [
         {
             "id": "1",
-            "title": "Frontend Developer",
-            "company": "Tech Corp",
-            "location": location or "Remote",
+            "title": f"Junior {query or 'Software Engineer'}",
+            "company": "Tech Solutions India",
+            "location": location or "Remote, India",
             "type": "Full-time",
-            "url": "https://linkedin.com/jobs/view/123",
+            "url": "https://www.linkedin.com/jobs/search/",
             "match_score": 92
         },
         {
             "id": "2",
-            "title": "Full Stack Developer",
-            "company": "StartupXYZ",
-            "location": "San Francisco, CA",
+            "title": f"{query or 'Full Stack Developer'}",
+            "company": "Global Dev Center",
+            "location": location or "Bangalore, KA",
             "type": "Full-time",
-            "url": "https://linkedin.com/jobs/view/456",
+            "url": "https://www.linkedin.com/jobs/search/",
             "match_score": 88
         },
         {
             "id": "3",
-            "title": "Junior Software Engineer",
-            "company": "BigTech Inc",
-            "location": "New York, NY",
+            "title": f"Intern - {query or 'Analyst'}",
+            "company": "Chennai Innovate Labs",
+            "location": location or "Chennai, TN",
             "type": "Internship",
-            "url": "https://internshala.com/job/view/789",
+            "url": "https://www.linkedin.com/jobs/search/",
             "match_score": 85
         }
     ]

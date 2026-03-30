@@ -29,29 +29,29 @@ async def get_jobs(
         mock_jobs = [
             {
                 "id": "1",
-                "title": "Frontend Developer",
-                "company": "Tech Corp",
-                "location": "Remote",
+                "title": f"Junior {search_query or 'Software Engineer'}",
+                "company": "Tech Solutions India",
+                "location": "Remote, India",
                 "type": "Full-time",
-                "url": "https://linkedin.com/jobs/view/123",
+                "url": "#",
                 "match_score": 92
             },
             {
                 "id": "2",
-                "title": "Full Stack Developer",
-                "company": "StartupXYZ",
-                "location": "San Francisco, CA",
+                "title": f"{search_query or 'Full Stack Developer'}",
+                "company": "Global Dev Center",
+                "location": "Bangalore / Remote",
                 "type": "Full-time",
-                "url": "https://linkedin.com/jobs/view/456",
+                "url": "#",
                 "match_score": 88
             },
             {
                 "id": "3",
-                "title": "Junior Software Engineer",
-                "company": "BigTech Inc",
-                "location": "New York, NY",
+                "title": f"Intern - {search_query or 'Systems Engineer'}",
+                "company": "Innovate Labs",
+                "location": "Chennai, India",
                 "type": "Internship",
-                "url": "https://internshala.com/job/view/789",
+                "url": "#",
                 "match_score": 85
             }
         ]

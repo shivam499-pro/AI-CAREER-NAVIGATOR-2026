@@ -230,14 +230,20 @@ export default function JobsPage() {
                   <p className="text-sm text-primary font-semibold">{path.match_percentage}% match</p>
                 </div>
               ))}
-              {analysis?.roadmap && (
-                <div className="mb-10">
-                  <CareerRoadmap roadmap={analysis.roadmap} />
-                </div>
-              )}
             </div>
           </div>
         )}
+
+        {/* Career Roadmap Timeline
+        {analysis?.roadmap && (
+          <div className="mb-10 bg-card rounded-2xl border p-6">
+            <h3 className="text-xl font-bold text-foreground mb-6 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-[#6C3FC8]" />
+              Your Career Roadmap
+            </h3>
+            <CareerRoadmap roadmap={analysis.roadmap} />
+          </div>
+        )} */}
 
         {/* Section: Live Job Matches */}
         <section className="mb-10">
@@ -245,7 +251,7 @@ export default function JobsPage() {
             <Search className="w-5 h-5 text-[#6C3FC8]" />
             Live Job Matches
           </h3>
-          
+
           {jobsLoading ? (
             <div className="flex items-center justify-center p-12 bg-card rounded-xl border">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -254,7 +260,7 @@ export default function JobsPage() {
           ) : jobs.length > 0 ? (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {jobs.map((job, i) => (
-                <div 
+                <div
                   key={i}
                   className="bg-card rounded-xl border p-6 hover:shadow-lg transition-shadow border-l-4 border-l-[#6C3FC8]"
                 >
@@ -266,7 +272,7 @@ export default function JobsPage() {
                       New
                     </span>
                   </div>
-                  
+
                   <div className="space-y-2 mb-6">
                     <div className="flex items-center text-sm text-muted-foreground">
                       <Building2 className="w-4 h-4 mr-2 text-[#1E3A5F]" />
@@ -277,10 +283,10 @@ export default function JobsPage() {
                       {job.location}
                     </div>
                   </div>
-                  
-                  <a 
-                    href={job.url || job.apply_link} 
-                    target="_blank" 
+
+                  <a
+                    href={job.url || job.apply_link}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="block"
                   >
@@ -295,7 +301,7 @@ export default function JobsPage() {
                       className="ml-2"
                     >
                       Refresh Jobs
-                    </Button> 
+                    </Button>
                   </a>
                 </div>
               ))}
@@ -401,6 +407,19 @@ export default function JobsPage() {
             ))}
           </div>
         </section>
+
+
+        {/* Career Roadmap Timeline */}
+        {analysis?.roadmap && (
+          <div className="mb-10 bg-card rounded-2xl border p-6">
+            <h3 className="text-xl font-bold text-foreground mb-6 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-[#6C3FC8]" />
+              Your Career Roadmap
+            </h3>
+            <CareerRoadmap roadmap={analysis.roadmap} />
+          </div>
+        )}
+
 
         {/* Profile Summary */}
         {profile && (
