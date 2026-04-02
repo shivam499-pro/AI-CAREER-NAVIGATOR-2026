@@ -168,8 +168,9 @@ export default function InterviewPage() {
         answer,
         feedback
       }
-      
-      setAnswers([...answers, newAnswer])
+
+      const updatedAnswers = [...answers, newAnswer]
+      setAnswers(updatedAnswers)
       
       // Move to next or finish
       if (currentQuestion < questions.length - 1) {
@@ -177,7 +178,7 @@ export default function InterviewPage() {
         setAnswer('')
         setShowHint(false)
       } else {
-        finishInterview()
+        finishInterview(updatedAnswers)
       }
     } catch (err) {
       console.error('Error submitting answer:', err)
@@ -186,8 +187,10 @@ export default function InterviewPage() {
     }
   }
 
-  const finishInterview = async () => {
+  const finishInterview = async (finalAnswers?: Answer[]) => {
     if (!user) return
+
+    const answersToUse = finalAnswers || answers
     
     // Stop timer
     if (timerInterval) {
@@ -196,7 +199,7 @@ export default function InterviewPage() {
     }
     
     // Calculate total score
-    const total = answers.reduce((sum, a) => sum + (a.feedback?.score || 0), 0)
+    const total = answersToUse.reduce((sum, a) => sum + (a.feedback?.score || 0), 0)
     setTotalScore(total)
     
     // Save session
@@ -209,8 +212,8 @@ export default function InterviewPage() {
           user_id: user.id,
           career_path: careerPath,
           questions: questions.map(q => q.question),
-          answers: answers.map(a => ({ question: a.question, answer: a.answer })),
-          scores: answers.map(a => a.feedback?.score || 0),
+          answers: answersToUse.map(a => ({ question: a.question, answer: a.answer })),
+          scores: answersToUse.map(a => a.feedback?.score || 0),
           total_score: total
         })
       })
