@@ -295,6 +295,7 @@ Powered by AI Career Navigator`
                 <select
                   value={careerPath}
                   onChange={(e) => setCareerPath(e.target.value)}
+                  aria-label="Select career path"
                   className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#6C3FC8] outline-none"
                 >
                   {careerPaths.length > 0 ? (
@@ -369,7 +370,8 @@ Powered by AI Career Navigator`
                 <div 
                   className="h-full bg-gradient-to-r from-[#1E3A5F] to-[#6C3FC8] transition-all"
                   style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
-                />
+                                  
+                />                
               </div>
             </div>
 
