@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import Navbar from '@/components/Navbar'
 import { 
   Brain, Loader2, ChevronRight, CheckCircle, XCircle,
-  Lightbulb, ArrowRight, Copy, RefreshCw, MessageSquare
+  Lightbulb, ArrowRight, Copy, RefreshCw, MessageSquare, Mic, MicOff
 } from 'lucide-react'
 
 interface Question {
@@ -55,6 +55,11 @@ export default function InterviewPage() {
   const [elapsedTime, setElapsedTime] = useState(0)
   const [timerInterval, setTimerInterval] = useState<NodeJS.Timeout | null>(null)
   
+  // Voice recognition state
+  const [isRecording, setIsRecording] = useState(false)
+  const [voiceStatus, setVoiceStatus] = useState<'idle' | 'listening' | 'done'>('idle')
+  const [recognition, setRecognition] = useState<any>(null)
+  
   // Results state
   const [totalScore, setTotalScore] = useState(0)
 
@@ -76,6 +81,48 @@ export default function InterviewPage() {
       if (timerInterval) clearInterval(timerInterval)
     }
   }, [timerInterval])
+
+  // Initialize speech recognition on component mount
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (SpeechRecognition) {
+      const recognitionInstance = new SpeechRecognition()
+      recognitionInstance.continuous = true
+      recognitionInstance.interimResults = true
+      recognitionInstance.lang = 'en-US'
+      
+      recognitionInstance.onresult = (event: any) => {
+        let finalTranscript = ''
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript + ' '
+          }
+        }
+        
+        if (finalTranscript) {
+          setAnswer(prev => prev + finalTranscript.trim())
+          setVoiceStatus('done')
+        }
+      }
+      
+      recognitionInstance.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error)
+        setIsRecording(false)
+        setVoiceStatus('idle')
+      }
+      
+      recognitionInstance.onend = () => {
+        setIsRecording(false)
+        if (voiceStatus !== 'done') {
+          setVoiceStatus('idle')
+        }
+      }
+      
+      setRecognition(recognitionInstance)
+    }
+  }, [voiceStatus])
 
   const loadUserData = async (userId: string) => {
     try {
@@ -256,6 +303,29 @@ Powered by AI Career Navigator`
     navigator.clipboard.writeText(text)
   }
 
+  // Toggle voice recording
+  const toggleVoice = () => {
+    if (!recognition) {
+      alert('Voice input not supported in this browser. Please type your answer.')
+      return
+    }
+    
+    if (isRecording) {
+      recognition.stop()
+      setIsRecording(false)
+      setVoiceStatus('done')
+    } else {
+      setAnswer('') // Clear previous answer for new recording
+      try {
+        recognition.start()
+        setIsRecording(true)
+        setVoiceStatus('listening')
+      } catch (e) {
+        console.error('Error starting recognition:', e)
+      }
+    }
+  }
+
   if (loading && screen === 'setup') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -400,14 +470,42 @@ Powered by AI Career Navigator`
                 </div>
               )}
 
-              <textarea
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                placeholder="Type your answer here..."
-                className="w-full p-4 border rounded-lg focus:ring-2 focus:ring-[#6C3FC8] outline-none min-h-[200px]"
-              />
+              <div className="flex items-center gap-2">
+                <textarea
+                  value={answer}
+                  onChange={(e) => setAnswer(e.target.value)}
+                  placeholder="Type your answer here..."
+                  className="w-full p-4 border rounded-lg focus:ring-2 focus:ring-[#6C3FC8] outline-none min-h-[200px]"
+                />
+              </div>
 
-              <div className="flex justify-between mt-4">
+              <div className="flex items-center justify-between mt-3">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={toggleVoice}
+                    disabled={!recognition}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                      !recognition 
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                        : isRecording 
+                          ? 'bg-red-100 text-red-600 animate-pulse' 
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                    title={!recognition ? 'Voice input not supported in this browser' : 'Click to speak your answer'}
+                  >
+                    {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                    <span className="text-sm">
+                      {isRecording ? 'Stop' : 'Voice'}
+                    </span>
+                  </button>
+                  <span className="text-sm text-muted-foreground">
+                    {voiceStatus === 'idle' && 'Click mic to speak your answer'}
+                    {voiceStatus === 'listening' && '🔴 Listening...'}
+                    {voiceStatus === 'done' && '✅ Done! Review your answer'}
+                  </span>
+                </div>
+                
                 <Button 
                   variant="outline" 
                   onClick={() => setShowHint(!showHint)}
