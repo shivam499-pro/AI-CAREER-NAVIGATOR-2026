@@ -88,6 +88,10 @@ export default function InterviewPage() {
   
   // Results state
   const [totalScore, setTotalScore] = useState(0)
+  
+  // Streak state
+  const [streakData, setStreakData] = useState<{current_streak: number, longest_streak: number, last_practice_date: string | null, total_sessions: number} | null>(null)
+  const [streakMessage, setStreakMessage] = useState<string | null>(null)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -98,6 +102,18 @@ export default function InterviewPage() {
       }
       setUser(user)
       await loadUserData(user.id)
+      
+      // Fetch streak data
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        const streakResponse = await fetch(`${apiUrl}/api/streaks/${user.id}`)
+        if (streakResponse.ok) {
+          const data = await streakResponse.json()
+          setStreakData(data)
+        }
+      } catch (err) {
+        console.error('Error fetching streak:', err)
+      }
     }
     checkAuth()
   }, [router])
@@ -305,6 +321,27 @@ export default function InterviewPage() {
           total_score: total
         })
       })
+      
+      // Update streak after successful session save
+      try {
+        const streakResponse = await fetch(`${apiUrl}/api/streaks/update`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user.id })
+        })
+        if (streakResponse.ok) {
+          const streakData = await streakResponse.json()
+          setStreakData({
+            current_streak: streakData.current_streak,
+            longest_streak: streakData.longest_streak,
+            last_practice_date: streakData.last_practice_date,
+            total_sessions: streakData.total_sessions
+          })
+          setStreakMessage(streakData.message)
+        }
+      } catch (streakErr) {
+        console.error('Error updating streak:', streakErr)
+      }
     } catch (err) {
       console.error('Error saving session:', err)
     }
@@ -706,6 +743,18 @@ Powered by AI Career Navigator`
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
+      
+      {/* Streak Badge - Always visible at top */}
+      {streakData && (
+        <div className={`bg-gradient-to-r from-orange-500 to-red-500 text-white py-2 px-4 text-center text-sm font-medium ${
+          streakData.current_streak >= 30 ? 'animate-pulse' : 
+          streakData.current_streak >= 7 ? 'shadow-lg' : ''
+        }`}>
+          {streakData.current_streak >= 30 ? '🏆 ' : streakData.current_streak > 0 ? '🔥 ' : 'Start your streak today! '}
+          {streakData.current_streak > 0 ? `${streakData.current_streak} day streak` : '🔥'}
+        </div>
+      )}
+      
       <main className="container mx-auto px-4 py-8">
         {/* STATE 1: SETUP SCREEN */}
         {screen === 'setup' && (
@@ -1142,6 +1191,13 @@ Powered by AI Career Navigator`
                 Interview Performance for {careerPath}
               </p>
             </div>
+
+            {/* Streak Update Message */}
+            {streakMessage && (
+              <div className="mb-6 p-4 bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-lg text-center">
+                <p className="text-orange-700 font-medium">{streakMessage}</p>
+              </div>
+            )}
 
             {/* Question Summaries */}
             <div className="space-y-4 mb-8">

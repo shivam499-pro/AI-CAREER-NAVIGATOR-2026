@@ -6,7 +6,7 @@ load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import analysis, jobs, auth, resume, profile_enhanced, interview
+from routers import analysis, jobs, auth, resume, profile_enhanced, interview, streaks
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -41,6 +41,7 @@ app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
 app.include_router(resume.router, prefix="/api/resume", tags=["Resume"])
 app.include_router(profile_enhanced.router, prefix="/api/profile", tags=["Profile Enhanced"])
 app.include_router(interview.router, prefix="/api/interview", tags=["Interview"])
+app.include_router(streaks.router, prefix="/api/streaks", tags=["Streaks"])
 
 @app.get("/")
 async def root():
