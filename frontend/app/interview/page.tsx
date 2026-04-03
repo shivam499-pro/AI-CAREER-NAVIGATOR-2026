@@ -98,6 +98,9 @@ export default function InterviewPage() {
   const [rankData, setRankData] = useState<{xp: number, level: number, rank_title: string, next_level_xp: number, progress_percent: number} | null>(null)
   const [xpEarned, setXpEarned] = useState<number | null>(null)
   const [leveledUp, setLeveledUp] = useState(false)
+  
+  // Badge popup state
+  const [newBadge, setNewBadge] = useState<{emoji: string, name: string} | null>(null)
 
   // Challenge modal
   const [challengeModal, setChallengeModal] = useState(false)
@@ -392,6 +395,72 @@ export default function InterviewPage() {
         }
       } catch (rankErr) {
         console.error('Error updating rank:', rankErr)
+      }
+      
+      // Check for badges - session_complete always
+      try {
+        const sessionBadgeResponse = await fetch(`${apiUrl}/api/badges/check`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user.id, event: 'session_complete' })
+        })
+        if (sessionBadgeResponse.ok) {
+          const sessionBadgeData = await sessionBadgeResponse.json()
+          if (sessionBadgeData.newly_earned && sessionBadgeData.newly_earned.length > 0) {
+            const badge = sessionBadgeData.newly_earned[0]
+            setNewBadge({ emoji: badge.emoji, name: badge.name })
+            setTimeout(() => setNewBadge(null), 3000)
+          }
+        }
+      } catch (badgeErr) {
+        console.error('Error checking session badges:', badgeErr)
+      }
+      
+      // Check for hard_mode badge if difficulty was hard
+      if (difficulty === 'hard') {
+        try {
+          await fetch(`${apiUrl}/api/badges/check`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: user.id, event: 'hard_mode' })
+          })
+        } catch (hardBadgeErr) {
+          console.error('Error checking hard mode badge:', hardBadgeErr)
+        }
+      }
+      
+      // Check for simulation badge if simMode was true
+      if (simMode) {
+        try {
+          await fetch(`${apiUrl}/api/badges/check`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: user.id, event: 'simulation' })
+          })
+        } catch (simBadgeErr) {
+          console.error('Error checking simulation badge:', simBadgeErr)
+        }
+      }
+      
+      // Check for perfect_score badge if total === 50
+      if (total === 50) {
+        try {
+          const perfectBadgeResponse = await fetch(`${apiUrl}/api/badges/check`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: user.id, event: 'perfect_score' })
+          })
+          if (perfectBadgeResponse.ok) {
+            const perfectBadgeData = await perfectBadgeResponse.json()
+            if (perfectBadgeData.newly_earned && perfectBadgeData.newly_earned.length > 0) {
+              const badge = perfectBadgeData.newly_earned[0]
+              setNewBadge({ emoji: badge.emoji, name: badge.name })
+              setTimeout(() => setNewBadge(null), 3000)
+            }
+          }
+        } catch (perfectBadgeErr) {
+          console.error('Error checking perfect score badge:', perfectBadgeErr)
+        }
       }
     } catch (err) {
       console.error('Error saving session:', err)
@@ -1345,6 +1414,17 @@ Powered by AI Career Navigator`
         {/* STATE 3: RESULTS SCREEN */}
         {screen === 'results' && (
           <div className="max-w-3xl mx-auto">
+            {/* Badge Popup */}
+            {newBadge && (
+              <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-[#6C3FC8] to-[#4A2F8A] text-white px-6 py-4 rounded-xl shadow-2xl animate-bounce">
+                <div className="text-center">
+                  <div className="text-3xl mb-2">{newBadge.emoji}</div>
+                  <div className="font-bold">New Badge Earned!</div>
+                  <div className="text-lg">{newBadge.name}</div>
+                </div>
+              </div>
+            )}
+
             {/* Overall Score */}
             <div className="text-center mb-8">
               <div className="inline-flex items-center justify-center w-32 h-32 rounded-full bg-gradient-to-br from-[#1E3A5F] to-[#6C3FC8] text-white mb-4">
@@ -1440,7 +1520,11 @@ Powered by AI Career Navigator`
           <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-bold text-white mb-2">🤜 Challenge Created!</h3>
             <p className="text-gray-400 text-sm mb-3">Share this link with your friends:</p>
-            <input readOnly value={challengeURL}
+            <input 
+              readOnly 
+              value={challengeURL}
+              aria-label="Challenge link"
+              title="Share this link with friends"
               className="w-full bg-gray-700 text-white text-sm rounded-lg px-3 py-2 mb-3" />
             <div className="flex gap-2">
               <button onClick={copyChallengeLink}
