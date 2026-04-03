@@ -69,6 +69,10 @@ export default function InterviewPage() {
   const [hintLoading, setHintLoading] = useState(false)
   const [showCoachingHint, setShowCoachingHint] = useState(false)
   
+  // Communication score state (for voice input)
+  const [usedVoiceInput, setUsedVoiceInput] = useState(false)
+  const [commScore, setCommScore] = useState<{score: number, fillers: Record<string, number>, tip: string} | null>(null)
+  
   // Results state
   const [totalScore, setTotalScore] = useState(0)
 
@@ -382,6 +386,80 @@ Powered by AI Career Navigator`
       setHintLoading(false)
     }
   }
+
+  // Calculate communication score from voice input
+  const calculateCommScore = (text: string) => {
+    const fillerWords = ['um', 'uh', 'like', 'you know', 'basically', 'literally', 'actually', 'sort of', 'kind of', 'right', 'okay', 'so yeah']
+    const textLower = text.toLowerCase()
+    
+    // Count filler words
+    const fillers: Record<string, number> = {}
+    let fillerCount = 0
+    
+    fillerWords.forEach(word => {
+      const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp('\\b' + escaped + '\\b', 'gi')
+      const matches = textLower.match(regex)
+      if (matches && matches.length > 0) {
+        fillers[word] = matches.length
+        fillerCount += matches.length
+      }
+    })
+    const fetchCoachingHint = async () => {
+    setHintLoading(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/interview/question-hint`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: questions[currentQuestion].question,
+          career_path: careerPath
+        })
+      })
+      const data = await response.json()
+      setCoachingHint(data)
+    } catch (err) {
+      console.error('Error fetching coaching hint:', err)
+    } finally {
+      setHintLoading(false)
+    }
+  }    
+    // Calculate score
+    let score = 100
+    score -= Math.min(fillerCount * 5, 40) // -5 per filler, max -40
+    
+    const wordCount = text.split(/\s+/).filter(w => w.length > 0).length
+    if (wordCount < 20) score -= 20 // Too short
+    if (wordCount > 200) score -= 10 // Too long
+    
+    score = Math.max(0, score)
+    
+    // Generate tip
+    let tip = ''
+    if (fillerCount > 3) {
+      tip = 'Try pausing instead of using filler words'
+    } else if (wordCount < 20) {
+      tip = 'Try to elaborate more on your answer'
+    } else if (wordCount > 200) {
+      tip = 'Try to be more concise with your answers'
+    } else if (score >= 80) {
+      tip = 'Great communication! Keep it up 🎉'
+    } else {
+      tip = 'Keep practicing to improve your communication skills'
+    }
+    
+    return { score, fillers, tip }
+  }
+
+  // Update communication score when voiceStatus changes to done
+  useEffect(() => {
+    if (voiceStatus === 'done' && answer.trim()) {
+      setUsedVoiceInput(true)
+      const scoreResult = calculateCommScore(answer)
+      setCommScore(scoreResult)
+    }
+  }, [voiceStatus, answer])
 
   // When question changes, auto-speak and fetch coaching hint
   useEffect(() => {
