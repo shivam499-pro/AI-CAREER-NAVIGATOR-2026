@@ -373,9 +373,35 @@ def generate_interview_questions(
     profile: dict,
     career_path: str,
     difficulty: str,
-    resume_text: str = ""
+    resume_text: str = "",
+    personality: str = "friendly"
 ) -> list:
+    # Build personality instruction based on the selected mode
+    if personality == "friendly":
+        personality_instruction = """
+    You are a warm, encouraging interviewer. 
+    Ask questions in a supportive tone.
+    Use phrases like "Great topic! Tell me about..."
+    """
+    elif personality == "strict":
+        personality_instruction = """
+    You are a strict, no-nonsense interviewer.
+    Ask direct, challenging questions with no hints.
+    Use phrases like "Explain exactly how...", "Be specific about..."
+    """
+    elif personality == "google":
+        personality_instruction = """
+    You are a Google-style technical interviewer.
+    Ask deep, pressure-filled questions about system design,
+    scalability, algorithms, and edge cases.
+    Use phrases like "Now consider if this scaled to 1 million users..."
+    """
+    else:
+        personality_instruction = ""
+
     prompt = f"""You are an expert technical interviewer.
+{personality_instruction}
+
 Generate exactly 5 interview questions for: {career_path}
 Difficulty: {difficulty}
 Profile: {json.dumps(profile)}

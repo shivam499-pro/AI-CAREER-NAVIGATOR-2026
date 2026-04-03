@@ -42,6 +42,7 @@ export default function InterviewPage() {
   // Setup state
   const [careerPath, setCareerPath] = useState('Full Stack Developer')
   const [difficulty, setDifficulty] = useState('medium')
+  const [personality, setPersonality] = useState('friendly')
   const [pastSessions, setPastSessions] = useState(0)
   const [careerPaths, setCareerPaths] = useState<string[]>([])
   
@@ -229,7 +230,8 @@ export default function InterviewPage() {
         body: JSON.stringify({
           user_id: user.id,
           career_path: careerPath,
-          difficulty
+          difficulty,
+          personality
         })
       })
       
@@ -929,6 +931,52 @@ Powered by AI Career Navigator`
                 </div>
               </div>
 
+              {/* Personality Selector */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-2">Choose Your Interviewer</label>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPersonality('friendly')}
+                    className={`p-4 rounded-lg border-2 transition-colors ${
+                      personality === 'friendly'
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">😊</div>
+                    <div className="text-sm font-medium">Friendly</div>
+                    <div className="text-xs text-muted-foreground mt-1">Warm & encouraging</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPersonality('strict')}
+                    className={`p-4 rounded-lg border-2 transition-colors ${
+                      personality === 'strict'
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">😐</div>
+                    <div className="text-sm font-medium">Strict</div>
+                    <div className="text-xs text-muted-foreground mt-1">Direct & challenging</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPersonality('google')}
+                    className={`p-4 rounded-lg border-2 transition-colors ${
+                      personality === 'google'
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">😈</div>
+                    <div className="text-sm font-medium">Google-style</div>
+                    <div className="text-xs text-muted-foreground mt-1">Pressure & depth</div>
+                  </button>
+                </div>
+              </div>
+
               {/* Mode Selection */}
               <div className="mb-6">
                 <label className="block text-sm font-medium mb-2">Interview Mode</label>
@@ -1012,6 +1060,15 @@ Powered by AI Career Navigator`
                 ⚡ Simulation Mode — Answer like a real interview
               </div>
             )}
+
+            {/* Personality Badge */}
+            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-center">
+              <span className="text-blue-700 dark:text-blue-300 font-medium">
+                {personality === 'friendly' && '😊 Friendly Interviewer'}
+                {personality === 'strict' && '😐 Strict Interviewer'}
+                {personality === 'google' && '😈 Google-style Interviewer'}
+              </span>
+            </div>
 
             {/* Simulation Mode Timer */}
             {simMode && (

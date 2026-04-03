@@ -28,6 +28,7 @@ class GenerateQuestionsRequest(BaseModel):
     user_id: str
     career_path: str
     difficulty: str = "medium"
+    personality: str = "friendly"
 
 
 class EvaluateAnswerRequest(BaseModel):
@@ -99,7 +100,8 @@ async def generate_questions(request: Request, body: GenerateQuestionsRequest):
             full_profile, 
             body.career_path,  # Changed from request.career_path
             body.difficulty,   # Changed from request.difficulty
-            full_profile.get("resume_text", "")
+            full_profile.get("resume_text", ""),
+            body.personality
         )
         
         return {"questions": questions}
