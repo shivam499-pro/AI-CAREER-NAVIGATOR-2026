@@ -73,6 +73,13 @@ export default function InterviewPage() {
   const [usedVoiceInput, setUsedVoiceInput] = useState(false)
   const [commScore, setCommScore] = useState<{score: number, fillers: Record<string, number>, tip: string} | null>(null)
   
+  // Audio recording state (for voice playback)
+  const [audioURL, setAudioURL] = useState<string | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
+  const [audioChunks, setAudioChunks] = useState<Blob[]>([])
+  const [audioSupported, setAudioSupported] = useState(true)
+  
   // Results state
   const [totalScore, setTotalScore] = useState(0)
 
@@ -317,18 +324,59 @@ Powered by AI Career Navigator`
   }
 
   // Toggle voice recording
-  const toggleVoice = () => {
+  const toggleVoice = async () => {
     if (!recognition) {
       alert('Voice input not supported in this browser. Please type your answer.')
       return
     }
     
     if (isRecording) {
+      // Stop voice recognition
       recognition.stop()
       setIsRecording(false)
       setVoiceStatus('done')
+      
+      // Stop audio recording if active
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop()
+      }
     } else {
       setAnswer('') // Clear previous answer for new recording
+      setAudioURL(null) // Clear previous audio
+      setAudioChunks([]) // Reset audio chunks
+      
+      // Start audio recording if supported
+      if (audioSupported) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+          const chunks: Blob[] = []
+          
+          recorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              chunks.push(event.data)
+            }
+          }
+          
+          recorder.onstop = () => {
+            if (chunks.length > 0) {
+              const blob = new Blob(chunks, { type: 'audio/webm' })
+              const url = URL.createObjectURL(blob)
+              setAudioURL(url)
+              setAudioChunks(chunks)
+            }
+            // Stop all tracks in the stream
+            stream.getTracks().forEach(track => track.stop())
+          }
+          
+          recorder.start()
+          setMediaRecorder(recorder)
+        } catch (err) {
+          // Silently fail - playback button will be hidden
+          console.log('Audio recording not available')
+        }
+      }
+      
       try {
         recognition.start()
         setIsRecording(true)
@@ -343,6 +391,10 @@ Powered by AI Career Navigator`
   useEffect(() => {
     if (typeof window !== 'undefined' && !window.speechSynthesis) {
       setSpeechSupported(false)
+    }
+    // Check for MediaRecorder support
+    if (typeof window !== 'undefined' && !window.MediaRecorder) {
+      setAudioSupported(false)
     }
   }, [])
 
@@ -451,6 +503,53 @@ Powered by AI Career Navigator`
     
     return { score, fillers, tip }
   }
+
+  // Playback control functions
+  const playAudio = () => {
+    if (!audioURL) return
+    
+    const audio = new Audio(audioURL)
+    audio.onended = () => setIsPlaying(false)
+    audio.onerror = () => setIsPlaying(false)
+    audio.play()
+    setIsPlaying(true)
+  }
+
+  const stopAudio = () => {
+    const audioElements = document.querySelectorAll('audio')
+    audioElements.forEach(audio => {
+      audio.pause()
+      audio.currentTime = 0
+    })
+    setIsPlaying(false)
+  }
+
+  const togglePlayback = () => {
+    if (isPlaying) {
+      stopAudio()
+    } else {
+      playAudio()
+    }
+  }
+
+  // Cleanup audio when question changes
+  useEffect(() => {
+    if (audioURL) {
+      URL.revokeObjectURL(audioURL)
+      setAudioURL(null)
+    }
+    setIsPlaying(false)
+    setAudioChunks([])
+  }, [currentQuestion])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (audioURL) {
+        URL.revokeObjectURL(audioURL)
+      }
+    }
+  }, [audioURL])
 
   // Update communication score when voiceStatus changes to done
   useEffect(() => {
@@ -727,6 +826,21 @@ Powered by AI Career Navigator`
                   <div className="text-sm text-blue-400 mt-1">
                     💡 {commScore.tip}
                   </div>
+
+                  {/* Audio Playback Button */}
+                  {audioSupported && audioURL && (
+                    <button
+                      type="button"
+                      onClick={togglePlayback}
+                      className={`mt-3 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                        isPlaying 
+                          ? 'bg-red-50 border-red-300 text-red-600 hover:bg-red-100'
+                          : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {isPlaying ? '⏹ Stop Playback' : '🎧 Play Back Your Answer'}
+                    </button>
+                  )}
 
                 </div>
               )}
