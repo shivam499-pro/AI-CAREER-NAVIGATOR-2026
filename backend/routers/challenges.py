@@ -1,29 +1,17 @@
-"""
-Challenges Router
-Handles challenge links for friends to compete in interviews
-"""
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from supabase import create_client
+from supabase import create_client, Client
 import os
 import random
 import string
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
+from datetime import datetime
 
 router = APIRouter()
 
 # Initialize Supabase client
-supabase_url = os.getenv("SUPABASE_URL")
-supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
-supabase = create_client(supabase_url, supabase_key)
-
-
-def generate_challenge_code(length=8):
-    """Generate a random challenge code"""
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://example.supabase.co")
+SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY", "example-key")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
 class CreateChallengeRequest(BaseModel):
@@ -39,134 +27,177 @@ class SubmitChallengeRequest(BaseModel):
     answers: list
 
 
+def generate_challenge_code(length: int = 8) -> str:
+    """Generate a random 8-character challenge code."""
+    chars = string.ascii_uppercase + string.digits
+    return ''.join(random.choice(chars) for _ in range(length))
+
+
 @router.post("/create")
-async def create_challenge(body: CreateChallengeRequest):
+async def create_challenge(request: CreateChallengeRequest):
     """
-    Create a new challenge and return shareable link
+    Create a new challenge with shareable link.
+    Request: { user_id, career_path, questions }
+    Returns: { challenge_code, share_url }
     """
     try:
         # Generate unique challenge code
         challenge_code = generate_challenge_code()
         
-        # Make sure code is unique
-        while True:
-            existing = supabase.table("challenges").select("challenge_code").eq("challenge_code", challenge_code).execute()
-            if not existing.data:
-                break
+        # Check if code already exists (very unlikely but handle it)
+        existing = supabase.table("challenges").select("challenge_code").eq("challenge_code", challenge_code).execute()
+        while existing.data:
             challenge_code = generate_challenge_code()
+            existing = supabase.table("challenges").select("challenge_code").eq("challenge_code", challenge_code).execute()
         
-        # Save challenge to database
-        supabase.table("challenges").insert({
+        # Get creator name
+        creator_name = "Anonymous"
+        try:
+            user_response = supabase.table("users").select("full_name, email").eq("id", request.user_id).execute()
+            if user_response.data and user_response.data[0].get("full_name"):
+                creator_name = user_response.data[0]["full_name"]
+            elif user_response.data and user_response.data[0].get("email"):
+                creator_name = user_response.data[0]["email"].split("@")[0]
+        except Exception:
+            pass
+        
+        # Insert challenge into database
+        data = {
             "challenge_code": challenge_code,
-            "creator_id": body.user_id,
-            "career_path": body.career_path,
-            "questions": body.questions
-        }).execute()
+            "creator_id": request.user_id,
+            "creator_name": creator_name,
+            "career_path": request.career_path,
+            "questions": request.questions,
+            "created_at": datetime.utcnow().isoformat()
+        }
         
-        # Get share URL (use the frontend URL)
-        frontend_url = os.getenv("NEXT_PUBLIC_FRONTEND_URL", "http://localhost:3000")
-        share_url = f"{frontend_url}/challenge/{challenge_code}"
+        response = supabase.table("challenges").insert(data).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create challenge")
+        
+        # Generate share URL
+        share_url = f"http://localhost:3000/challenge/{challenge_code}"
         
         return {
             "challenge_code": challenge_code,
-            "share_url": share_url
+            "share_url": share_url,
+            "creator_name": creator_name
         }
-        
+    
     except Exception as e:
         print(f"Error creating challenge: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create challenge")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{challenge_code}")
 async def get_challenge(challenge_code: str):
     """
-    Fetch challenge details by code
+    Get challenge details by code.
+    Returns: { challenge_code, career_path, questions, creator_name }
     """
     try:
-        # Fetch challenge
         response = supabase.table("challenges").select("*").eq("challenge_code", challenge_code.upper()).execute()
         
-        if not response.data or len(response.data) == 0:
+        if not response.data:
             raise HTTPException(status_code=404, detail="Challenge not found")
         
         challenge = response.data[0]
-        
-        # Get creator name
-        creator_name = "Friend"
-        if challenge.get("creator_id"):
-            user_response = supabase.table("users").select("full_name, email").eq("id", challenge["creator_id"]).execute()
-            if user_response.data and len(user_response.data) > 0:
-                user = user_response.data[0]
-                creator_name = user.get("full_name") or user.get("email") or "Friend"
         
         return {
             "challenge_code": challenge["challenge_code"],
             "career_path": challenge["career_path"],
             "questions": challenge["questions"],
-            "creator_name": creator_name
+            "creator_name": challenge.get("creator_name", "Anonymous")
         }
-        
+    
     except HTTPException:
         raise
     except Exception as e:
         print(f"Error fetching challenge: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch challenge")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/submit")
-async def submit_challenge(body: SubmitChallengeRequest):
+async def submit_challenge_result(request: SubmitChallengeRequest):
     """
-    Submit challenge result and return leaderboard
+    Submit challenge result.
+    Request: { challenge_code, user_id, score, answers }
+    Returns: { success, leaderboard }
     """
     try:
-        # Save result
-        supabase.table("challenge_results").insert({
-            "challenge_code": body.challenge_code.upper(),
-            "user_id": body.user_id,
-            "score": body.score,
-            "answers": body.answers
-        }).execute()
+        # Get user info
+        user_email = "Anonymous"
+        user_name = "Anonymous"
+        try:
+            user_response = supabase.table("users").select("full_name, email").eq("id", request.user_id).execute()
+            if user_response.data:
+                user_name = user_response.data[0].get("full_name") or user_response.data[0].get("email", "Anonymous").split("@")[0]
+                user_email = user_response.data[0].get("email", "Anonymous")
+        except Exception:
+            pass
+        
+        # Insert result
+        data = {
+            "challenge_code": request.challenge_code.upper(),
+            "user_id": request.user_id,
+            "user_email": user_email,
+            "user_name": user_name,
+            "score": request.score,
+            "answers": request.answers,
+            "completed_at": datetime.utcnow().isoformat()
+        }
+        
+        supabase.table("challenge_results").insert(data).execute()
         
         # Get leaderboard
-        leaderboard = await get_leaderboard(body.challenge_code)
+        leaderboard_response = supabase.table("challenge_results").select(
+            "user_name, user_email, score, completed_at"
+        ).eq("challenge_code", request.challenge_code.upper()).order("score", desc=True).execute()
+        
+        leaderboard = []
+        for i, row in enumerate(leaderboard_response.data):
+            leaderboard.append({
+                "rank": i + 1,
+                "user_name": row.get("user_name", "Anonymous"),
+                "user_email": row.get("user_email", ""),
+                "score": row.get("score", 0),
+                "completed_at": row.get("completed_at", "")
+            })
         
         return {
             "success": True,
             "leaderboard": leaderboard
         }
-        
+    
     except Exception as e:
-        print(f"Error submitting challenge: {e}")
-        raise HTTPException(status_code=500, detail="Failed to submit challenge")
+        print(f"Error submitting challenge result: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/leaderboard/{challenge_code}")
 async def get_leaderboard(challenge_code: str):
     """
-    Get all results for a challenge sorted by score
+    Get leaderboard for a challenge.
+    Returns: [{ user_email, score, completed_at }]
     """
     try:
-        response = supabase.table("challenge_results").select("*").eq("challenge_code", challenge_code.upper()).order("score", desc=True).execute()
+        response = supabase.table("challenge_results").select(
+            "user_name, user_email, score, completed_at"
+        ).eq("challenge_code", challenge_code.upper()).order("score", desc=True).execute()
         
         leaderboard = []
-        for i, result in enumerate(response.data if response.data else []):
-            # Get user info
-            user_name = f"Player {i + 1}"
-            if result.get("user_id"):
-                user_response = supabase.table("users").select("full_name, email").eq("id", result["user_id"]).execute()
-                if user_response.data and len(user_response.data) > 0:
-                    user = user_response.data[0]
-                    user_name = user.get("full_name") or user.get("email") or f"Player {i + 1}"
-            
+        for i, row in enumerate(response.data):
             leaderboard.append({
                 "rank": i + 1,
-                "user_name": user_name,
-                "score": result.get("score", 0),
-                "completed_at": result.get("completed_at")
+                "user_name": row.get("user_name", "Anonymous"),
+                "user_email": row.get("user_email", ""),
+                "score": row.get("score", 0),
+                "completed_at": row.get("completed_at", "")
             })
         
         return leaderboard
-        
+    
     except Exception as e:
         print(f"Error fetching leaderboard: {e}")
-        return []
+        raise HTTPException(status_code=500, detail=str(e))

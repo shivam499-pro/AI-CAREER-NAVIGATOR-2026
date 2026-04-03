@@ -97,11 +97,10 @@ export default function InterviewPage() {
   const [rankData, setRankData] = useState<{xp: number, level: number, rank_title: string, next_level_xp: number, progress_percent: number} | null>(null)
   const [xpEarned, setXpEarned] = useState<number | null>(null)
   const [leveledUp, setLeveledUp] = useState(false)
-  
-  // Challenge modal state
-  const [showChallengeModal, setShowChallengeModal] = useState(false)
-  const [challengeCode, setChallengeCode] = useState<string | null>(null)
-  const [challengeLink, setChallengeLink] = useState<string | null>(null)
+
+  // Challenge modal
+  const [challengeModal, setChallengeModal] = useState(false)
+  const [challengeURL, setChallengeURL] = useState('')
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -437,9 +436,8 @@ export default function InterviewPage() {
       
       if (response.ok) {
         const data = await response.json()
-        setChallengeCode(data.challenge_code)
-        setChallengeLink(data.share_url)
-        setShowChallengeModal(true)
+        setChallengeURL(data.share_url)
+        setChallengeModal(true)
         setCopied(false)
       }
     } catch (err) {
@@ -449,9 +447,9 @@ export default function InterviewPage() {
 
   // Copy challenge link to clipboard
   const copyChallengeLink = async () => {
-    if (!challengeLink) return
+    if (!challengeURL) return
     
-    await navigator.clipboard.writeText(challengeLink)
+    await navigator.clipboard.writeText(challengeURL)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -1356,6 +1354,9 @@ Powered by AI Career Navigator`
                 <Copy className="w-4 h-4 mr-2" />
                 Share Results
               </Button>
+              <Button onClick={createChallenge} variant="outline" className="border-[#FF6B35] text-[#FF6B35]">
+                🤜 Challenge a Friend
+              </Button>
               <Link href="/progress">
                 <Button variant="outline">
                   📊 View My Progress
@@ -1375,6 +1376,28 @@ Powered by AI Career Navigator`
           </div>
         )}
       </main>
+      
+      {/* Challenge Modal */}
+      {challengeModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold text-white mb-2">🤜 Challenge Created!</h3>
+            <p className="text-gray-400 text-sm mb-3">Share this link with your friends:</p>
+            <input readOnly value={challengeURL}
+              className="w-full bg-gray-700 text-white text-sm rounded-lg px-3 py-2 mb-3" />
+            <div className="flex gap-2">
+              <button onClick={copyChallengeLink}
+                className="flex-1 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm">
+                {copied ? '✅ Copied!' : '📋 Copy Link'}
+              </button>
+              <button onClick={() => setChallengeModal(false)}
+                className="px-4 py-2 rounded-lg bg-gray-600 hover:bg-gray-700 text-white text-sm">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
