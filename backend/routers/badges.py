@@ -203,11 +203,11 @@ async def check_and_award_badges(request: CheckBadgeRequest):
         raise HTTPException(status_code=500, detail="Failed to check badges")
 
 
-# Supabase table (as comment):
--- CREATE TABLE user_badges (
---   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
---   user_id uuid REFERENCES auth.users(id),
---   badge_id text NOT NULL,
---   earned_at timestamp DEFAULT now(),
---   UNIQUE(user_id, badge_id)
--- );
+# # Supabase table (as comment):
+# -- CREATE TABLE user_badges (
+# --   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+# --   user_id uuid REFERENCES auth.users(id),
+# --   badge_id text NOT NULL,
+# --   earned_at timestamp DEFAULT now(),
+# --   UNIQUE(user_id, badge_id)
+# -- );
