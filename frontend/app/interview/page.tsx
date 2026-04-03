@@ -80,6 +80,12 @@ export default function InterviewPage() {
   const [audioChunks, setAudioChunks] = useState<Blob[]>([])
   const [audioSupported, setAudioSupported] = useState(true)
   
+  // Simulation mode state
+  const [simMode, setSimMode] = useState(false)
+  const [questionTimeLeft, setQuestionTimeLeft] = useState(120)
+  const [questionTimer, setQuestionTimer] = useState<NodeJS.Timeout | null>(null)
+  const [showTimeUpMsg, setShowTimeUpMsg] = useState(false)
+  
   // Results state
   const [totalScore, setTotalScore] = useState(0)
 
@@ -212,7 +218,22 @@ export default function InterviewPage() {
   }
 
   const submitAnswer = async () => {
-    if (!user || !answer.trim()) return
+    if (!user) return
+    
+    // Clear question timer if running
+    if (questionTimer) {
+      clearInterval(questionTimer)
+      setQuestionTimer(null)
+    }
+    
+    if (!answer.trim()) {
+      // In simulation mode, submit even if empty when time is up
+      if (simMode) {
+        await handleTimeUp()
+        return
+      }
+      return
+    }
     
     setSubmitting(true)
     try {
@@ -322,6 +343,101 @@ Powered by AI Career Navigator`
     
     navigator.clipboard.writeText(text)
   }
+
+  // Handle time up in simulation mode
+  const handleTimeUp = async () => {
+    if (questionTimer) {
+      clearInterval(questionTimer)
+      setQuestionTimer(null)
+    }
+    
+    setShowTimeUpMsg(true)
+    
+    // Auto submit the answer (may be empty)
+    if (!user) return
+    
+    setSubmitting(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/interview/evaluate-answer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: questions[currentQuestion].question,
+          answer,
+          career_path: careerPath,
+          user_id: user.id
+        })
+      })
+      
+      const feedback = await response.json()
+      
+      const newAnswer: Answer = {
+        question: questions[currentQuestion].question,
+        answer,
+        feedback
+      }
+
+      const updatedAnswers = [...answers, newAnswer]
+      setAnswers(updatedAnswers)
+      
+      // Move to next or finish after delay
+      setTimeout(() => {
+        setShowTimeUpMsg(false)
+        if (currentQuestion < questions.length - 1) {
+          setCurrentQuestion(prev => prev + 1)
+          setAnswer('')
+          setShowHint(false)
+          setQuestionTimeLeft(120) // Reset timer for next question
+        } else {
+          finishInterview(updatedAnswers)
+        }
+      }, 1500)
+    } catch (err) {
+      console.error('Error submitting answer:', err)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Start question timer when entering a new question in simulation mode
+  useEffect(() => {
+    if (simMode && screen === 'interview' && questions.length > 0) {
+      setQuestionTimeLeft(120)
+      
+      // Clear any existing timer
+      if (questionTimer) {
+        clearInterval(questionTimer)
+      }
+      
+      // Start countdown
+      const timer = setInterval(() => {
+        setQuestionTimeLeft(prev => {
+          if (prev <= 1) {
+            // Time's up - trigger auto submit
+            handleTimeUp()
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+      
+      setQuestionTimer(timer)
+      
+      return () => {
+        if (timer) clearInterval(timer)
+      }
+    }
+  }, [currentQuestion, simMode, screen, questions.length])
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (questionTimer) {
+        clearInterval(questionTimer)
+      }
+    }
+  }, [])
 
   // Toggle voice recording
   const toggleVoice = async () => {
@@ -652,6 +768,40 @@ Powered by AI Career Navigator`
                 </div>
               </div>
 
+              {/* Mode Selection */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-2">Interview Mode</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSimMode(false)}
+                    className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
+                      !simMode 
+                        ? 'bg-[#6C3FC8] text-white' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    🎯 Practice Mode
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSimMode(true)}
+                    className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
+                      simMode 
+                        ? 'bg-[#FF6B35] text-white' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    ⚡ Simulation Mode
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {simMode 
+                    ? '⚡ Real interview feel — 2 min per question, no hints, auto-submit'
+                    : '🎯 Relaxed practice — no timer, hints available'}
+                </p>
+              </div>
+
               <Button 
                 onClick={startInterview}
                 disabled={loading}
@@ -695,6 +845,46 @@ Powered by AI Career Navigator`
               </div>
             </div>
 
+            {/* Simulation Mode Banner */}
+            {simMode && (
+              <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg text-center text-orange-700 font-medium">
+                ⚡ Simulation Mode — Answer like a real interview
+              </div>
+            )}
+
+            {/* Simulation Mode Timer */}
+            {simMode && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">⏱ Time Remaining:</span>
+                  <span className={`text-lg font-bold ${
+                    questionTimeLeft > 60 ? 'text-green-600' :
+                    questionTimeLeft > 30 ? 'text-yellow-600' :
+                    'text-red-600 animate-pulse'
+                  }`}>
+                    {Math.floor(questionTimeLeft / 60)}:{String(questionTimeLeft % 60).padStart(2, '0')}
+                  </span>
+                </div>
+                <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full transition-all ${
+                      questionTimeLeft > 60 ? 'bg-green-500' :
+                      questionTimeLeft > 30 ? 'bg-yellow-500' :
+                      'bg-red-500 animate-pulse'
+                    }`}
+                    style={{ width: `${(questionTimeLeft / 120) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Time's up message */}
+            {showTimeUpMsg && (
+              <div className="mb-4 p-4 bg-red-100 border border-red-300 rounded-lg text-center text-red-700 animate-pulse">
+                ⏰ Time's up! Moving to next question...
+              </div>
+            )}
+
             {/* Question Card */}
             <div className="bg-card rounded-xl border p-6 mb-6">
               <div className="flex items-center gap-2 mb-4">
@@ -734,8 +924,10 @@ Powered by AI Career Navigator`
                 </div>
               )}
 
-              {/* AI Coaching Hint Card */}
-              {!showCoachingHint ? (
+              {/* AI Coaching Hint Card - Only in Practice Mode */}
+              {!simMode && (
+                <>
+                  {!showCoachingHint ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -777,6 +969,8 @@ Powered by AI Career Navigator`
                   </div>
                 </div>
               ) : null}
+                </>
+              )}
 
               <div className="flex items-center gap-2">
                 <textarea
@@ -787,8 +981,8 @@ Powered by AI Career Navigator`
                 />
               </div>
 
-              {/* Communication Score Card (Voice Input) */}
-              {usedVoiceInput && commScore && (
+              {/* Communication Score Card (Voice Input) - Only in Practice Mode */}
+              {!simMode && usedVoiceInput && commScore && (
                 <div className="mt-3 p-4 rounded-xl border border-gray-700 bg-gray-800/50">
                   {/* Score Header */}
                   <div className="flex items-center gap-2 mb-3">
@@ -872,13 +1066,16 @@ Powered by AI Career Navigator`
                   </span>
                 </div>
                 
-                <Button 
-                  variant="outline" 
-                  onClick={() => setShowHint(!showHint)}
-                >
-                  <Lightbulb className="w-4 h-4 mr-2" />
-                  {showHint ? 'Hide Hint' : 'Show Hint'}
-                </Button>
+                {/* Show Hint button - Only in Practice Mode */}
+                {!simMode && (
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowHint(!showHint)}
+                  >
+                    <Lightbulb className="w-4 h-4 mr-2" />
+                    {showHint ? 'Hide Hint' : 'Show Hint'}
+                  </Button>
+                )}
                 
                 <Button 
                   onClick={submitAnswer}
