@@ -92,6 +92,11 @@ export default function InterviewPage() {
   // Streak state
   const [streakData, setStreakData] = useState<{current_streak: number, longest_streak: number, last_practice_date: string | null, total_sessions: number} | null>(null)
   const [streakMessage, setStreakMessage] = useState<string | null>(null)
+  
+  // Rank state
+  const [rankData, setRankData] = useState<{xp: number, level: number, rank_title: string, next_level_xp: number, progress_percent: number} | null>(null)
+  const [xpEarned, setXpEarned] = useState<number | null>(null)
+  const [leveledUp, setLeveledUp] = useState(false)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -113,6 +118,18 @@ export default function InterviewPage() {
         }
       } catch (err) {
         console.error('Error fetching streak:', err)
+      }
+      
+      // Fetch rank data
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        const rankResponse = await fetch(`${apiUrl}/api/ranks/${user.id}`)
+        if (rankResponse.ok) {
+          const data = await rankResponse.json()
+          setRankData(data)
+        }
+      } catch (err) {
+        console.error('Error fetching rank:', err)
       }
     }
     checkAuth()
@@ -341,6 +358,29 @@ export default function InterviewPage() {
         }
       } catch (streakErr) {
         console.error('Error updating streak:', streakErr)
+      }
+      
+      // Update rank after successful session save
+      try {
+        const rankResponse = await fetch(`${apiUrl}/api/ranks/update`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user.id, score: total })
+        })
+        if (rankResponse.ok) {
+          const rankData = await rankResponse.json()
+          setRankData({
+            xp: rankData.xp,
+            level: rankData.level,
+            rank_title: rankData.rank_title,
+            next_level_xp: rankData.next_level_xp,
+            progress_percent: ((rankData.xp % 100) / 100) * 100
+          })
+          setXpEarned(rankData.xp_earned)
+          setLeveledUp(rankData.leveled_up)
+        }
+      } catch (rankErr) {
+        console.error('Error updating rank:', rankErr)
       }
     } catch (err) {
       console.error('Error saving session:', err)
@@ -745,13 +785,34 @@ Powered by AI Career Navigator`
       <Navbar />
       
       {/* Streak Badge - Always visible at top */}
-      {streakData && (
-        <div className={`bg-gradient-to-r from-orange-500 to-red-500 text-white py-2 px-4 text-center text-sm font-medium ${
-          streakData.current_streak >= 30 ? 'animate-pulse' : 
-          streakData.current_streak >= 7 ? 'shadow-lg' : ''
-        }`}>
-          {streakData.current_streak >= 30 ? '🏆 ' : streakData.current_streak > 0 ? '🔥 ' : 'Start your streak today! '}
-          {streakData.current_streak > 0 ? `${streakData.current_streak} day streak` : '🔥'}
+      {(streakData || rankData) && (
+        <div className="flex items-center justify-center gap-4 py-2 px-4 bg-gradient-to-r from-gray-900 to-gray-800 text-white">
+          {/* Streak Badge */}
+          {streakData && (
+            <div className={`text-sm font-medium ${
+              streakData.current_streak >= 30 ? 'animate-pulse' : 
+              streakData.current_streak >= 7 ? 'shadow-lg' : ''
+            }`}>
+              {streakData.current_streak >= 30 ? '🏆 ' : streakData.current_streak > 0 ? '🔥 ' : 'Start '}
+              {streakData.current_streak > 0 ? `${streakData.current_streak} day streak` : 'streak today! 🔥'}
+            </div>
+          )}
+          
+          {/* Rank Badge */}
+          {rankData && (
+            <div className="text-sm border-l border-gray-600 pl-4">
+              <span className="font-semibold">{rankData.rank_title} — Level {rankData.level}</span>
+              <div className="text-xs text-gray-400 mt-1">
+                {rankData.xp} / {rankData.next_level_xp} XP to next level
+              </div>
+              <div className="w-24 h-1.5 bg-gray-700 rounded-full mt-1">
+                <div 
+                  className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"
+                  style={{ width: `${rankData.progress_percent}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
       
@@ -1194,8 +1255,27 @@ Powered by AI Career Navigator`
 
             {/* Streak Update Message */}
             {streakMessage && (
-              <div className="mb-6 p-4 bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-lg text-center">
+              <div className="mb-4 p-3 bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-lg text-center">
                 <p className="text-orange-700 font-medium">{streakMessage}</p>
+              </div>
+            )}
+            
+            {/* XP Earned Message */}
+            {xpEarned && (
+              <div className={`mb-4 p-4 rounded-lg text-center ${
+                leveledUp 
+                  ? 'bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-400 animate-pulse' 
+                  : 'bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200'
+              }`}>
+                {leveledUp ? (
+                  <p className="text-amber-700 font-bold text-lg">
+                    🎉 LEVEL UP! You are now a {rankData?.rank_title}! 🚀
+                  </p>
+                ) : (
+                  <p className="text-purple-700 font-medium">
+                    +{xpEarned} XP earned! 🎉
+                  </p>
+                )}
               </div>
             )}
 
