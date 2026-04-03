@@ -46,6 +46,11 @@ class SaveSessionRequest(BaseModel):
     total_score: float
 
 
+class QuestionHintRequest(BaseModel):
+    question: str
+    career_path: str
+
+
 @router.post("/generate-questions")
 @limiter.limit("10/minute")
 async def generate_questions(request: Request, body: GenerateQuestionsRequest):
@@ -164,3 +169,50 @@ async def get_interview_history(user_id: str):
         
     except Exception as e:
         return {"sessions": [], "count": 0, "error": str(e)}
+
+
+@router.post("/question-hint")
+async def get_question_hint(body: QuestionHintRequest):
+    """
+    Get AI coaching hint for a specific interview question.
+    """
+    try:
+        from services import gemini_service
+        
+        prompt = f"""You are an expert interview coach. For this interview question: 
+'{body.question}' for a '{body.career_path}' role, provide:
+1. What the interviewer is looking for (2-3 points)
+2. How to structure the answer (method like STAR, etc.)
+3. A short example direction (2-3 sentences)
+
+Keep it concise and practical.
+
+Return ONLY a valid JSON object with exactly these fields:
+{{"looking_for": "...", "structure": "...", "example": "..."}}
+No other text or markdown."""
+        
+        # Use the existing generate method from gemini_service
+        response = gemini_service._generate(prompt)
+        
+        # Parse the JSON response
+        import json
+        import re
+        
+        # Clean the response
+        text = response.strip()
+        text = re.sub(r'```json\s*', '', text)
+        text = re.sub(r'```\s*', '', text)
+        text = text.strip()
+        
+        result = json.loads(text)
+        
+        return result
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {
+            "looking_for": "Focus on demonstrating your skills and experience.",
+            "structure": "Use STAR method (Situation, Task, Action, Result).",
+            "example": "Start with a brief context, then describe your specific contribution."
+        }

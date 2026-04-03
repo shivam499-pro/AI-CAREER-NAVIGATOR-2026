@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import Navbar from '@/components/Navbar'
 import { 
   Brain, Loader2, ChevronRight, CheckCircle, XCircle,
-  Lightbulb, ArrowRight, Copy, RefreshCw, MessageSquare, Mic, MicOff
+  Lightbulb, ArrowRight, Copy, RefreshCw, MessageSquare, Mic, MicOff, Volume2
 } from 'lucide-react'
 
 interface Question {
@@ -59,6 +59,15 @@ export default function InterviewPage() {
   const [isRecording, setIsRecording] = useState(false)
   const [voiceStatus, setVoiceStatus] = useState<'idle' | 'listening' | 'done'>('idle')
   const [recognition, setRecognition] = useState<any>(null)
+  
+  // Text-to-Speech state
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [speechSupported, setSpeechSupported] = useState(true)
+  
+  // AI Coaching hint state
+  const [coachingHint, setCoachingHint] = useState<{looking_for: string, structure: string, example: string} | null>(null)
+  const [hintLoading, setHintLoading] = useState(false)
+  const [showCoachingHint, setShowCoachingHint] = useState(false)
   
   // Results state
   const [totalScore, setTotalScore] = useState(0)
@@ -326,6 +335,70 @@ Powered by AI Career Navigator`
     }
   }
 
+  // Check for SpeechSynthesis support and initialize
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !window.speechSynthesis) {
+      setSpeechSupported(false)
+    }
+  }, [])
+
+  // Speak the current question
+  const speakQuestion = () => {
+    if (!speechSupported || !questions[currentQuestion]) return
+    
+    // Stop any current speech
+    window.speechSynthesis.cancel()
+    
+    const utterance = new SpeechSynthesisUtterance(questions[currentQuestion].question)
+    utterance.lang = 'en-US'
+    utterance.rate = 0.9
+    
+    utterance.onstart = () => setIsSpeaking(true)
+    utterance.onend = () => setIsSpeaking(false)
+    utterance.onerror = () => setIsSpeaking(false)
+    
+    window.speechSynthesis.speak(utterance)
+  }
+
+  // Fetch AI coaching hint for current question
+  const fetchCoachingHint = async () => {
+    setHintLoading(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/interview/question-hint`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: questions[currentQuestion].question,
+          career_path: careerPath
+        })
+      })
+      
+      const data = await response.json()
+      setCoachingHint(data)
+    } catch (err) {
+      console.error('Error fetching coaching hint:', err)
+    } finally {
+      setHintLoading(false)
+    }
+  }
+
+  // When question changes, auto-speak and fetch coaching hint
+  useEffect(() => {
+    if (screen === 'interview' && questions.length > 0) {
+      // Reset coaching hint state
+      setCoachingHint(null)
+      setShowCoachingHint(false)
+      
+      // Auto-speak the question after a short delay
+      if (speechSupported) {
+        setTimeout(() => {
+          speakQuestion()
+        }, 500)
+      }
+    }
+  }, [currentQuestion, screen, questions.length, speechSupported])
+
   if (loading && screen === 'setup') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -454,6 +527,20 @@ Powered by AI Career Navigator`
                 <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm capitalize">
                   {questions[currentQuestion]?.difficulty || 'medium'}
                 </span>
+                {speechSupported && (
+                  <button
+                    type="button"
+                    onClick={speakQuestion}
+                    className={`ml-2 p-2 rounded-full transition-colors ${
+                      isSpeaking 
+                        ? 'bg-[#6C3FC8]/20 text-[#6C3FC8] animate-pulse' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                    title={isSpeaking ? 'Speaking...' : 'Read question aloud'}
+                  >
+                    <Volume2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
               
               <h2 className="text-xl font-semibold text-foreground mb-4">
@@ -469,6 +556,50 @@ Powered by AI Career Navigator`
                   <p className="text-yellow-700 mt-1">{questions[currentQuestion]?.hint || 'No hint available'}</p>
                 </div>
               )}
+
+              {/* AI Coaching Hint Card */}
+              {!showCoachingHint ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCoachingHint(true)
+                    fetchCoachingHint()
+                  }}
+                  className="w-full p-3 mb-4 bg-[#6C3FC8]/10 border border-[#6C3FC8]/30 rounded-lg text-[#6C3FC8] font-medium hover:bg-[#6C3FC8]/20 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Lightbulb className="w-4 h-4" />
+                  💡 Get AI Coaching Hint
+                </button>
+              ) : hintLoading ? (
+                <div className="p-4 mb-4 bg-gray-50 border rounded-lg flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#6C3FC8]" />
+                  <span className="text-gray-600">Loading coaching hint...</span>
+                </div>
+              ) : coachingHint ? (
+                <div className="p-4 mb-4 bg-gradient-to-r from-[#6C3FC8]/10 to-[#1E3A5F]/10 border border-[#6C3FC8]/30 rounded-lg">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Lightbulb className="w-5 h-5 text-[#6C3FC8]" />
+                    <span className="font-semibold text-[#6C3FC8]">AI Coaching Hint</span>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">💡 What the interviewer is looking for:</p>
+                      <p className="text-sm text-gray-600 mt-1">{coachingHint.looking_for}</p>
+                    </div>
+                    
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">📝 How to structure your answer:</p>
+                      <p className="text-sm text-gray-600 mt-1">{coachingHint.structure}</p>
+                    </div>
+                    
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">✅ Example direction:</p>
+                      <p className="text-sm text-gray-600 mt-1 italic">{coachingHint.example}</p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="flex items-center gap-2">
                 <textarea
