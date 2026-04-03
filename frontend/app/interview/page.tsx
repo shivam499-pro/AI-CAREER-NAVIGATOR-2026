@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -97,6 +97,12 @@ export default function InterviewPage() {
   const [rankData, setRankData] = useState<{xp: number, level: number, rank_title: string, next_level_xp: number, progress_percent: number} | null>(null)
   const [xpEarned, setXpEarned] = useState<number | null>(null)
   const [leveledUp, setLeveledUp] = useState(false)
+  
+  // Challenge modal state
+  const [showChallengeModal, setShowChallengeModal] = useState(false)
+  const [challengeCode, setChallengeCode] = useState<string | null>(null)
+  const [challengeLink, setChallengeLink] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -181,7 +187,7 @@ export default function InterviewPage() {
       
       setRecognition(recognitionInstance)
     }
-  }, [voiceStatus])
+  }, [])
 
   const loadUserData = async (userId: string) => {
     try {
@@ -298,6 +304,10 @@ export default function InterviewPage() {
         setCurrentQuestion(prev => prev + 1)
         setAnswer('')
         setShowHint(false)
+        // Reset voice-related states for next question
+        setVoiceStatus('idle')
+        setUsedVoiceInput(false)
+        setCommScore(null)
       } else {
         finishInterview(updatedAnswers)
       }
@@ -408,6 +418,44 @@ export default function InterviewPage() {
     return 'Needs Work'
   }
 
+  // Create challenge function
+  const createChallenge = async () => {
+    if (!user || !questions.length) return
+    
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const questionTexts = questions.map(q => q.question)
+      const response = await fetch(`${apiUrl}/api/challenges/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          career_path: careerPath,
+          questions: questionTexts
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setChallengeCode(data.challenge_code)
+        setChallengeLink(data.share_url)
+        setShowChallengeModal(true)
+        setCopied(false)
+      }
+    } catch (err) {
+      console.error('Error creating challenge:', err)
+    }
+  }
+
+  // Copy challenge link to clipboard
+  const copyChallengeLink = async () => {
+    if (!challengeLink) return
+    
+    await navigator.clipboard.writeText(challengeLink)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   const copyResults = () => {
     const text = `🎯 My AI Interview Coach Results
 
@@ -457,6 +505,11 @@ Powered by AI Career Navigator`
 
       const updatedAnswers = [...answers, newAnswer]
       setAnswers(updatedAnswers)
+      
+      // Reset voice-related states for next question
+      setVoiceStatus('idle')
+      setUsedVoiceInput(false)
+      setCommScore(null)
       
       // Move to next or finish after delay
       setTimeout(() => {
@@ -633,7 +686,7 @@ Powered by AI Career Navigator`
   }
 
   // Calculate communication score from voice input
-  const calculateCommScore = (text: string) => {
+  const calculateCommScore = useCallback((text: string) => {
     const fillerWords = ['um', 'uh', 'like', 'you know', 'basically', 'literally', 'actually', 'sort of', 'kind of', 'right', 'okay', 'so yeah']
     const textLower = text.toLowerCase()
     
@@ -695,7 +748,7 @@ Powered by AI Career Navigator`
     }
     
     return { score, fillers, tip }
-  }
+  }, [])
 
   // Playback control functions
   const playAudio = () => {
@@ -751,7 +804,7 @@ Powered by AI Career Navigator`
       const scoreResult = calculateCommScore(answer)
       setCommScore(scoreResult)
     }
-  }, [voiceStatus, answer])
+  }, [voiceStatus, answer, calculateCommScore])
 
   // When question changes, auto-speak and fetch coaching hint
   useEffect(() => {
