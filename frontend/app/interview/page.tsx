@@ -688,6 +688,49 @@ Powered by AI Career Navigator`
                 />
               </div>
 
+              {/* Communication Score Card (Voice Input) */}
+              {usedVoiceInput && commScore && (
+                <div className="mt-3 p-4 rounded-xl border border-gray-700 bg-gray-800/50">
+                  {/* Score Header */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm font-semibold text-gray-300">
+                      🎙️ Voice Communication Score
+                    </span>
+                    <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${
+                      commScore.score >= 80 ? 'bg-green-500/20 text-green-400' :
+                      commScore.score >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
+                      commScore.score >= 40 ? 'bg-orange-500/20 text-orange-400' :
+                      'bg-red-500/20 text-red-400'
+                    }`}>
+                      {commScore.score}/100 — {
+                        commScore.score >= 80 ? '🟢 Excellent' :
+                        commScore.score >= 60 ? '🟡 Good' :
+                        commScore.score >= 40 ? '🟠 Needs Improvement' :
+                        '🔴 Needs Practice'
+                      }
+                    </span>
+                  </div>
+
+                  {/* Filler Words */}
+                  {Object.keys(commScore.fillers).length > 0 && (
+                    <div className="mb-2 text-sm text-gray-400">
+                      <span className="text-gray-300 font-medium">Filler words detected: </span>
+                      {Object.entries(commScore.fillers).map(([word, count]) => (
+                        <span key={word} className="mr-2 text-orange-400">
+                          "{word}" ({count}x)
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Tip */}
+                  <div className="text-sm text-blue-400 mt-1">
+                    💡 {commScore.tip}
+                  </div>
+
+                </div>
+              )}
+
               <div className="flex items-center justify-between mt-3">
                 <div className="flex items-center gap-3">
                   <button
