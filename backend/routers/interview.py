@@ -216,3 +216,57 @@ No other text or markdown."""
             "structure": "Use STAR method (Situation, Task, Action, Result).",
             "example": "Start with a brief context, then describe your specific contribution."
         }
+
+
+@router.get("/progress/{user_id}")
+async def get_user_progress(user_id: str):
+    """
+    Fetch user's progress data including sessions, rank, and streaks.
+    """
+    try:
+        # Fetch last 10 sessions
+        sessions_response = supabase.table("interview_sessions").select(
+            "career_path, total_score, created_at"
+        ).eq("user_id", user_id).order("created_at", desc=True).limit(10).execute()
+        
+        sessions = sessions_response.data if sessions_response.data else []
+        # Reverse to show oldest to newest for chart
+        sessions = list(reversed(sessions))
+        
+        # Fetch user rank
+        rank_response = supabase.table("user_ranks").select(
+            "xp, level, rank_title"
+        ).eq("user_id", user_id).execute()
+        
+        rank = rank_response.data[0] if rank_response.data else {
+            "xp": 0,
+            "level": 1,
+            "rank_title": "🌱 Fresher"
+        }
+        
+        # Fetch user streaks
+        streaks_response = supabase.table("user_streaks").select(
+            "current_streak, longest_streak, total_sessions"
+        ).eq("user_id", user_id).execute()
+        
+        streaks = streaks_response.data[0] if streaks_response.data else {
+            "current_streak": 0,
+            "longest_streak": 0,
+            "total_sessions": 0
+        }
+        
+        return {
+            "sessions": sessions,
+            "rank": rank,
+            "streaks": streaks
+        }
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {
+            "sessions": [],
+            "rank": {"xp": 0, "level": 1, "rank_title": "🌱 Fresher"},
+            "streaks": {"current_streak": 0, "longest_streak": 0, "total_sessions": 0},
+            "error": str(e)
+        }

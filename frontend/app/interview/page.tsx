@@ -1303,6 +1303,11 @@ Powered by AI Career Navigator`
                 <Copy className="w-4 h-4 mr-2" />
                 Share Results
               </Button>
+              <Link href="/progress">
+                <Button variant="outline">
+                  📊 View My Progress
+                </Button>
+              </Link>
               <Button onClick={() => { setScreen('setup'); setElapsedTime(0); }} className="bg-[#6C3FC8] hover:bg-[#6C3FC8]/90">
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Practice Again
