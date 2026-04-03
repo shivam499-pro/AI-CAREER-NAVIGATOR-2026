@@ -31,6 +31,9 @@ export default function ProgressPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [progressData, setProgressData] = useState<ProgressData | null>(null)
+  const [userEmail, setUserEmail] = useState('')
+  const [sendingReport, setSendingReport] = useState(false)
+  const [reportSent, setReportSent] = useState(false)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -38,6 +41,10 @@ export default function ProgressPage() {
       if (!user) {
         router.push('/auth/login')
         return
+      }
+      // Get user email for email report
+      if (user.email) {
+        setUserEmail(user.email)
       }
       await fetchProgressData(user.id)
     }
@@ -95,6 +102,33 @@ export default function ProgressPage() {
   const getNextLevelXP = (level: number) => {
     const levels = [0, 100, 250, 500, 900, 1400, 2000]
     return levels[level] || 2000
+  }
+
+  const sendWeeklyReport = async () => {
+    if (!userEmail) return
+    setSendingReport(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      const response = await fetch(`${apiUrl}/api/email/send-report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          user_id: user?.id, 
+          email: userEmail 
+        })
+      })
+      
+      if (response.ok) {
+        setReportSent(true)
+        setTimeout(() => setReportSent(false), 3000)
+      }
+    } catch (err) {
+      console.error('Error sending report:', err)
+    } finally {
+      setSendingReport(false)
+    }
   }
 
   if (loading) {
@@ -256,6 +290,44 @@ export default function ProgressPage() {
             </div>
             <p className="text-sm text-center text-muted-foreground mt-4">
               Keep practicing to earn more XP and level up!
+            </p>
+          </div>
+
+          {/* Weekly Email Report Section */}
+          <div className="bg-card rounded-xl border p-6 mt-8">
+            <h2 className="text-xl font-semibold mb-2">📧 Weekly Performance Report</h2>
+            <p className="text-muted-foreground mb-4">
+              Get your personalized AI performance report sent to your email every week
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="email"
+                value={userEmail}
+                onChange={(e) => setUserEmail(e.target.value)}
+                placeholder="Enter your email"
+                className="flex-1 p-3 border rounded-lg focus:ring-2 focus:ring-[#6C3FC8] outline-none"
+                aria-label="Email address for report"
+              />
+              <Button 
+                onClick={sendWeeklyReport}
+                disabled={sendingReport || !userEmail}
+                className="bg-[#6C3FC8] hover:bg-[#6C3FC8]/90"
+              >
+                {sendingReport ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...</>
+                ) : 'Send Report Now'}
+              </Button>
+            </div>
+            
+            {reportSent && (
+              <p className="text-green-600 font-medium mt-3">
+                ✅ Report sent to {userEmail}!
+              </p>
+            )}
+            
+            <p className="text-xs text-gray-500 mt-3">
+              💡 Tip: Add GMAIL_USER and GMAIL_APP_PASSWORD to your .env file to enable emails
             </p>
           </div>
         </div>
