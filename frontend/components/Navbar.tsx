@@ -7,13 +7,14 @@ import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import {
   Menu, X, LayoutDashboard, Brain, Mic, User,
-  FileText, Briefcase, LogOut, TrendingUp
+  FileText, Briefcase, LogOut, TrendingUp, Trophy
 } from 'lucide-react'
 
 const navLinks = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/analysis', label: 'Analysis', icon: Brain },
   { href: '/interview', label: 'Interview', icon: Mic },
+  { href: '/challenges', label: 'Challenges', icon: Trophy },
   { href: '/progress', label: 'Progress', icon: TrendingUp },
   { href: '/profile', label: 'Profile', icon: User },
   { href: '/resume', label: 'Resume', icon: FileText },
