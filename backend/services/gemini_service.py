@@ -133,7 +133,8 @@ def _generate(prompt: str) -> str:
 def run_combined_analysis(
     github_data: dict,
     leetcode_data: dict,
-    resume_text: str = ""
+    resume_text: str = "",
+    user_profile: dict = {}
 ) -> dict:
     """
     Single combined Gemini API call.
@@ -146,6 +147,34 @@ def run_combined_analysis(
 You are an expert AI Career Mentor. Analyze this candidate 
 profile completely and provide personalized career guidance.
 
+===== USER PROFILE =====
+User Type: {user_profile.get('user_type', 'Not specified')}
+
+--- Education ---
+College: {user_profile.get('college_name', 'Not specified')}
+Degree: {user_profile.get('degree', 'Not specified')}
+Branch: {user_profile.get('branch', 'Not specified')}
+Year of Study: {user_profile.get('year_of_study', 'Not specified')}
+Graduation Year: {user_profile.get('graduation_year', 'Not specified')}
+CGPA: {user_profile.get('cgpa', 'Not specified')}
+
+--- Professional ---
+Current Job Title: {user_profile.get('current_job_title', 'Not specified')}
+Current Company: {user_profile.get('current_company', 'Not specified')}
+Years of Experience: {user_profile.get('years_of_experience', 'Not specified')}
+Current Tech Stack: {user_profile.get('current_tech_stack', [])}
+Reason for Switching: {user_profile.get('reason_for_switching', 'Not specified')}
+
+--- Career Goals ---
+Career Goal: {user_profile.get('career_goal', 'Not specified')}
+Target Companies: {user_profile.get('target_companies', [])}
+Preferred Work Type: {user_profile.get('preferred_work_type', 'Not specified')}
+Job Search Timeline: {user_profile.get('job_search_timeline', 'Not specified')}
+
+--- Skills ---
+Extra Skills: {user_profile.get('extra_skills', [])}
+Certificates: {user_profile.get('certificates', [])}
+
 ===== GITHUB DATA =====
 {json.dumps(github_data or {}, indent=2)}
 
@@ -156,8 +185,11 @@ profile completely and provide personalized career guidance.
 {resume_text[:3000] if resume_text else "Not provided"}
 
 ===== YOUR TASK =====
-Based on ALL the above data, return ONLY a single valid 
-JSON object. No markdown, no extra text, just JSON.
+Analyze ALL the above data including the user profile, 
+GitHub activity, LeetCode performance, and resume.
+Give PERSONALIZED recommendations based on their specific 
+career goal, experience level, and background.
+If career_goal is specified, make it the PRIMARY career path.
 
 Use this exact structure:
 {{
@@ -257,7 +289,8 @@ Use this exact structure:
 def _get_cached_analysis(
     github_data: dict,
     leetcode_data: dict,
-    resume_text: str = ""
+    resume_text: str = "",
+    user_profile: dict = {}
 ) -> dict:
     global _last_github_data, _last_leetcode_data
     
@@ -265,13 +298,14 @@ def _get_cached_analysis(
     if github_data: _last_github_data = github_data
     if leetcode_data: _last_leetcode_data = leetcode_data
     
-    cache_key = str(github_data) + str(leetcode_data) + str(resume_text[:100])
+    cache_key = str(github_data) + str(leetcode_data) + str(resume_text[:100]) + str(user_profile)
 
     if cache_key not in _analysis_cache:
         result = run_combined_analysis(
             github_data,
             leetcode_data,
-            resume_text
+            resume_text,
+            user_profile
         )
         if result["success"]:
             _analysis_cache[cache_key] = result["data"]
@@ -289,12 +323,14 @@ def _get_cached_analysis(
 def analyze_profile(
     github_data: dict,
     leetcode_data: dict,
-    resume_text: str = ""
+    resume_text: str = "",
+    user_profile: dict = {}
 ) -> dict:
     data, error = _get_cached_analysis(
         github_data,
         leetcode_data,
-        resume_text
+        resume_text,
+        user_profile
     )
     if data:
         return data.get("analysis", {
@@ -316,12 +352,14 @@ def generate_career_paths(
     analysis: dict,
     github_data: dict,
     leetcode_data: dict,
-    resume_text: str = ""
+    resume_text: str = "",
+    user_profile: dict = {}
 ) -> list:
     data, error = _get_cached_analysis(
         github_data,
         leetcode_data,
-        resume_text
+        resume_text,
+        user_profile
     )
     if data:
         return data.get("career_paths", [])
@@ -332,12 +370,14 @@ def generate_skill_gaps(
     analysis: dict,
     career_path: str,
     github_data: dict,
-    resume_text: str = ""
+    resume_text: str = "",
+    user_profile: dict = {}
 ) -> list:
     data, error = _get_cached_analysis(
         github_data=_last_github_data,
         leetcode_data=_last_leetcode_data,
-        resume_text=resume_text
+        resume_text=resume_text,
+        user_profile=user_profile
     )
     if data:
         return data.get("skill_gaps", [])
@@ -348,12 +388,14 @@ def generate_roadmap(
     analysis: dict,
     career_path: str,
     duration_months: int = 6,
-    resume_text: str = ""
+    resume_text: str = "",
+    user_profile: dict = {}
 ) -> dict:
     data, error = _get_cached_analysis(
         github_data=_last_github_data,
         leetcode_data=_last_leetcode_data,
-        resume_text=resume_text
+        resume_text=resume_text,
+        user_profile=user_profile
     )
     if data:
         return data.get("roadmap", {

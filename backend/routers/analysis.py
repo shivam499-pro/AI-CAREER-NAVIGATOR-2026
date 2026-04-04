@@ -62,6 +62,28 @@ async def start_analysis(
         leetcode_username = profile.get("leetcode_username")
         resume_text = profile.get("resume_text", "")
         
+        # Build user_profile dict with all enhanced onboarding fields
+        user_profile = {
+            "user_type": profile.get("user_type"),
+            "college_name": profile.get("college_name"),
+            "degree": profile.get("degree"),
+            "branch": profile.get("branch"),
+            "year_of_study": profile.get("year_of_study"),
+            "graduation_year": profile.get("graduation_year"),
+            "cgpa": profile.get("cgpa"),
+            "current_job_title": profile.get("current_job_title"),
+            "current_company": profile.get("current_company"),
+            "years_of_experience": profile.get("years_of_experience"),
+            "current_tech_stack": profile.get("current_tech_stack", []),
+            "reason_for_switching": profile.get("reason_for_switching"),
+            "career_goal": profile.get("career_goal"),
+            "target_companies": profile.get("target_companies", []),
+            "preferred_work_type": profile.get("preferred_work_type"),
+            "job_search_timeline": profile.get("job_search_timeline"),
+            "extra_skills": profile.get("extra_skills", []),
+            "certificates": profile.get("certificates", []),
+        }
+        
         # Fetch GitHub data
         github_data = {}
         if github_username:
@@ -86,7 +108,7 @@ async def start_analysis(
         
         # Single combined AI call - replaces 4 separate calls
         combined_result = gemini_service.run_combined_analysis(
-            github_data, leetcode_data, resume_text
+            github_data, leetcode_data, resume_text, user_profile
         )
         if not combined_result.get("success"):
             raise HTTPException(status_code=500, detail=combined_result.get("error", "AI analysis failed"))
