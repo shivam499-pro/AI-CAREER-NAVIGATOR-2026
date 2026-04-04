@@ -211,11 +211,15 @@ export default function OnboardingPage() {
         resume_url: resumeUrl,
       }
 
+      // Get session token for authorization
+      const { data: { session } } = await supabase.auth.getSession()
+
       // Call POST /api/profile/enhanced
       const response = await fetch(`${apiUrl}/api/profile/enhanced`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
         },
         body: JSON.stringify(requestBody),
       })
