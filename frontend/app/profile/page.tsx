@@ -295,6 +295,7 @@ export default function ProfilePage() {
                 value={profile.degree}
                 onChange={(e) => setProfile({ ...profile, degree: e.target.value })}
                 className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-[#6C3FC8] outline-none"
+                aria-label="Select degree"
               >
                 <option value="">Select Degree</option>
                 <option value="B.Tech">B.Tech</option>
@@ -311,6 +312,7 @@ export default function ProfilePage() {
                 value={profile.branch}
                 onChange={(e) => setProfile({ ...profile, branch: e.target.value })}
                 className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-[#6C3FC8] outline-none"
+                aria-label="Select branch"
               >
                 <option value="">Select Branch</option>
                 <option value="CSE">CSE</option>
@@ -327,6 +329,7 @@ export default function ProfilePage() {
                 value={profile.current_year}
                 onChange={(e) => setProfile({ ...profile, current_year: e.target.value })}
                 className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-[#6C3FC8] outline-none"
+                aria-label="Select current year"
               >
                 <option value="">Select Year</option>
                 <option value="1st Year">1st Year</option>
@@ -371,7 +374,7 @@ export default function ProfilePage() {
             {profile.extra_skills.map((skill, i) => (
               <span key={i} className="px-3 py-1 bg-[#6C3FC8]/10 text-[#6C3FC8] rounded-full flex items-center gap-1">
                 {skill}
-                <button onClick={() => removeSkill(i)} className="hover:text-red-500">
+                <button onClick={() => removeSkill(i)} className="hover:text-red-500" aria-label="Remove skill">
                   <X className="w-3 h-3" />
                 </button>
               </span>
@@ -412,6 +415,7 @@ export default function ProfilePage() {
                   value={exp.role}
                   onChange={(e) => updateExperience(i, 'role', e.target.value)}
                   className="p-2 border rounded-lg focus:ring-2 focus:ring-[#6C3FC8] outline-none"
+                  aria-label="Select role"
                 >
                   <option value="">Select Role</option>
                   <option value="Intern">Intern</option>
@@ -468,7 +472,7 @@ export default function ProfilePage() {
                 className="flex-1 p-2 border rounded-lg focus:ring-2 focus:ring-[#6C3FC8] outline-none"
                 placeholder="Issuer (e.g. AWS - Amazon)"
               />
-              <button onClick={() => removeCertificate(i)} className="text-red-500">
+              <button onClick={() => removeCertificate(i)} className="text-red-500" aria-label="Remove certificate">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -579,7 +583,7 @@ export default function ProfilePage() {
               {profile.target_companies.map((company, i) => (
                 <span key={i} className="px-3 py-1 bg-[#1E3A5F]/10 text-[#1E3A5F] rounded-full flex items-center gap-1">
                   {company}
-                  <button onClick={() => removeCompany(i)} className="hover:text-red-500">
+                  <button onClick={() => removeCompany(i)} className="hover:text-red-500" aria-label="Remove company">
                     <X className="w-3 h-3" />
                   </button>
                 </span>
