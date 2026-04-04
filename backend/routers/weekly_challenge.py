@@ -1,15 +1,19 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from supabase import create_client, Client
+from supabase import create_client
 import os
+from dotenv import load_dotenv
 from datetime import datetime, timedelta
+
+# Load environment variables
+load_dotenv()
 
 router = APIRouter()
 
 # Initialize Supabase client
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://example.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY", "example-key")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+supabase = create_client(supabase_url, supabase_key)
 
 
 class SubmitWeeklyChallengeRequest(BaseModel):
