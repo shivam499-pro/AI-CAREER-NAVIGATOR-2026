@@ -1,7 +1,23 @@
 """
 Enhanced Profile Router
 Handles enhanced profile data (academic, skills, experience, achievements, goals)
+
+Run this in Supabase SQL Editor to add missing columns:
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS user_type text;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS year_of_study text;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS graduation_year integer;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS cgpa text;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS current_job_title text;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS current_company text;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS years_of_experience integer;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS current_tech_stack jsonb;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS reason_for_switching text;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS career_goal text;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS target_companies jsonb;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS preferred_work_type text;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS job_search_timeline text;
 """
+
 from fastapi import APIRouter, HTTPException, Depends
 from lib.auth import get_current_user
 from pydantic import BaseModel
@@ -21,23 +37,35 @@ supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
 supabase = create_client(supabase_url, supabase_key)
 
 
-class EnhancedProfile(BaseModel):
+class EnhancedProfileRequest(BaseModel):
+    user_id: str
+    # Identity
+    user_type: str  # "student" | "professional" | "fresher" | "career_switch"
+    # Student fields
     college_name: Optional[str] = None
     degree: Optional[str] = None
     branch: Optional[str] = None
-    current_year: Optional[str] = None
+    year_of_study: Optional[str] = None
     graduation_year: Optional[int] = None
-    cgpa: Optional[float] = None
-    extra_skills: Optional[List[str]] = []
-    experience: Optional[List[dict]] = []
-    certificates: Optional[List[dict]] = []
-    target_companies: Optional[List[str]] = []
-    preferred_location: Optional[str] = None
+    cgpa: Optional[str] = None
+    # Professional fields
+    current_job_title: Optional[str] = None
+    current_company: Optional[str] = None
+    years_of_experience: Optional[int] = None
+    current_tech_stack: Optional[List[str]] = []
+    reason_for_switching: Optional[str] = None
+    # Common fields
     career_goal: Optional[str] = None
-    open_to: Optional[str] = None
-    codechef_rating: Optional[int] = None
-    codeforces_rating: Optional[int] = None
-    hackathon_wins: Optional[int] = None
+    target_companies: Optional[List[str]] = []
+    preferred_work_type: Optional[str] = None
+    extra_skills: Optional[List[str]] = []
+    certificates: Optional[List[str]] = []
+    job_search_timeline: Optional[str] = None
+    # Existing fields
+    github_username: Optional[str] = None
+    leetcode_username: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    resume_url: Optional[str] = None
 
 
 @router.get("/enhanced")
@@ -78,28 +106,51 @@ async def get_enhanced_profile(user: Any = Depends(get_current_user)):
 
 
 @router.post("/enhanced")
-async def save_enhanced_profile(profile: EnhancedProfile, user: Any = Depends(get_current_user)):
+async def save_enhanced_profile(profile: EnhancedProfileRequest, user: Any = Depends(get_current_user)):
     """
     Save enhanced profile data for the current authenticated user.
+    Uses upsert to insert or update based on user_id.
     """
     try:
-        user_id = user.id
+        user_id = profile.user_id
         profile_data = profile.dict(exclude_unset=True)
         
-        # Update profile in Supabase
-        response = supabase.table("profiles").update(profile_data).eq("user_id", user_id).execute()
+        # Remove user_id from profile_data since we'll use it for matching
+        profile_data.pop("user_id", None)
         
-        if not response.data:
-            # Profile doesn't exist, create it
-            response = supabase.table("profiles").insert({
-                "user_id": user_id,
-                **profile_data
-            }).execute()
+        # Use upsert (insert or update based on user_id)
+        response = supabase.table("profiles").upsert({
+            "user_id": user_id,
+            **profile_data
+        }).execute()
         
-        return {"success": True, "message": "Profile saved successfully"}
+        if response.data:
+            return {"success": True, "message": "Profile saved successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save profile")
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# Keep backward compatibility with the old EnhancedProfile model
+class EnhancedProfile(BaseModel):
+    college_name: Optional[str] = None
+    degree: Optional[str] = None
+    branch: Optional[str] = None
+    current_year: Optional[str] = None
+    graduation_year: Optional[int] = None
+    cgpa: Optional[float] = None
+    extra_skills: Optional[List[str]] = []
+    experience: Optional[List[dict]] = []
+    certificates: Optional[List[dict]] = []
+    target_companies: Optional[List[str]] = []
+    preferred_location: Optional[str] = None
+    career_goal: Optional[str] = None
+    open_to: Optional[str] = None
+    codechef_rating: Optional[int] = None
+    codeforces_rating: Optional[int] = None
+    hackathon_wins: Optional[int] = None
+
 
 @router.get("/progress")
 async def get_user_progress(user: Any = Depends(get_current_user)):
