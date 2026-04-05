@@ -37,6 +37,7 @@ export default function ChallengesPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
+  const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 })
   
   useEffect(() => {
     const fetchData = async () => {
@@ -47,8 +48,8 @@ export default function ChallengesPage() {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
         
         const [challengeRes, leaderboardRes] = await Promise.all([
-          fetch(`${apiUrl}/api/weekly/current`),
-          fetch(`${apiUrl}/api/weekly/leaderboard`)
+          fetch(`${apiUrl}/api/weekly-challenge/current`),
+          fetch(`${apiUrl}/api/weekly-challenge/leaderboard`)
         ])
         
         if (challengeRes.ok) {
@@ -70,6 +71,30 @@ export default function ChallengesPage() {
     fetchData()
   }, [])
   
+  // Calculate time until next Sunday midnight
+  const getNextSundayMidnight = () => {
+    const now = new Date()
+    const dayOfWeek = now.getUTCDay()
+    const daysUntilSunday = (7 - dayOfWeek) % 7
+    const nextSunday = new Date(now)
+    nextSunday.setUTCDate(now.getUTCDate() + (daysUntilSunday === 0 ? 7 : daysUntilSunday))
+    nextSunday.setUTCHours(0, 0, 0, 0)
+    return nextSunday.toISOString()
+  }
+
+  // Update countdown every second until next Sunday midnight
+  useEffect(() => {
+    const updateCountdown = () => {
+      const sundayMidnight = getNextSundayMidnight()
+      setCountdown(getTimeRemaining(sundayMidnight))
+    }
+    
+    updateCountdown()
+    const interval = setInterval(updateCountdown, 1000)
+    
+    return () => clearInterval(interval)
+  }, [])
+  
   const handleAcceptChallenge = () => {
     if (challenge) {
       router.push(`/interview?mode=weekly&career_path=${encodeURIComponent(challenge.career_path)}`)
@@ -84,6 +109,25 @@ export default function ChallengesPage() {
       return diff > 0 ? diff : 0
     } catch {
       return 0
+    }
+  }
+  
+  const getTimeRemaining = (endsAt: string) => {
+    try {
+      const endDate = new Date(endsAt)
+      const now = new Date()
+      const diff = endDate.getTime() - now.getTime()
+      
+      if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0 }
+      
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+      
+      return { days, hours, minutes, seconds }
+    } catch {
+      return { days: 0, hours: 0, minutes: 0, seconds: 0 }
     }
   }
   
@@ -195,12 +239,37 @@ export default function ChallengesPage() {
                            <Target className="w-4 h-4 text-blue-400" />
                            <span className="text-xs font-black uppercase tracking-widest text-slate-300">{challenge.career_path}</span>
                         </div>
-                        <div className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-xl border border-white/5">
-                           <Clock className="w-4 h-4 text-yellow-400" />
-                           <span className="text-xs font-black uppercase tracking-widest text-yellow-400">
-                             {daysRemaining} Days <span className="text-slate-500">Left</span>
-                           </span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-2">
+                        <div className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-xl border border-yellow-500/30">
+                          <Clock className="w-4 h-4 text-yellow-400 animate-pulse" />
+                          <span className="text-xs font-black uppercase tracking-widest text-yellow-400">
+                            Until Sunday Midnight
+                          </span>
                         </div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <div className="flex items-center justify-center w-14 h-12 bg-[#0F172A] rounded-xl border border-purple-500/30">
+                          <span className="text-lg font-black text-purple-400">{String(countdown.days).padStart(2, '0')}</span>
+                        </div>
+                        <span className="text-sm font-black text-slate-500">:</span>
+                        <div className="flex items-center justify-center w-14 h-12 bg-[#0F172A] rounded-xl border border-purple-500/30">
+                          <span className="text-lg font-black text-purple-400">{String(countdown.hours).padStart(2, '0')}</span>
+                        </div>
+                        <span className="text-sm font-black text-slate-500">:</span>
+                        <div className="flex items-center justify-center w-14 h-12 bg-[#0F172A] rounded-xl border border-purple-500/30">
+                          <span className="text-lg font-black text-purple-400">{String(countdown.minutes).padStart(2, '0')}</span>
+                        </div>
+                        <span className="text-sm font-black text-slate-500">:</span>
+                        <div className="flex items-center justify-center w-14 h-12 bg-[#0F172A] rounded-xl border border-purple-500/30">
+                          <span className="text-lg font-black text-purple-400 animate-pulse">{String(countdown.seconds).padStart(2, '0')}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-6 text-[10px] font-black uppercase tracking-widest text-slate-500 mt-1 ml-1">
+                        <span>Days</span>
+                        <span>Hrs</span>
+                        <span>Min</span>
+                        <span>Sec</span>
                       </div>
                     </div>
                   )}
