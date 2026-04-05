@@ -3,13 +3,14 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import Navbar from '@/components/Navbar'
 import { 
   Brain, ChevronRight, Loader2, Sparkles, 
   TrendingUp, Target, Code, CheckCircle, XCircle,
-  Calendar, ArrowRight
+  Calendar, ArrowRight, Award, Zap, AlertTriangle
 } from 'lucide-react'
 
 interface CareerPath {
@@ -86,27 +87,14 @@ export default function AnalysisPage() {
       const response = await fetch(`${apiUrl}/api/analysis/results/${userId}`)
       const data = await response.json()
       
-      console.log('API Response (GET /results):', JSON.stringify(data, null, 2))
-
       if (data.status === 'found') {
-        // Extract strengths - from both possible locations
         let strengths = data.analysis?.analysis?.strengths || data.analysis?.strengths || data.strengths || []
-        if (typeof strengths === 'string') {
-          strengths = [strengths]
-        }
-        // Filter out error messages
+        if (typeof strengths === 'string') strengths = [strengths]
         strengths = strengths.filter((s: string) => !s.toLowerCase().includes('error'))
         
-        // Extract career paths - at data.career_paths
-        let careerPaths = data.career_paths || []
-        
-        // Extract skill gaps - at data.skill_gaps
-        let skillGaps = data.skill_gaps || []
-        
-        // Extract roadmap - at data.roadmap
-        let roadmap = data.roadmap || { target_career: '', duration_months: 6, milestones: [] }
-        
-        // Extract experience level - nested at data.analysis.analysis.experience_level
+        const careerPaths = data.career_paths || []
+        const skillGaps = data.skill_gaps || []
+        const roadmap = data.roadmap || { target_career: '', duration_months: 6, milestones: [] }
         const experienceLevel = data.analysis?.analysis?.experience_level || data.experience_level || 'Intermediate'
         
         setAnalysis({
@@ -117,12 +105,9 @@ export default function AnalysisPage() {
           roadmap: roadmap,
         })
       } else {
-        // No analysis yet, trigger one
         await runAnalysis(userId)
       }
     } catch (err) {
-      console.error('Error checking analysis:', err)
-      // Try to run analysis anyway
       await runAnalysis(userId)
     } finally {
       setLoading(false)
@@ -132,46 +117,23 @@ export default function AnalysisPage() {
   const runAnalysis = async (userId: string) => {
     setAnalyzing(true)
     setError('')
-
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
       const response = await fetch(`${apiUrl}/api/analysis/start`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId }),
       })
-
-      if (!response.ok) {
-        throw new Error('Analysis failed')
-      }
-
+      if (!response.ok) throw new Error('Analysis failed')
       const data = await response.json()
-
       if (data.status === 'completed') {
-        console.log('API Response (POST /start):', JSON.stringify(data, null, 2))
-        
-        // Extract strengths - from both possible locations
         let strengths = data.analysis?.analysis?.strengths || data.analysis?.strengths || data.strengths || []
-        if (typeof strengths === 'string') {
-          strengths = [strengths]
-        }
-        // Filter out error messages
+        if (typeof strengths === 'string') strengths = [strengths]
         strengths = strengths.filter((s: string) => !s.toLowerCase().includes('error'))
-        
-        // Extract career paths
-        let careerPaths = data.career_paths || []
-        
-        // Extract skill gaps
-        let skillGaps = data.skill_gaps || []
-        
-        // Extract roadmap
+        const careerPaths = data.career_paths || []
+        const skillGaps = data.skill_gaps || []
         const roadmap = data.roadmap || { target_career: '', duration_months: 6, milestones: [] }
-        
-        // Extract experience level
         const experienceLevel = data.analysis?.experience_level || data.experience_level || 'Intermediate'
-        
         setAnalysis({
           experience_level: experienceLevel,
           strengths: strengths,
@@ -181,7 +143,6 @@ export default function AnalysisPage() {
         })
       }
     } catch (err) {
-      console.error('Analysis error:', err)
       setError('Failed to run analysis. Please try again.')
     } finally {
       setAnalyzing(false)
@@ -190,10 +151,10 @@ export default function AnalysisPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
+          <Loader2 className="w-12 h-12 animate-spin text-primary-violet mx-auto mb-4" />
+          <p className="text-slate-400 font-medium tracking-wide">Loading Intelligence...</p>
         </div>
       </div>
     )
@@ -201,55 +162,47 @@ export default function AnalysisPage() {
 
   if (analyzing) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center">
+      <div className="min-h-screen bg-[#0F172A] flex items-center justify-center">
         <div className="text-center max-w-md p-8">
-          <div className="relative mb-8">
-            <div className="w-24 h-24 mx-auto">
-              <div className="absolute inset-0 rounded-full border-4 border-primary/20" />
-              <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-            </div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Brain className="w-10 h-10 text-primary" />
+          <div className="relative mb-12">
+            <div className="w-32 h-32 mx-auto">
+              <div className="absolute inset-0 rounded-full border-4 border-primary-violet/20" />
+              <div className="absolute inset-0 rounded-full border-4 border-primary-violet border-t-transparent animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Brain className="w-12 h-12 text-primary-violet drop-shadow-[0_0_10px_rgba(108,63,200,0.5)]" />
+              </div>
             </div>
           </div>
-          <h2 className="text-2xl font-bold text-foreground mb-2">
-            Analyzing Your Profile
-          </h2>
-          <p className="text-muted-foreground mb-4">
-            Our AI is reading your GitHub and LeetCode data...
-          </p>
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center justify-center gap-2">
-              <CheckCircle className="w-4 h-4 text-success" />
-              <span>Fetching GitHub data</span>
-            </div>
-            <div className="flex items-center justify-center gap-2">
-              <CheckCircle className="w-4 h-4 text-success" />
-              <span>Fetching LeetCode data</span>
-            </div>
-            <div className="flex items-center justify-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin text-primary" />
-              <span>Running AI analysis...</span>
-            </div>
+          <h2 className="text-3xl font-black text-white mb-3 tracking-tight">Syncing Intelligence</h2>
+          <p className="text-slate-400 mb-8 font-medium">Reading GitHub and LeetCode activity...</p>
+          <div className="space-y-4 max-w-xs mx-auto">
+            {['Fetching GitHub repos', 'Parsing LeetCode solutions', 'Generating career paths'].map((step, i) => (
+              <div key={i} className="flex items-center gap-3 text-sm font-bold text-slate-300">
+                <CheckCircle className={`w-5 h-5 ${i < 2 ? 'text-green-500' : 'text-slate-700'}`} />
+                <span>{step}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
     )
   }
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="text-center max-w-md">
-          <XCircle className="w-16 h-16 text-error mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-foreground mb-2">Analysis Failed</h2>
-          <p className="text-muted-foreground mb-4">{error}</p>
-          <Button onClick={() => user && runAnalysis(user.id)}>
-            Try Again
-          </Button>
-        </div>
-      </div>
-    )
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.15 } }
+  }
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 }
+  }
+
+  const getExperienceStyles = (level: string) => {
+    const l = level.toLowerCase()
+    if (l.includes('beginner')) return 'bg-blue-500/10 text-blue-500 border-blue-500/30'
+    if (l.includes('senior')) return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
+    return 'bg-primary-violet/10 text-primary-violet border-primary-violet/30'
   }
 
   if (!analysis) {
@@ -257,163 +210,157 @@ export default function AnalysisPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[#0F172A] text-white">
       <Navbar />
-      <main className="container mx-auto px-4 py-8">
-        {/* Experience Level */}
-        <div className="mb-8">
-          <div className="bg-gradient-to-r from-primary to-accent-violet rounded-2xl p-8 text-white">
-            <div className="flex items-center gap-4 mb-4">
-              <Sparkles className="w-8 h-8" />
-              <h2 className="text-2xl font-bold">Your Experience Level</h2>
+      <main className="container mx-auto px-4 py-12 max-w-6xl">
+        <motion.div 
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="space-y-12"
+        >
+          {/* Experience Level */}
+          <motion.div variants={itemVariants} className="relative group">
+            <div className="absolute -inset-1 bg-gradient-to-r from-primary-violet to-purple-600 rounded-3xl blur opacity-25 group-hover:opacity-40 transition" />
+            <div className="relative bg-[#1E293B] rounded-2xl p-10 border border-white/5 flex flex-col md:flex-row items-center gap-8">
+              <div className="w-20 h-20 bg-primary-violet/20 rounded-2xl flex items-center justify-center border border-primary-violet/30">
+                <Award className="w-10 h-10 text-primary-violet" />
+              </div>
+              <div className="text-center md:text-left flex-1">
+                <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
+                  <Sparkles className="w-5 h-5 text-primary-violet" />
+                  <span className="text-xs font-black uppercase tracking-widest text-primary-violet">Analysis Baseline</span>
+                </div>
+                <h2 className="text-4xl font-black text-white mb-2">
+                  {analysis.experience_level}
+                </h2>
+                <p className="text-slate-400 font-medium">Verified technical maturity across 12+ real-world indicators</p>
+              </div>
+              <div className={`px-8 py-4 rounded-xl border-2 font-black text-xl uppercase tracking-tighter ${getExperienceStyles(analysis.experience_level)}`}>
+                {analysis.experience_level} Verified
+              </div>
             </div>
-            <div className="text-5xl font-bold mb-2">
-              {analysis.experience_level}
-            </div>
-            <p className="text-white/80">
-              Based on your GitHub activity and LeetCode performance
-            </p>
-          </div>
-        </div>
+          </motion.div>
 
-        {/* Strengths */}
-        <div className="mb-8">
-          <h3 className="text-xl font-bold text-foreground mb-4">Your Strengths</h3>
-          <div className="flex flex-wrap gap-2">
-            {analysis.strengths && analysis.strengths.length > 0 ? (
-              analysis.strengths.map((strength, i) => (
-                <span 
+          {/* Strengths */}
+          <motion.div variants={itemVariants} className="space-y-6">
+            <h3 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-3">
+              <Zap className="w-5 h-5 text-green-500" />
+              Core Technical Strengths
+            </h3>
+            <div className="flex flex-wrap gap-3">
+              {analysis.strengths?.map((strength, i) => (
+                <div 
                   key={i}
-                  className="px-4 py-2 bg-success/10 text-success rounded-full font-medium"
+                  className="px-6 py-3 bg-[#1E293B] border-l-4 border-l-green-500 text-white rounded-xl font-bold border border-white/5 shadow-lg group hover:scale-105 transition-all"
                 >
                   {strength}
-                </span>
-              ))
-            ) : (
-              <p className="text-muted-foreground">No data available</p>
-            )}
-          </div>
-        </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
 
-        {/* Career Paths */}
-        <div className="mb-8">
-          <h3 className="text-xl font-bold text-foreground mb-4">Recommended Career Paths</h3>
-          {analysis.career_paths && analysis.career_paths.length > 0 ? (
-            <div className="grid md:grid-cols-3 gap-4">
-              {analysis.career_paths.slice(0, 3).map((path, i) => {
-                // Handle different possible field names
-                const pathName = path.name || path.career_name || path.title || 'Unknown Career'
-                const matchPct = path.match_percentage ?? path.match ?? path.percentage ?? 0
-                const reasonTxt = path.reason || path.description || path.justification || ''
-                
+          {/* Career Paths */}
+          <motion.div variants={itemVariants} className="space-y-6">
+            <h3 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-3">
+              <Target className="w-5 h-5 text-primary-violet" />
+              Strategic Career Paths
+            </h3>
+            <div className="grid md:grid-cols-3 gap-6">
+              {analysis.career_paths?.slice(0, 3).map((path, i) => {
+                const name = path.name || path.career_name || path.title || 'Unknown'
+                const match = path.match_percentage ?? path.match ?? path.percentage ?? 0
+                const desc = path.reason || path.description || path.justification || ''
                 return (
-                  <div 
-                    key={i}
-                    className={`bg-card rounded-xl p-6 border-2 ${
-                      i === 0 ? 'border-primary' : ''
-                    }`}
-                  >
+                  <div key={i} className={`bg-[#1E293B] rounded-2xl p-8 border border-white/5 relative group transition-all hover:bg-[#1E293B]/80 ${i === 0 ? 'shadow-[0_0_30px_rgba(108,63,200,0.15)] ring-2 ring-primary-violet/30' : ''}`}>
                     {i === 0 && (
-                      <span className="text-xs font-bold text-primary mb-2 block">BEST MATCH</span>
+                      <div className="absolute -top-3 left-8 bg-primary-violet text-white text-[10px] font-black px-4 py-1 rounded-full animate-pulse">BEST MATCH</div>
                     )}
-                    <h4 className="font-bold text-foreground mb-2">{pathName}</h4>
-                    <div className="text-3xl font-bold text-primary mb-2">
-                      {typeof matchPct === 'number' ? `${matchPct}%` : 'N/A'}
+                    <h4 className="text-xl font-black text-white mb-4 leading-tight">{name}</h4>
+                    <div className="mb-6 flex items-baseline gap-2">
+                      <span className={`text-4xl font-black ${i === 0 ? 'text-primary-violet' : 'text-white'}`}>{match}%</span>
+                      <span className="text-xs text-slate-500 font-bold uppercase">Alignment</span>
                     </div>
-                    <p className="text-sm text-muted-foreground">{reasonTxt || 'No reason provided'}</p>
+                    {/* Gradient Bar */}
+                    <div className="h-2 w-full bg-slate-800 rounded-full mb-6 overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-1000 ${i === 0 ? 'bg-gradient-to-r from-primary-violet to-purple-400' : 'bg-slate-600'}`} 
+                        style={{ width: `${match}%` }} 
+                      />
+                    </div>
+                    <p className="text-xs text-slate-400 leading-relaxed font-medium">{desc}</p>
                   </div>
                 )
               })}
             </div>
-          ) : (
-            <p className="text-muted-foreground">Analysis pending...</p>
-          )}
-        </div>
+          </motion.div>
 
-        {/* Skill Gaps */}
-        <div className="mb-8">
-          <h3 className="text-xl font-bold text-foreground mb-4">Skill Gap Analysis</h3>
-          {analysis.skill_gaps && analysis.skill_gaps.length > 0 ? (
-            <div className="bg-card rounded-xl border overflow-hidden">
-              {analysis.skill_gaps.slice(0, 8).map((item, i) => {
-                // Handle different possible field names
-                const skillName = item.skill || item.skill_name || item.name || 'Unknown Skill'
-                const hasSkill = item.have ?? item.has ?? item.owned ?? false
-                const priorityNum = item.priority ?? item.priority_level ?? item.level ?? null
-                
+          {/* Skill Gaps */}
+          <motion.div variants={itemVariants} className="space-y-6">
+            <h3 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-3">
+              <Code className="w-5 h-5 text-blue-400" />
+              Critical Skill Gaps
+            </h3>
+            <div className="bg-[#1E293B] rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
+              {analysis.skill_gaps?.slice(0, 8).map((item, i) => {
+                const name = item.skill || item.skill_name || item.name || 'Skill'
+                const has = item.have ?? item.has ?? item.owned ?? false
+                const p = item.priority ?? item.priority_level ?? item.level ?? 0
+                const accent = has ? 'border-l-green-500' : p === 1 ? 'border-l-red-500' : 'border-l-yellow-500'
                 return (
-                  <div 
-                    key={i}
-                    className="flex items-center justify-between p-4 border-b last:border-0"
-                  >
-                    <div className="flex items-center gap-3">
-                      {hasSkill ? (
-                        <CheckCircle className="w-5 h-5 text-success" />
-                      ) : (
-                        <XCircle className="w-5 h-5 text-warning" />
-                      )}
-                      <span className="font-medium text-foreground">{skillName}</span>
+                  <div key={i} className={`flex items-center justify-between p-6 border-b border-white/5 last:border-0 border-l-4 ${accent} hover:bg-white/[0.02] transition-colors`}>
+                    <div className="flex items-center gap-4">
+                      {has ? <CheckCircle className="w-6 h-6 text-green-500" /> : <AlertTriangle className="w-6 h-6 text-yellow-500" />}
+                      <span className="font-bold text-lg text-white">{name}</span>
                     </div>
-                    <span className={`text-sm ${hasSkill ? 'text-success' : 'text-warning'}`}>
-                      {hasSkill ? 'Have it' : priorityNum !== null ? `Priority #${priorityNum}` : 'Needs work'}
+                    <span className={`px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${has ? 'bg-green-500/10 text-green-500' : p === 1 ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                      {has ? 'Verified Level' : `Priority ${p}`}
                     </span>
                   </div>
                 )
               })}
             </div>
-          ) : (
-            <p className="text-muted-foreground">Analysis pending...</p>
-          )}
-        </div>
+          </motion.div>
 
-        {/* Roadmap */}
-        <div className="mb-8">
-          <h3 className="text-xl font-bold text-foreground mb-4">
-            Your {analysis.roadmap?.duration_months || 6}-Month Roadmap
-          </h3>
-          <div className="bg-card rounded-xl border p-6">
-            <div className="flex items-center gap-2 mb-6">
-              <Calendar className="w-5 h-5 text-primary" />
-              <span className="font-semibold text-foreground">
-                Target: {analysis.roadmap?.target_career || 'Full Stack Developer'}
-              </span>
-            </div>
-            
-            <div className="space-y-4">
-              {analysis.roadmap?.milestones?.slice(0, 8).map((milestone, i) => (
-                <div key={i} className="flex gap-4">
-                  <div className="flex flex-col items-center">
-                    <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold">
-                      {milestone.week}
-                    </div>
-                    {i < (analysis.roadmap?.milestones?.length || 0) - 1 && (
-                      <div className="w-0.5 h-12 bg-gray-200" />
-                    )}
+          {/* Roadmap */}
+          <motion.div variants={itemVariants} className="space-y-6 pb-12">
+            <h3 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-3">
+              <Calendar className="w-5 h-5 text-primary-violet" />
+              Strategic {analysis.roadmap?.duration_months || 6}-Month Growth Path
+            </h3>
+            <div className="bg-[#1E293B] rounded-2xl p-10 border border-white/5 relative">
+              <div className="absolute left-[3.35rem] top-24 bottom-24 w-0.5 bg-gradient-to-b from-primary-violet/50 via-primary-violet/20 to-transparent" />
+              {analysis.roadmap?.milestones?.map((m, i) => (
+                <div key={i} className="flex gap-8 mb-12 last:mb-0 relative group">
+                  <div className="relative z-10 w-12 h-12 rounded-full bg-[#0F172A] border-4 border-primary-violet text-primary-violet flex items-center justify-center font-black text-xl shadow-[0_0_15px_rgba(108,63,200,0.4)] group-hover:scale-110 transition-transform">
+                    {m.week}
                   </div>
-                  <div className="flex-1 pb-6">
-                    <h4 className="font-semibold text-foreground">{milestone.title}</h4>
-                    <p className="text-sm text-muted-foreground">{milestone.description}</p>
-                    {milestone.deliverable && (
-                      <p className="text-xs text-primary mt-1">
-                        → {milestone.deliverable}
-                      </p>
-                    )}
+                  <div className="flex-1 bg-slate-900/40 p-8 rounded-2xl border border-white/5 group-hover:border-primary-violet/30 transition-all hover:bg-slate-900/60">
+                    <h4 className="text-xl font-black text-white mb-2 leading-tight">{m.title}</h4>
+                    <p className="text-sm text-slate-400 font-medium leading-relaxed mb-6 italic opacity-80">"{m.description}"</p>
+                    <div className="flex flex-wrap gap-2">
+                      {m.skills?.map((s, si) => (
+                        <span key={si} className="text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-primary-violet/10 text-primary-violet rounded-lg border border-primary-violet/20">
+                          {s}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-        </div>
+          </motion.div>
 
-        {/* Find Jobs CTA */}
-        <div className="text-center">
-          <Link href="/jobs">
-            <Button className="bg-primary hover:bg-primary/90 text-lg px-8 py-6">
-              Find Matching Jobs
-              <ArrowRight className="ml-2 w-5 h-5" />
-            </Button>
-          </Link>
-        </div>
+          {/* CTA */}
+          <motion.div variants={itemVariants} className="text-center bg-gradient-to-b from-transparent to-primary-violet/10 rounded-3xl p-12">
+            <Link href="/jobs">
+              <Button className="bg-primary-violet hover:bg-primary-violet/90 text-white text-xl font-black px-12 py-8 rounded-2xl shadow-2xl hover:shadow-primary-violet/30 transition-all gap-4">
+                Accelerate My Career Launch
+                <ArrowRight className="w-6 h-6" />
+              </Button>
+            </Link>
+          </motion.div>
+        </motion.div>
       </main>
     </div>
   )
