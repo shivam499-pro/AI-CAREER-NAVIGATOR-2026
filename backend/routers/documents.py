@@ -123,6 +123,7 @@ async def upload_documents(
         file_parts = []       # Gemini content parts
         file_names = []       # Track processed filenames
         file_contents = []    # Raw bytes for Supabase upload
+        storage_urls = []     # URLs of uploaded files
 
         for f in files:
             if f.content_type not in ALLOWED_TYPES:
@@ -188,6 +189,7 @@ async def upload_documents(
             )
 
         # --- Upload files to Supabase Storage ---
+        storage_urls = []
         for fname, fbytes, ftype in file_contents:
             storage_path = f"{user_id}/documents/{fname}"
             try:
@@ -196,9 +198,15 @@ async def upload_documents(
                     file=fbytes,
                     file_options={"content-type": ftype, "upsert": "true"},
                 )
+                # Get public URL
+                public_url = supabase.storage.from_("user_documents").get_public_url(storage_path)
+                storage_urls.append({"filename": fname, "url": public_url})
             except Exception as storage_err:
-                # Log but don't fail — extraction is more important
-                print(f"Storage upload warning for {fname}: {storage_err}")
+                # Raise a clear error if storage upload fails
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to upload file '{fname}' to storage. Please try again later."
+                )
 
         # --- Send to Gemini multimodal API ---
         contents = [EXTRACTION_PROMPT] + file_parts
@@ -277,6 +285,7 @@ async def upload_documents(
             "extracted": extracted,
             "files_processed": len(file_names),
             "filenames": file_names,
+            "file_urls": storage_urls
         }
 
     except HTTPException:

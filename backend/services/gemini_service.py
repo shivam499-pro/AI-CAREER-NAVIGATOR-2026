@@ -7,6 +7,7 @@ import json
 import re
 import random
 import time
+from collections import OrderedDict
 from google import genai
 from dotenv import load_dotenv
 
@@ -16,6 +17,31 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Set this to True to bypass Gemini API calls and return realistic fake data
 MOCK_MODE = False
+
+# Retry configuration
+MAX_RETRIES = 2
+RETRY_BASE_DELAY = 1.0  # seconds
+
+# Rate limit error detection
+RATE_LIMIT_ERRORS = [
+    "429",
+    "rate limit",
+    "RESOURCE_EXHAUSTED",
+    "quota exceeded",
+    "too many requests"
+]
+
+# Temporary errors that should be retried
+RETRIABLE_ERRORS = [
+    "500",
+    "502",
+    "503",
+    "504",
+    "timeout",
+    "timed out",
+    "connection",
+    "network"
+]
 
 MOCK_RESPONSE = {
     "analysis": {
@@ -95,8 +121,14 @@ if not GEMINI_API_KEY:
 
 client_genai = genai.Client(api_key=GEMINI_API_KEY)
 
-# Cache state to handle multiple calls in one session
-_analysis_cache = {}
+# Cache configuration
+CACHE_MAX_SIZE = 100  # Maximum number of entries
+CACHE_TTL_SECONDS = 3600  # 1 hour TTL
+
+# Cache state with TTL tracking
+# Using OrderedDict for LRU behavior: most recently used stays at end
+_analysis_cache = OrderedDict()  # {cache_key: (timestamp, data)}
+_cache_timestamps = {}  # {cache_key: timestamp}
 _last_github_data = {}
 _last_leetcode_data = {}
 
@@ -124,12 +156,86 @@ def _clean_json(text: str) -> str:
     return text.strip()
 
 
+def _cleanup_cache():
+    """
+    Remove expired entries and enforce max size limit.
+    Uses LRU: removes oldest entries when at capacity.
+    """
+    global _analysis_cache, _cache_timestamps
+    current_time = time.time()
+    
+    # Remove expired entries
+    expired_keys = [
+        key for key, ts in _cache_timestamps.items()
+        if current_time - ts > CACHE_TTL_SECONDS
+    ]
+    for key in expired_keys:
+        _analysis_cache.pop(key, None)
+        _cache_timestamps.pop(key, None)
+    
+    # Enforce max size (LRU: remove oldest entries)
+    while len(_analysis_cache) > CACHE_MAX_SIZE:
+        oldest_key = next(iter(_analysis_cache))
+        _analysis_cache.pop(oldest_key)
+        _cache_timestamps.pop(oldest_key, None)
+
+
+def _is_rate_limit_error(error: Exception) -> bool:
+    """Check if error is a rate limit error."""
+    error_str = str(error).lower()
+    return any(keyword in error_str for keyword in RATE_LIMIT_ERRORS)
+
+
+def _is_retriable_error(error: Exception) -> bool:
+    """Check if error is a temporary error that should be retried."""
+    error_str = str(error).lower()
+    return any(keyword in error_str for keyword in RETRIABLE_ERRORS)
+
+
+def _generate_with_retry(prompt: str) -> str:
+    """
+    Generate content with retry logic.
+    - Does NOT retry on rate limit errors (429)
+    - Retries with exponential backoff on temporary errors (max 2 retries)
+    """
+    last_exception = None
+    
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            response = client_genai.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            return response.text
+        except Exception as e:
+            last_exception = e
+            
+            # If it's a rate limit error, do NOT retry - return immediately
+            if _is_rate_limit_error(e):
+                raise RateLimitError(
+                    "Gemini API rate limit exceeded. Please wait a moment and try again."
+                ) from e
+            
+            # If it's a retriable error and we have retries left
+            if attempt < MAX_RETRIES and _is_retriable_error(e):
+                delay = RETRY_BASE_DELAY * (2 ** attempt)  # Exponential backoff
+                print(f"Retryable error on attempt {attempt + 1}, waiting {delay}s: {str(e)}")
+                time.sleep(delay)
+                continue
+            
+            # For non-retriable errors or max retries reached, raise
+            raise
+    
+    raise last_exception
+
+
+class RateLimitError(Exception):
+    """Custom exception for rate limit errors."""
+    pass
+
+
 def _generate(prompt: str) -> str:
-    response = client_genai.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt
-    )
-    return response.text
+    return _generate_with_retry(prompt)
 
 
 def run_combined_analysis(
@@ -276,6 +382,13 @@ Use this exact structure:
         clean_text = _clean_json(raw_text)
         result = json.loads(clean_text)
         return {"success": True, "data": result}
+    except RateLimitError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": "rate_limit",
+            "retry_after": None
+        }
     except json.JSONDecodeError as e:
         return {
             "success": False,
@@ -294,26 +407,49 @@ def _get_cached_analysis(
     resume_text: str = "",
     user_profile: dict = {}
 ) -> dict:
-    global _last_github_data, _last_leetcode_data
+    global _last_github_data, _last_leetcode_data, _analysis_cache, _cache_timestamps
     
     # Store the most recent inputs
     if github_data: _last_github_data = github_data
     if leetcode_data: _last_leetcode_data = leetcode_data
     
+    # Clean up expired entries and enforce size limit
+    _cleanup_cache()
+    
     cache_key = str(github_data) + str(leetcode_data) + str(resume_text[:100]) + str(user_profile)
-
-    if cache_key not in _analysis_cache:
-        result = run_combined_analysis(
-            github_data,
-            leetcode_data,
-            resume_text,
-            user_profile
-        )
-        if result["success"]:
-            _analysis_cache[cache_key] = result["data"]
-        else:
-            return None, result["error"]
-
+    current_time = time.time()
+    
+    # Check if valid cache entry exists
+    if cache_key in _analysis_cache:
+        # Check if not expired
+        if cache_key in _cache_timestamps:
+            if current_time - _cache_timestamps[cache_key] <= CACHE_TTL_SECONDS:
+                # Move to end (most recently used) for LRU
+                _analysis_cache.move_to_end(cache_key)
+                return _analysis_cache[cache_key], None
+            else:
+                # Expired - remove it
+                _analysis_cache.pop(cache_key, None)
+                _cache_timestamps.pop(cache_key, None)
+    
+    # Cache miss - run analysis
+    result = run_combined_analysis(
+        github_data,
+        leetcode_data,
+        resume_text,
+        user_profile
+    )
+    if result["success"]:
+        # Clean up before adding new entry
+        _cleanup_cache()
+        # Add to cache with timestamp
+        _analysis_cache[cache_key] = result["data"]
+        _cache_timestamps[cache_key] = current_time
+        # Move to end for LRU
+        _analysis_cache.move_to_end(cache_key)
+    else:
+        return None, result["error"]
+    
     return _analysis_cache[cache_key], None
 
 
@@ -470,6 +606,12 @@ Return ONLY the JSON array, no other text."""
         if isinstance(questions, list) and len(questions) > 0:
             return questions
         return []
+    except RateLimitError as e:
+        print(f"Rate limit error in interview questions: {str(e)}")
+        return []
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse interview questions: {str(e)}")
+        return []
     except Exception as e:
         print(f"Gemini attempt 1 failed: {str(e)}, retrying...")
         try:
@@ -488,6 +630,9 @@ Return ONLY the JSON array, no other text."""
             questions = json.loads(_clean_json(text))
             if isinstance(questions, list) and len(questions) > 0:
                 return questions
+            return []
+        except RateLimitError as e:
+            print(f"Rate limit error on retry: {str(e)}")
             return []
         except Exception as e2:
             print(f"Gemini attempt 2 also failed: {str(e2)}")

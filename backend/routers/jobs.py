@@ -4,15 +4,42 @@ from services import jobs_service
 
 router = APIRouter()
 
+# Default pagination settings
+DEFAULT_PAGE = 1
+DEFAULT_LIMIT = 10
+MAX_LIMIT = 50
+
+
+def paginate_response(data: list, page: int, limit: int) -> dict:
+    """Add pagination metadata to a list response."""
+    total = len(data)
+    total_pages = (total + limit - 1) // limit  # Ceiling division
+    start_idx = (page - 1) * limit
+    end_idx = start_idx + limit
+    
+    return {
+        "data": data[start_idx:end_idx],
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": total_pages
+        }
+    }
+
+
 @router.get("/")
 async def get_jobs(
     query: Optional[str] = Query(None),
     location: Optional[str] = Query(None),
     job_type: Optional[str] = Query(None),
-    keywords: Optional[str] = Query(None)
+    keywords: Optional[str] = Query(None),
+    page: int = Query(DEFAULT_PAGE, ge=1, description="Page number"),
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT, description="Items per page")
 ):
     """
     Get job suggestions based on user profile and filters.
+    Supports pagination with page and limit query parameters.
     """
     try:
         # Use the query provided or fallback to keywords/mock
@@ -20,9 +47,11 @@ async def get_jobs(
         
         if search_query:
             results = await jobs_service.search_jobs(search_query, location)
+            paginated = paginate_response(results, page, limit)
             return {
-                "jobs": results,
-                "count": len(results)
+                "jobs": paginated["data"],
+                "count": len(paginated["data"]),
+                "pagination": paginated["pagination"]
             }
         
         # Fallback to mock job data if no search query
@@ -61,10 +90,14 @@ async def get_jobs(
             mock_jobs = [j for j in mock_jobs if location.lower() in j["location"].lower()]
         if job_type:
             mock_jobs = [j for j in mock_jobs if job_type.lower() in j["type"].lower()]
-            
+        
+        # Paginate results
+        paginated = paginate_response(mock_jobs, page, limit)
+        
         return {
-            "jobs": mock_jobs,
-            "count": len(mock_jobs)
+            "jobs": paginated["data"],
+            "count": len(paginated["data"]),
+            "pagination": paginated["pagination"]
         }
         
     except Exception as e:

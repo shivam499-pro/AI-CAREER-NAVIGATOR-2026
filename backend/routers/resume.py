@@ -8,6 +8,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from supabase import create_client
 import os
+import uuid
 import fitz  # PyMuPDF
 from dotenv import load_dotenv
 
@@ -27,6 +28,40 @@ supabase = create_client(supabase_url, supabase_key)
 ALLOWED_TYPES = ["application/pdf"]
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
+# Supabase Storage bucket name for resumes
+RESUME_BUCKET = "resumes"
+
+
+def upload_to_supabase_storage(file_content: bytes, filename: str, user_id: str) -> str:
+    """
+    Upload file to Supabase Storage and return the public URL.
+    """
+    # Generate unique filename to avoid conflicts
+    ext = filename.split(".")[-1] if "." in filename else "pdf"
+    unique_filename = f"{user_id}/{uuid.uuid4()}.{ext}"
+    
+    try:
+        # Upload to Supabase Storage
+        supabase.storage.from_(RESUME_BUCKET).upload(
+            path=unique_filename,
+            file=file_content,
+            file_options={
+                "content-type": "application/pdf",
+                "upsert": "true"
+            }
+        )
+        
+        # Get public URL
+        public_url = supabase.storage.from_(RESUME_BUCKET).get_public_url(unique_filename)
+        return public_url
+        
+    except Exception as e:
+        print(f"Supabase Storage upload error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload file to storage: {str(e)}"
+        )
+
 
 @router.post("/upload")
 @limiter.limit("10/minute")
@@ -37,6 +72,7 @@ async def upload_resume(
 ):
     """
     Upload and extract text from a resume PDF.
+    Stores file in Supabase Storage and extracts text for analysis.
     """
     try:
         # Validate file type
@@ -71,10 +107,14 @@ async def upload_resume(
                 detail="Could not extract text from the PDF"
             )
         
-        # Save to Supabase profiles table
+        # Upload file to Supabase Storage
+        resume_url = upload_to_supabase_storage(content, file.filename, user_id)
+        
+        # Save to Supabase profiles table (both text and URL)
         profile_update = {
             "resume_text": text,
-            "resume_filename": file.filename
+            "resume_filename": file.filename,
+            "resume_url": resume_url
         }
         
         supabase.table("profiles").update(profile_update).eq("user_id", user_id).execute()
@@ -82,7 +122,8 @@ async def upload_resume(
         return {
             "success": True,
             "text_length": len(text),
-            "filename": file.filename
+            "filename": file.filename,
+            "resume_url": resume_url
         }
         
     except HTTPException:
@@ -110,9 +151,10 @@ def extract_text_from_pdf(pdf_content: bytes) -> str:
 async def get_resume_status(user_id: str):
     """
     Check if user has uploaded a resume.
+    Returns resume status including the URL if available.
     """
     try:
-        response = supabase.table("profiles").select("resume_filename, resume_text").eq("user_id", user_id).execute()
+        response = supabase.table("profiles").select("resume_filename, resume_text, resume_url").eq("user_id", user_id).execute()
         
         if not response.data:
             return {"has_resume": False}
@@ -122,7 +164,8 @@ async def get_resume_status(user_id: str):
         
         return {
             "has_resume": has_resume,
-            "filename": profile.get("resume_filename")
+            "filename": profile.get("resume_filename"),
+            "resume_url": profile.get("resume_url")
         }
         
     except Exception as e:

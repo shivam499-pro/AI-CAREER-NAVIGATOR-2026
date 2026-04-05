@@ -1,8 +1,77 @@
 from dotenv import load_dotenv
 import os
+import sys
 
 # Load environment variables FIRST — before any local imports
 load_dotenv()
+
+
+def validate_environment():
+    """
+    Validate that all required environment variables are present.
+    Exits with error code if any required variable is missing.
+    """
+    required_vars = {
+        # Supabase (required for all database operations)
+        "SUPABASE_URL": "Supabase project URL",
+        "SUPABASE_SERVICE_KEY": "Supabase service role key (backend only)",
+        
+        # Gemini AI (required for analysis and interview features)
+        "GEMINI_API_KEY": "Google Gemini API key for AI features",
+    }
+    
+    optional_vars = {
+        # Supabase
+        "SUPABASE_ANON_KEY": "Supabase anon key (frontend)",
+        
+        # External APIs
+        "GITHUB_TOKEN": "GitHub personal access token (for higher rate limits)",
+        "SERPAPI_KEY": "SerpAPI key for job search",
+        
+        # Email
+        "GMAIL_USER": "Gmail address for weekly reports",
+        "GMAIL_APP_PASSWORD": "Gmail app password for sending emails",
+        
+        # Server config
+        "CORS_ORIGINS": "Comma-separated list of allowed CORS origins",
+    }
+    
+    missing_required = []
+    
+    for var_name, description in required_vars.items():
+        value = os.getenv(var_name)
+        if not value or value.strip() == "":
+            missing_required.append(f"  - {var_name}: {description}")
+    
+    if missing_required:
+        print("\n" + "=" * 60)
+        print("ERROR: Missing required environment variables")
+        print("=" * 60)
+        print("\nThe following required variables are missing or empty:\n")
+        print("\n".join(missing_required))
+        print("\n" + "-" * 60)
+        print("To fix this, copy .env.example to .env and fill in the values.")
+        print("=" * 60 + "\n")
+        sys.exit(1)
+    
+    # Warn about missing optional but commonly needed vars
+    missing_optional = []
+    for var_name, description in optional_vars.items():
+        value = os.getenv(var_name)
+        if not value or value.strip() == "":
+            missing_optional.append(f"  - {var_name}: {description}")
+    
+    
+    if missing_optional:
+        print("\n[INFO] Optional environment variables not set:")
+        print("\n".join(missing_optional))
+        print("\n[INFO] Some features may not work without these.")
+    
+    print("\n[OK] Environment validation passed!")
+
+
+# Validate environment before starting the app
+validate_environment()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
