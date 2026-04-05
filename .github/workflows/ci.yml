@@ -38,6 +38,15 @@ jobs:
           cd backend
           source venv/bin/activate
           python -m pytest -v --tb=short
+        env:
+          SUPABASE_URL: https://test.supabase.co
+          SUPABASE_SERVICE_KEY: test-service-key
+          SUPABASE_ANON_KEY: test-anon-key
+          GEMINI_API_KEY: test-gemini-key
+          JWT_SECRET_KEY: test-jwt-secret-key-minimum-32-chars
+          GITHUB_TOKEN: test-github-token
+          SERPAPI_KEY: test-serpapi-key
+          CORS_ORIGINS: http://localhost:3000
 
   # Frontend build check
   frontend-build:
@@ -51,11 +60,10 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'pnpm'
+          node-version: '24'
       
       - name: Install pnpm
-        run: npm install -g pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
       
       - name: Install frontend dependencies
         run: |
@@ -79,11 +87,10 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'pnpm'
+          node-version: '24'
       
       - name: Install pnpm
-        run: npm install -g pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
       
       - name: Install dependencies
         run: |
