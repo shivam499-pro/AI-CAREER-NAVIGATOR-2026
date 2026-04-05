@@ -7,11 +7,13 @@ import { supabase } from '@/lib/supabase'
 import Navbar from '@/components/Navbar'
 import ProgressTracker from '@/components/ProgressTracker'
 import MatchFitScore from '@/components/MatchFitScore'
-import { Brain, LogOut, ChevronRight, Sparkles, Target, TrendingUp, ShieldCheck, Briefcase, Activity } from 'lucide-react'
+import { Brain, LogOut, ChevronRight, Sparkles, Target, TrendingUp, ShieldCheck, Briefcase, Activity, Mail, Loader2 } from 'lucide-react'
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<{ email: string } | null>(null)
+  const [user, setUser] = useState<{ email: string; id?: string } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [emailMessage, setEmailMessage] = useState('')
 
   const formatUsername = (email: string) => {
     // Extract first word before any dot or number and capitalize
@@ -31,7 +33,7 @@ export default function DashboardPage() {
           window.location.href = '/auth/login'
           return
         }
-        setUser({ email: user.email })
+        setUser({ email: user.email, id: user.id })
       } catch (err) {
         window.location.href = '/auth/login'
       } finally {
@@ -40,6 +42,33 @@ export default function DashboardPage() {
     }
     getUser()
   }, [])
+
+  const sendProgressReport = async () => {
+    if (!user?.id) return
+    setEmailStatus('loading')
+    setEmailMessage('')
+    
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/email-report/send-report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user.id })
+      })
+      
+      if (response.ok) {
+        setEmailStatus('success')
+        setEmailMessage('Progress report sent successfully!')
+      } else {
+        const data = await response.json().catch(() => ({}))
+        setEmailStatus('error')
+        setEmailMessage(data.detail || 'Failed to send progress report')
+      }
+    } catch (err) {
+      setEmailStatus('error')
+      setEmailMessage('Failed to send progress report')
+    }
+  }
 
   if (loading) {
     return (
@@ -120,19 +149,62 @@ export default function DashboardPage() {
                <motion.div key={i} variants={itemVariants}>
                  <Link href={action.href}>
                    <div className="bg-[#1E293B] group rounded-xl p-6 border border-slate-800 border-l-primary-violet border-l-4 hover:shadow-[0_0_20px_rgba(108,63,200,0.2)] hover:bg-[#243147] transition-all cursor-pointer h-full relative overflow-hidden">
-                     <div className="absolute top-0 right-0 w-32 h-32 bg-primary-violet/5 rounded-full blur-3xl -mr-16 -mt-16 group-hover:bg-primary-violet/10 transition-colors" />
-                     <div className="w-12 h-12 rounded-lg bg-primary-violet/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-all border border-primary-violet/20">
-                       <action.icon className="w-6 h-6 text-primary-violet" />
-                     </div>
-                     <div className="relative z-10">
-                        <h3 className="font-bold text-white text-base mb-1">{action.label}</h3>
-                        <p className="text-xs text-slate-400 leading-tight font-medium">{action.desc}</p>
-                     </div>
+                       <div className="absolute top-0 right-0 w-32 h-32 bg-primary-violet/5 rounded-full blur-3xl -mr-16 -mt-16 group-hover:bg-primary-violet/10 transition-colors" />
+                       <div className="w-12 h-12 rounded-lg bg-primary-violet/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-all border border-primary-violet/20">
+                         <action.icon className="w-6 h-6 text-primary-violet" />
+                       </div>
+                       <div className="relative z-10">
+                          <h3 className="font-bold text-white text-base mb-1">{action.label}</h3>
+                          <p className="text-xs text-slate-400 leading-tight font-medium">{action.desc}</p>
+                       </div>
                    </div>
                  </Link>
                </motion.div>
              ))}
            </div>
+        </motion.div>
+
+        {/* Email Report Section */}
+        <motion.div variants={itemVariants}>
+          <div className="bg-[#1E293B] rounded-xl p-6 border border-slate-800">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center border border-green-500/20">
+                <Mail className="w-5 h-5 text-green-400" />
+              </div>
+              <h3 className="font-bold text-white text-lg">Email Progress Report</h3>
+            </div>
+            <p className="text-sm text-slate-400 mb-4">Get your career progress sent to your inbox.</p>
+            
+            <button
+              onClick={sendProgressReport}
+              disabled={emailStatus === 'loading'}
+              className="bg-green-600 hover:bg-green-700 disabled:bg-green-800 text-white font-bold px-6 py-3 rounded-lg transition-all flex items-center gap-2"
+            >
+              {emailStatus === 'loading' ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Mail className="w-5 h-5" />
+                  Send Progress Report
+                </>
+              )}
+            </button>
+            
+            {emailStatus === 'success' && (
+              <div className="mt-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-sm font-medium">
+                ✓ {emailMessage}
+              </div>
+            )}
+            
+            {emailStatus === 'error' && (
+              <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm font-medium">
+                ✗ {emailMessage}
+              </div>
+            )}
+          </div>
         </motion.div>
       </main>
     </div>

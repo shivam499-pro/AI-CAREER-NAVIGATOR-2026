@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from supabase import create_client, Client
 import os
@@ -176,27 +176,52 @@ async def submit_challenge_result(request: SubmitChallengeRequest):
 
 
 @router.get("/leaderboard/{challenge_code}")
-async def get_leaderboard(challenge_code: str):
+async def get_leaderboard(
+    challenge_code: str,
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(10, ge=1, le=50, description="Items per page")
+):
     """
-    Get leaderboard for a challenge.
-    Returns: [{ user_email, score, completed_at }]
+    Get leaderboard for a challenge with pagination.
+    Returns paginated leaderboard with metadata.
     """
     try:
+        # First get total count
+        count_response = supabase.table("challenge_results").select(
+            "user_name, user_email, score, completed_at",
+            count=True
+        ).eq("challenge_code", challenge_code.upper()).execute()
+        
+        total = count_response.count or 0
+        total_pages = (total + limit - 1) // limit
+        
+        # Get paginated results
         response = supabase.table("challenge_results").select(
             "user_name, user_email, score, completed_at"
-        ).eq("challenge_code", challenge_code.upper()).order("score", desc=True).execute()
+        ).eq("challenge_code", challenge_code.upper()).order("score", desc=True).range(
+            (page - 1) * limit,
+            page * limit - 1
+        ).execute()
         
         leaderboard = []
         for i, row in enumerate(response.data):
             leaderboard.append({
-                "rank": i + 1,
+                "rank": (page - 1) * limit + i + 1,
                 "user_name": row.get("user_name", "Anonymous"),
                 "user_email": row.get("user_email", ""),
                 "score": row.get("score", 0),
                 "completed_at": row.get("completed_at", "")
             })
         
-        return leaderboard
+        return {
+            "leaderboard": leaderboard,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "total_pages": total_pages
+            }
+        }
     
     except Exception as e:
         print(f"Error fetching leaderboard: {e}")

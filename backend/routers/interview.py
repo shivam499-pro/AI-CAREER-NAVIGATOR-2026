@@ -2,7 +2,7 @@
 Interview Router
 Handles AI interview practice functionality
 """
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Query, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from pydantic import BaseModel
@@ -109,6 +109,17 @@ async def generate_questions(request: Request, body: GenerateQuestionsRequest):
     except HTTPException:
         raise
     except Exception as e:
+        error_str = str(e).lower()
+        # Check if it's a rate limit error
+        if "rate limit" in error_str or "429" in error_str:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "message": "The AI service is currently busy. Please wait a moment and try again.",
+                    "error_type": "rate_limit",
+                    "suggestion": "Wait 30-60 seconds before retrying your request."
+                }
+            )
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
@@ -157,20 +168,54 @@ async def save_session(body: SaveSessionRequest):
 
 
 @router.get("/history/{user_id}")
-async def get_interview_history(user_id: str):
+async def get_interview_history(
+    user_id: str,
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(10, ge=1, le=50, description="Items per page")
+):
     """
-    Get past interview sessions for a user.
+    Get past interview sessions for a user with pagination.
     """
     try:
-        response = supabase.table("interview_sessions").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        # Get total count
+        count_response = supabase.table("interview_sessions").select(
+            "career_path, total_score, created_at",
+            count=True
+        ).eq("user_id", user_id).execute()
+        
+        total = count_response.count or 0
+        total_pages = (total + limit - 1) // limit
+        
+        # Get paginated results
+        response = supabase.table("interview_sessions").select(
+            "career_path, total_score, created_at"
+        ).eq("user_id", user_id).order("created_at", desc=True).range(
+            (page - 1) * limit,
+            page * limit - 1
+        ).execute()
+        
+        sessions = response.data if response.data else []
+        # Reverse to show oldest to newest for chart
+        sessions = list(reversed(sessions))
         
         return {
-            "sessions": response.data,
-            "count": len(response.data) if response.data else 0
+            "sessions": sessions,
+            "count": len(sessions),
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "total_pages": total_pages
+            }
         }
         
     except Exception as e:
-        return {"sessions": [], "count": 0, "error": str(e)}
+        return {
+            "sessions": [],
+            "count": 0,
+            "error": str(e),
+            "pagination": {"page": page, "limit": limit, "total": 0, "total_pages": 0}
+        }
 
 
 @router.post("/question-hint")

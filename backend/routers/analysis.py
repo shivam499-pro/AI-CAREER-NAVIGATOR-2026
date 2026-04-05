@@ -110,7 +110,19 @@ async def start_analysis(
         combined_result = gemini_service.run_combined_analysis(
             github_data, leetcode_data, resume_text, user_profile
         )
+        
+        # Handle rate limit error specifically
         if not combined_result.get("success"):
+            error_type = combined_result.get("error_type")
+            if error_type == "rate_limit":
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "message": "The AI service is currently busy. Please wait a moment and try again.",
+                        "error_type": "rate_limit",
+                        "suggestion": "Wait 30-60 seconds before retrying your request."
+                    }
+                )
             raise HTTPException(status_code=500, detail=combined_result.get("error", "AI analysis failed"))
         
         data = combined_result.get("data", {})

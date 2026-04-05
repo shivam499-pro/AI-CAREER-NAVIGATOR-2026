@@ -1,0 +1,107 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Backend tests
+  backend-test:
+    name: Backend Tests (pytest)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Create virtual environment
+        run: |
+          cd backend
+          python -m venv venv
+          source venv/bin/activate
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          source venv/bin/activate
+          pip install -r requirements.txt
+      
+      - name: Run backend tests
+        run: |
+          cd backend
+          source venv/bin/activate
+          python -m pytest -v --tb=short
+        env:
+          SUPABASE_URL: https://test.supabase.co
+          SUPABASE_SERVICE_KEY: test-service-key
+          SUPABASE_ANON_KEY: test-anon-key
+          GEMINI_API_KEY: test-gemini-key
+          JWT_SECRET_KEY: test-jwt-secret-key-minimum-32-chars
+          GITHUB_TOKEN: test-github-token
+          SERPAPI_KEY: test-serpapi-key
+          CORS_ORIGINS: http://localhost:3000
+
+  # Frontend build check
+  frontend-build:
+    name: Frontend Build (Next.js)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+      
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          pnpm install
+      
+      - name: Run Next.js build
+        run: |
+          cd frontend
+          pnpm build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+
+  # Lint check (optional)
+  lint:
+    name: Lint Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+      
+      - name: Install dependencies
+        run: |
+          cd frontend
+          pnpm install
+      
+      - name: Run linter
+        run: |
+          cd frontend
+          npx next lint

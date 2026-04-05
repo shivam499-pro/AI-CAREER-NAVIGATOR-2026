@@ -2,7 +2,7 @@
 Badges Router
 Handles user achievement badges system
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from supabase import create_client
 import os
@@ -55,14 +55,32 @@ class CheckBadgeRequest(BaseModel):
 
 
 @router.get("/{user_id}")
-async def get_user_badges(user_id: str):
+async def get_user_badges(
+    user_id: str,
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(10, ge=1, le=50, description="Items per page")
+):
     """
-    Fetch user's earned badges from "user_badges" table
-    Returns: { earned: [...badges], all_badges: [...BADGES] }
+    Fetch user's earned badges from "user_badges" table with pagination.
+    Returns: { earned: [...badges], all_badges: [...BADGES], pagination: {...} }
     """
     try:
-        # Get user's earned badges
-        response = supabase.table("user_badges").select("*").eq("user_id", user_id).execute()
+        # Get total count of earned badges
+        count_response = supabase.table("user_badges").select(
+            "*",
+            count=True
+        ).eq("user_id", user_id).execute()
+        
+        total = count_response.count or 0
+        total_pages = (total + limit - 1) // limit
+        
+        # Get paginated earned badges
+        response = supabase.table("user_badges").select("*").eq(
+            "user_id", user_id
+        ).range(
+            (page - 1) * limit,
+            page * limit - 1
+        ).execute()
         
         earned_badges = []
         if response.data:
@@ -82,7 +100,13 @@ async def get_user_badges(user_id: str):
         
         return {
             "earned": earned_badges,
-            "all_badges": BADGES
+            "all_badges": BADGES,  # Static list, no pagination needed
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "total_pages": total_pages
+            }
         }
         
     except Exception as e:

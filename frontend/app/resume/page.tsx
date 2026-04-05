@@ -8,9 +8,21 @@ import { Button } from '@/components/ui/button'
 import Navbar from '@/components/Navbar'
 import { 
   Brain, Upload, FileText, Loader2, CheckCircle, 
-  AlertCircle, ArrowRight, X, Sparkles
+  AlertCircle, ArrowRight, X, Sparkles, Image, 
+  FilePlus2, Trash2, Award, BookOpen
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+
+// ─────────────────────────────────────────────
+// Types for multi-document upload
+// ─────────────────────────────────────────────
+interface ExtractedData {
+  certificates: { name: string; issuer: string; date: string; skills: string[] }[]
+  skills_extracted: string[]
+  grades: { subject: string; score: string }[]
+  achievements: string[]
+  summary: string
+}
 
 export default function ResumePage() {
   const router = useRouter()
@@ -22,6 +34,15 @@ export default function ResumePage() {
   const [uploadSuccess, setUploadSuccess] = useState(false)
   const [error, setError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // ─── Multi-doc state ───
+  const [docFiles, setDocFiles] = useState<File[]>([])
+  const [docUploading, setDocUploading] = useState(false)
+  const [docError, setDocError] = useState('')
+  const [docResult, setDocResult] = useState<ExtractedData | null>(null)
+  const [docFilesProcessed, setDocFilesProcessed] = useState(0)
+  const [docDragActive, setDocDragActive] = useState(false)
+  const docInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -120,6 +141,122 @@ export default function ResumePage() {
     }
   }
 
+  // ─────────────────────────────────────────────
+  // Multi-document handlers
+  // ─────────────────────────────────────────────
+  const ALLOWED_DOC_TYPES = [
+    'application/pdf',
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+  ]
+
+  const handleDocDrag = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDocDragActive(true)
+    } else if (e.type === 'dragleave') {
+      setDocDragActive(false)
+    }
+  }
+
+  const handleDocDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDocDragActive(false)
+    if (e.dataTransfer.files) {
+      addDocFiles(Array.from(e.dataTransfer.files))
+    }
+  }
+
+  const handleDocFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      addDocFiles(Array.from(e.target.files))
+    }
+  }
+
+  const addDocFiles = (incoming: File[]) => {
+    setDocError('')
+    const valid: File[] = []
+    for (const f of incoming) {
+      if (!ALLOWED_DOC_TYPES.includes(f.type)) {
+        setDocError(`Unsupported file: ${f.name}. Only PDF, JPG, JPEG, PNG allowed.`)
+        continue
+      }
+      if (f.size > 5 * 1024 * 1024) {
+        setDocError(`File "${f.name}" exceeds 5MB limit.`)
+        continue
+      }
+      valid.push(f)
+    }
+    setDocFiles(prev => {
+      const combined = [...prev, ...valid]
+      if (combined.length > 10) {
+        setDocError('Maximum 10 files allowed.')
+        return combined.slice(0, 10)
+      }
+      return combined
+    })
+  }
+
+  const removeDocFile = (index: number) => {
+    setDocFiles(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleDocUpload = async () => {
+    if (!docFiles.length || !user) return
+    setDocUploading(true)
+    setDocError('')
+    setDocResult(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('user_id', user.id)
+      for (const f of docFiles) {
+        formData.append('files', f)
+      }
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/documents/upload`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const errData = await response.json()
+        throw new Error(errData.detail || 'Document upload failed.')
+      }
+
+      const data = await response.json()
+      if (data.success) {
+        setDocResult(data.extracted)
+        setDocFilesProcessed(data.files_processed)
+      } else {
+        throw new Error('Document analysis failed.')
+      }
+    } catch (err: any) {
+      setDocError(err.message || 'Failed to process documents.')
+    } finally {
+      setDocUploading(false)
+    }
+  }
+
+  const getFileIcon = (file: File) => {
+    if (file.type === 'application/pdf') {
+      return <FileText className="w-5 h-5 text-red-400" />
+    }
+    return <Image className="w-5 h-5 text-blue-400" />
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  // ─────────────────────────────────────────────
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0F172A] flex items-center justify-center">
@@ -191,8 +328,11 @@ export default function ResumePage() {
     <div className="min-h-screen bg-[#0F172A] text-white selection:bg-purple-500/30">
       <Navbar />
       <main className="container mx-auto px-4 py-12">
-        <motion.div initial="hidden" animate="visible" variants={containerVariants} className="max-w-2xl mx-auto">
+        <motion.div initial="hidden" animate="visible" variants={containerVariants} className="max-w-2xl mx-auto space-y-8">
           
+          {/* ═══════════════════════════════════════════
+              SECTION 1: Existing Resume Upload (unchanged)
+              ═══════════════════════════════════════════ */}
           <motion.div variants={itemVariants} className="bg-[#1E293B] rounded-[2.5rem] p-8 md:p-12 border border-white/5 relative overflow-hidden shadow-2xl">
             <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-purple-500/10 to-transparent pointer-events-none" />
             
@@ -337,6 +477,329 @@ export default function ResumePage() {
               </Link>
             </div>
           </motion.div>
+
+          {/* ═══════════════════════════════════════════
+              SECTION 2: Multi-Document Upload (NEW)
+              ═══════════════════════════════════════════ */}
+          <motion.div
+            variants={itemVariants}
+            className="bg-[#1E293B] rounded-[2.5rem] p-8 md:p-12 border border-white/5 relative overflow-hidden shadow-2xl"
+          >
+            {/* Decorative gradient */}
+            <div className="absolute top-0 left-0 w-1/2 h-full bg-gradient-to-r from-cyan-500/5 to-transparent pointer-events-none" />
+            <div className="absolute bottom-0 right-0 w-1/3 h-1/2 bg-gradient-to-tl from-purple-500/5 to-transparent pointer-events-none" />
+
+            {/* Header */}
+            <div className="text-center mb-10 relative z-10">
+              <div className="w-16 h-16 bg-cyan-500/20 rounded-2xl border border-cyan-500/30 flex items-center justify-center mx-auto mb-6 shadow-[0_0_20px_rgba(6,182,212,0.3)]">
+                <FilePlus2 className="w-8 h-8 text-cyan-400" />
+              </div>
+              <h2 className="text-2xl font-black text-yellow-400 uppercase tracking-tighter mb-2 drop-shadow-[0_0_10px_rgba(250,204,21,0.2)]">
+                Upload Career Documents
+              </h2>
+              <p className="text-xs font-black text-slate-500 uppercase tracking-[0.15em]">
+                Optional — Certificates, Marksheets, Transcripts & More
+              </p>
+              <p className="text-[10px] text-slate-600 mt-2 max-w-md mx-auto leading-relaxed">
+                Upload multiple documents and our AI will extract certificates, skills, grades, and achievements to strengthen your career analysis.
+              </p>
+            </div>
+
+            {/* Drop zone */}
+            <div
+              className={`relative border-2 border-dashed rounded-[2rem] p-8 text-center transition-all duration-300 ${
+                docDragActive
+                  ? 'border-cyan-400 bg-cyan-500/10 scale-[1.02]'
+                  : 'border-cyan-500/20 bg-[#0F172A]/50 hover:border-cyan-400/50 hover:bg-[#0F172A]/80'
+              }`}
+              onDragEnter={handleDocDrag}
+              onDragLeave={handleDocDrag}
+              onDragOver={handleDocDrag}
+              onDrop={handleDocDrop}
+            >
+              <input
+                ref={docInputRef}
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                multiple
+                onChange={handleDocFileChange}
+                className="hidden"
+                id="doc-upload"
+              />
+
+              {docFiles.length === 0 ? (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="relative z-10"
+                >
+                  <div className="w-16 h-16 bg-cyan-500/15 rounded-full flex items-center justify-center mx-auto mb-5 relative">
+                    <div className="absolute inset-0 bg-cyan-500/10 blur-xl rounded-full" />
+                    <Upload className="w-8 h-8 text-cyan-400 relative z-10" />
+                  </div>
+                  <p className="font-black text-slate-300 text-sm uppercase tracking-widest mb-1">
+                    Drop Documents Here
+                  </p>
+                  <p className="text-[10px] font-bold text-slate-500 mb-6 uppercase tracking-[0.2em]">
+                    Or click to browse files
+                  </p>
+                  <label htmlFor="doc-upload">
+                    <div className="inline-flex items-center justify-center px-8 py-4 bg-[#1E293B] border border-white/10 hover:border-cyan-500/50 text-white rounded-2xl cursor-pointer font-black uppercase tracking-widest text-xs transition-all shadow-lg hover:shadow-cyan-500/20 active:scale-95">
+                      <FilePlus2 className="w-4 h-4 mr-2 text-cyan-400" />
+                      Select Documents
+                    </div>
+                  </label>
+                  <div className="mt-6 px-4 py-2 bg-white/5 rounded-full inline-block border border-white/5">
+                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+                      Max: 5MB each | 10 files | PDF, JPG, PNG
+                    </p>
+                  </div>
+                </motion.div>
+              ) : (
+                /* File list */
+                <div className="relative z-10 space-y-3">
+                  <AnimatePresence>
+                    {docFiles.map((file, idx) => (
+                      <motion.div
+                        key={`${file.name}-${idx}`}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                        transition={{ delay: idx * 0.05 }}
+                        className="flex items-center gap-3 px-4 py-3 bg-[#1E293B]/80 rounded-xl border border-white/5 hover:border-white/10 transition-colors group"
+                      >
+                        <div className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center bg-white/5">
+                          {getFileIcon(file)}
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <p className="text-xs font-bold text-white truncate">
+                            {file.name}
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-semibold">
+                            {formatFileSize(file.size)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => removeDocFile(idx)}
+                          className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                          title="Remove file"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+
+                  {/* Add more files */}
+                  {docFiles.length < 10 && (
+                    <label htmlFor="doc-upload">
+                      <div className="flex items-center justify-center gap-2 px-4 py-3 border border-dashed border-white/10 hover:border-cyan-500/40 rounded-xl cursor-pointer transition-all hover:bg-white/[0.02]">
+                        <FilePlus2 className="w-4 h-4 text-cyan-500/60" />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                          Add More Files ({docFiles.length}/10)
+                        </span>
+                      </div>
+                    </label>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Error display */}
+            <AnimatePresence>
+              {docError && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center gap-3"
+                >
+                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                  <p className="text-[10px] font-black text-red-400 uppercase tracking-widest">{docError}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Upload button */}
+            {docFiles.length > 0 && !docResult && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-8 flex justify-center"
+              >
+                <Button
+                  onClick={handleDocUpload}
+                  disabled={docUploading}
+                  className="w-full md:w-auto bg-gradient-to-r from-cyan-600 via-purple-600 to-purple-700 hover:scale-105 active:scale-95 text-white font-black uppercase tracking-widest h-14 px-10 rounded-2xl shadow-[0_10px_30px_-10px_rgba(6,182,212,0.4)] transition-all group"
+                >
+                  {docUploading ? (
+                    <span className="flex items-center gap-3">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span className="flex flex-col items-start">
+                        <span className="text-xs">AI is reading your documents...</span>
+                      </span>
+                    </span>
+                  ) : (
+                    <>
+                      <Sparkles className="w-5 h-5 mr-3" />
+                      Upload & Analyze Documents
+                      <ArrowRight className="ml-3 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                    </>
+                  )}
+                </Button>
+              </motion.div>
+            )}
+
+            {/* Loading state overlay */}
+            <AnimatePresence>
+              {docUploading && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="mt-6 p-6 bg-[#0F172A]/60 backdrop-blur border border-purple-500/20 rounded-2xl"
+                >
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="relative">
+                      <div className="w-16 h-16 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin" />
+                      <Brain className="w-7 h-7 text-purple-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-black text-white uppercase tracking-widest mb-1">
+                        AI is reading your documents...
+                      </p>
+                      <p className="text-[10px] text-slate-500 font-bold">
+                        Extracting certificates, skills, grades & achievements
+                      </p>
+                    </div>
+                    {/* Animated dots */}
+                    <div className="flex gap-1.5">
+                      {[0, 1, 2, 3, 4].map(i => (
+                        <motion.div
+                          key={i}
+                          className="w-2 h-2 rounded-full bg-purple-500"
+                          animate={{ opacity: [0.2, 1, 0.2], scale: [0.8, 1.2, 0.8] }}
+                          transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* ── Success results ── */}
+            <AnimatePresence>
+              {docResult && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-8 space-y-5"
+                >
+                  {/* Success banner */}
+                  <div className="p-5 bg-green-500/10 border border-green-500/30 rounded-2xl">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center">
+                        <CheckCircle className="w-5 h-5 text-green-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-green-400 uppercase tracking-widest">
+                          Analysis Complete
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-bold">
+                          {docFilesProcessed} document{docFilesProcessed !== 1 ? 's' : ''} processed successfully
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stats grid */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Certificates */}
+                    <div className="p-4 bg-[#0F172A]/60 rounded-2xl border border-white/5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Award className="w-4 h-4 text-yellow-400" />
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Certificates</span>
+                      </div>
+                      <p className="text-2xl font-black text-white">{docResult.certificates?.length || 0}</p>
+                      {docResult.certificates?.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {docResult.certificates.slice(0, 3).map((cert, i) => (
+                            <p key={i} className="text-[10px] text-slate-400 truncate">
+                              • {cert.name}
+                            </p>
+                          ))}
+                          {docResult.certificates.length > 3 && (
+                            <p className="text-[10px] text-slate-600">+{docResult.certificates.length - 3} more</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Skills */}
+                    <div className="p-4 bg-[#0F172A]/60 rounded-2xl border border-white/5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sparkles className="w-4 h-4 text-purple-400" />
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Skills Found</span>
+                      </div>
+                      <p className="text-2xl font-black text-white">{docResult.skills_extracted?.length || 0}</p>
+                      {docResult.skills_extracted?.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {docResult.skills_extracted.slice(0, 4).map((skill, i) => (
+                            <span key={i} className="text-[9px] font-bold px-2 py-0.5 bg-purple-500/15 text-purple-300 rounded-full border border-purple-500/20">
+                              {skill}
+                            </span>
+                          ))}
+                          {docResult.skills_extracted.length > 4 && (
+                            <span className="text-[9px] font-bold px-2 py-0.5 text-slate-500">
+                              +{docResult.skills_extracted.length - 4}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Grades */}
+                    <div className="p-4 bg-[#0F172A]/60 rounded-2xl border border-white/5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <BookOpen className="w-4 h-4 text-cyan-400" />
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Grades</span>
+                      </div>
+                      <p className="text-2xl font-black text-white">{docResult.grades?.length || 0}</p>
+                    </div>
+
+                    {/* Achievements */}
+                    <div className="p-4 bg-[#0F172A]/60 rounded-2xl border border-white/5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CheckCircle className="w-4 h-4 text-green-400" />
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Achievements</span>
+                      </div>
+                      <p className="text-2xl font-black text-white">{docResult.achievements?.length || 0}</p>
+                    </div>
+                  </div>
+
+                  {/* Summary */}
+                  {docResult.summary && (
+                    <div className="p-4 bg-[#0F172A]/60 rounded-2xl border border-white/5">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">AI Summary</p>
+                      <p className="text-sm text-slate-300 leading-relaxed">{docResult.summary}</p>
+                    </div>
+                  )}
+
+                  {/* Upload more button */}
+                  <div className="flex justify-center pt-2">
+                    <button
+                      onClick={() => { setDocResult(null); setDocFiles([]); setDocFilesProcessed(0); }}
+                      className="text-[10px] font-black text-slate-500 hover:text-cyan-400 uppercase tracking-[0.2em] cursor-pointer transition-colors px-4 py-2 rounded-lg hover:bg-white/5"
+                    >
+                      Upload More Documents
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+
         </motion.div>
       </main>
 
