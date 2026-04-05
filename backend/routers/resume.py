@@ -26,10 +26,47 @@ supabase = create_client(supabase_url, supabase_key)
 
 # Allowed file types
 ALLOWED_TYPES = ["application/pdf"]
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 # Supabase Storage bucket name for resumes
 RESUME_BUCKET = "resumes"
+
+# PDF magic bytes (first 4 bytes of a valid PDF)
+PDF_MAGIC_BYTES = b"%PDF"
+
+
+def validate_pdf_file(content: bytes, filename: str) -> None:
+    """
+    Validate that the file is a real PDF using magic bytes.
+    Raises HTTPException with clear error message if validation fails.
+    """
+    # Validate file extension
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file format. Only .pdf files are allowed."
+        )
+    
+    # Validate MIME type
+    content_type = filename.lower().split(".")[-1]
+    if content_type != "pdf":
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Only PDF files are allowed."
+        )
+    
+    # Validate magic bytes (PDF files start with %PDF)
+    if len(content) < 4:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file. File is too small to be a valid PDF."
+        )
+    
+    if not content.startswith(PDF_MAGIC_BYTES):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file content. The file is not a valid PDF document."
+        )
 
 
 def upload_to_supabase_storage(file_content: bytes, filename: str, user_id: str) -> str:
@@ -75,22 +112,25 @@ async def upload_resume(
     Stores file in Supabase Storage and extracts text for analysis.
     """
     try:
-        # Validate file type
+        # Validate file extension and MIME type
         if file.content_type not in ALLOWED_TYPES:
             raise HTTPException(
                 status_code=400,
-                detail="Only PDF files are allowed"
+                detail="Invalid file type. Only PDF files are allowed."
             )
         
         # Read file content
         content = await file.read()
         
-        # Validate file size
+        # Validate file size (10MB limit)
         if len(content) > MAX_FILE_SIZE:
             raise HTTPException(
                 status_code=400,
-                detail="File size must be less than 5MB"
+                detail="File size must be less than 10MB"
             )
+        
+        # Validate PDF magic bytes (must be a real PDF)
+        validate_pdf_file(content, file.filename)
         
         # Extract text from PDF using PyMuPDF
         try:

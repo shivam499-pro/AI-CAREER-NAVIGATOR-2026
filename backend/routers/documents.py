@@ -42,8 +42,54 @@ ALLOWED_TYPES = {
     "image/jpg": "jpg",
     "image/png": "png",
 }
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB per file
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB per file
 MAX_FILES = 10
+
+# PDF magic bytes (first 4 bytes of a valid PDF)
+PDF_MAGIC_BYTES = b"%PDF"
+
+
+def validate_file_content(content: bytes, filename: str, content_type: str) -> None:
+    """
+    Validate file content using magic bytes.
+    Raises HTTPException with clear error message if validation fails.
+    """
+    filename_lower = filename.lower()
+    
+    # Validate file extension matches content type for PDF
+    if content_type == "application/pdf":
+        if not filename_lower.endswith(".pdf"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file format. File '{filename}' must have .pdf extension."
+            )
+        
+        # Validate magic bytes for PDF
+        if len(content) < 4:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file '{filename}'. File is too small to be a valid PDF."
+            )
+        
+        if not content.startswith(PDF_MAGIC_BYTES):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file content. File '{filename}' is not a valid PDF document."
+            )
+    
+    # Validate image files have image magic bytes
+    elif content_type in ["image/jpeg", "image/jpg", "image/png"]:
+        expected_magic = {
+            "image/jpeg": b"\xff\xd8\xff",
+            "image/jpg": b"\xff\xd8\xff",
+            "image/png": b"\x89PNG"
+        }
+        magic = expected_magic.get(content_type)
+        if magic and not content.startswith(magic):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file content. File '{filename}' is not a valid {content_type.split('/')[1].upper()} image."
+            )
 
 EXTRACTION_PROMPT = """You are analyzing career documents for a student/professional.
 Extract ALL relevant information from these documents including:
@@ -137,8 +183,11 @@ async def upload_documents(
             if len(content) > MAX_FILE_SIZE:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"File '{f.filename}' exceeds 5MB limit."
+                    detail=f"File '{f.filename}' exceeds 10MB limit."
                 )
+            
+            # Validate actual file content using magic bytes
+            validate_file_content(content, f.filename, f.content_type)
 
             file_names.append(f.filename)
             file_contents.append((f.filename, content, f.content_type))

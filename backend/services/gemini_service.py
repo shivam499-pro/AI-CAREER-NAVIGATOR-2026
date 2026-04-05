@@ -43,6 +43,85 @@ RETRIABLE_ERRORS = [
     "network"
 ]
 
+# Input sanitization configuration
+MAX_INPUT_LENGTH = 5000  # Maximum characters for user input
+
+# Prompt injection patterns to detect and neutralize
+INJECTION_PATTERNS = [
+    r"ignore\s+(all\s+)?previous\s+instructions?",
+    r"ignore\s+(all\s+)?rules?",
+    r"forget\s+everything",
+    r"forget\s+(all\s+)?(your\s+)?(instructions?|rules?|system)?",
+    r"you\s+are\s+now\s+",
+    r"you\s+are\s+a\s+",
+    r"act\s+as\s+",
+    r"pretend\s+(to\s+be|you\s+are)",
+    r"system\s+prompt",
+    r"#system",
+    r"override\s+(your\s+)?",
+    r"jailbreak",
+    r" DAN ",  # "Do Anything Now"
+    r"developer\s+mode",
+    r"\{\{.*\}\}",  # Template injection
+    r"<\?xml",  # XML injection
+    r"<!\[CDATA\[",
+    r"```system",
+    r"#@\s*system",
+    r"\\[SYSTEM\\]",
+    r"\[INST\]",
+    r"<<SYS>>",
+    r"<</SYS>>",
+    r"###\s*Instructions",
+    r"Role:",
+    r"New\s+instruction",
+    r"Additional\s+instruction",
+    r"disregard\s+(your\s+)?",
+    r"disobey\s+",
+    r"without\s+your\s+(filters?|rules?|guidelines?)",
+    r"bypass\s+",
+]
+
+# Compile patterns for efficiency
+_COMPILED_INJECTION_PATTERNS = [re.compile(p, re.IGNORECASE) for p in INJECTION_PATTERNS]
+
+
+def sanitize_user_input(text: str, max_length: int = MAX_INPUT_LENGTH) -> str:
+    """
+    Sanitize user-provided text before inserting into Gemini prompts.
+    
+    This function:
+    - Trims text to maximum length
+    - Detects and neutralizes prompt injection patterns
+    - Logs warnings when potential injection is detected
+    
+    Returns the sanitized text.
+    """
+    if not text:
+        return text
+    
+    original_length = len(text)
+    
+    # Step 1: Check for potential injection patterns
+    injection_detected = False
+    for pattern in _COMPILED_INJECTION_PATTERNS:
+        if pattern.search(text):
+            injection_detected = True
+            # Replace the matched pattern with a safe placeholder
+            text = pattern.sub("[FILTERED]", text)
+    
+    if injection_detected:
+        import logging
+        logging.warning(
+            f"Potential prompt injection detected and neutralized. "
+            f"Original length: {original_length}, Sanitized length: {len(text)}"
+        )
+    
+    # Step 2: Trim to max length
+    if len(text) > max_length:
+        text = text[:max_length]
+    
+    return text.strip()
+
 MOCK_RESPONSE = {
     "analysis": {
         "experience_level": "Intermediate",
@@ -251,46 +330,68 @@ def run_combined_analysis(
     if MOCK_MODE:
         return {"success": True, "data": MOCK_RESPONSE}
 
+    # Sanitize all user-provided inputs
+    # Create sanitized copy of user_profile
+    sanitized_profile = {}
+    if user_profile:
+        for key, value in user_profile.items():
+            if isinstance(value, str):
+                sanitized_profile[key] = sanitize_user_input(value)
+            elif isinstance(value, list):
+                sanitized_profile[key] = [
+                    sanitize_user_input(str(item)) if isinstance(item, str) else item
+                    for item in value
+                ]
+            else:
+                sanitized_profile[key] = value
+    
+    # Sanitize resume text (limit to 3000 chars after sanitization)
+    sanitized_resume = sanitize_user_input(resume_text, max_length=3000)
+    
+    # Sanitize GitHub and LeetCode data (convert to string and sanitize)
+    sanitized_github = sanitize_user_input(json.dumps(github_data or {}), max_length=MAX_INPUT_LENGTH)
+    sanitized_leetcode = sanitize_user_input(json.dumps(leetcode_data or {}), max_length=MAX_INPUT_LENGTH)
+
     prompt = f"""
 You are an expert AI Career Mentor. Analyze this candidate 
 profile completely and provide personalized career guidance.
 
 ===== USER PROFILE =====
-User Type: {user_profile.get('user_type', 'Not specified')}
+User Type: {sanitized_profile.get('user_type', 'Not specified')}
 
 --- Education ---
-College: {user_profile.get('college_name', 'Not specified')}
-Degree: {user_profile.get('degree', 'Not specified')}
-Branch: {user_profile.get('branch', 'Not specified')}
-Year of Study: {user_profile.get('year_of_study', 'Not specified')}
-Graduation Year: {user_profile.get('graduation_year', 'Not specified')}
-CGPA: {user_profile.get('cgpa', 'Not specified')}
+College: {sanitized_profile.get('college_name', 'Not specified')}
+Degree: {sanitized_profile.get('degree', 'Not specified')}
+Branch: {sanitized_profile.get('branch', 'Not specified')}
+Year of Study: {sanitized_profile.get('year_of_study', 'Not specified')}
+Graduation Year: {sanitized_profile.get('graduation_year', 'Not specified')}
+CGPA: {sanitized_profile.get('cgpa', 'Not specified')}
 
 --- Professional ---
-Current Job Title: {user_profile.get('current_job_title', 'Not specified')}
-Current Company: {user_profile.get('current_company', 'Not specified')}
-Years of Experience: {user_profile.get('years_of_experience', 'Not specified')}
-Current Tech Stack: {user_profile.get('current_tech_stack', [])}
-Reason for Switching: {user_profile.get('reason_for_switching', 'Not specified')}
+Current Job Title: {sanitized_profile.get('current_job_title', 'Not specified')}
+Current Company: {sanitized_profile.get('current_company', 'Not specified')}
+Years of Experience: {sanitized_profile.get('years_of_experience', 'Not specified')}
+Current Tech Stack: {sanitized_profile.get('current_tech_stack', [])}
+Reason for Switching: {sanitized_profile.get('reason_for_switching', 'Not specified')}
 
 --- Career Goals ---
-Career Goal: {user_profile.get('career_goal', 'Not specified')}
-Target Companies: {user_profile.get('target_companies', [])}
-Preferred Work Type: {user_profile.get('preferred_work_type', 'Not specified')}
-Job Search Timeline: {user_profile.get('job_search_timeline', 'Not specified')}
+Career Goal: {sanitized_profile.get('career_goal', 'Not specified')}
+Target Companies: {sanitized_profile.get('target_companies', [])}
+Preferred Work Type: {sanitized_profile.get('preferred_work_type', 'Not specified')}
+Job Search Timeline: {sanitized_profile.get('job_search_timeline', 'Not specified')}
 
 --- Skills ---
-Extra Skills: {user_profile.get('extra_skills', [])}
-Certificates: {user_profile.get('certificates', [])}
+Extra Skills: {sanitized_profile.get('extra_skills', [])}
+Certificates: {sanitized_profile.get('certificates', [])}
 
 ===== GITHUB DATA =====
-{json.dumps(github_data or {}, indent=2)}
+{sanitized_github}
 
 ===== LEETCODE DATA =====
-{json.dumps(leetcode_data or {}, indent=2)}
+{sanitized_leetcode}
 
 ===== RESUME =====
-{resume_text[:3000] if resume_text else "Not provided"}
+{sanitized_resume[:3000] if sanitized_resume else "Not provided"}
 
 ===== YOUR TASK =====
 Analyze ALL the above data including the user profile, 
@@ -579,6 +680,25 @@ def generate_interview_questions(
     else:
         personality_instruction = ""
 
+    # Sanitize user-provided inputs
+    sanitized_career_path = sanitize_user_input(career_path)
+    sanitized_difficulty = sanitize_user_input(difficulty)
+    sanitized_resume = sanitize_user_input(resume_text, max_length=500)
+    
+    # Sanitize profile dict values
+    sanitized_profile = {}
+    if profile:
+        for key, value in profile.items():
+            if isinstance(value, str):
+                sanitized_profile[key] = sanitize_user_input(value)
+            elif isinstance(value, list):
+                sanitized_profile[key] = [
+                    sanitize_user_input(str(item)) if isinstance(item, str) else item
+                    for item in value
+                ]
+            else:
+                sanitized_profile[key] = value
+
     prompt = f"""You are an expert technical interviewer.
 {personality_instruction}
 
@@ -586,10 +706,10 @@ Session ID: {random.randint(10000, 99999)}
 Timestamp: {int(time.time())}
 Generate FRESH unique questions - do not repeat previous sessions.
 
-Generate exactly 5 interview questions for: {career_path}
-Difficulty: {difficulty}
-Profile: {json.dumps(profile)}
-{f"Resume highlights: {resume_text[:500]}" if resume_text else ""}
+Generate exactly 5 interview questions for: {sanitized_career_path}
+Difficulty: {sanitized_difficulty}
+Profile: {json.dumps(sanitized_profile)}
+{f"Resume highlights: {sanitized_resume[:500]}" if sanitized_resume else ""}
 
 Return ONLY a JSON array with exactly 5 objects.
 Each object must have:
@@ -644,10 +764,15 @@ def evaluate_interview_answer(
     answer: str,
     career_path: str
 ) -> dict:
-    prompt = f"""You are an expert technical interviewer for {career_path}.
+    # Sanitize all user inputs
+    sanitized_question = sanitize_user_input(question)
+    sanitized_answer = sanitize_user_input(answer, max_length=2000)
+    sanitized_career_path = sanitize_user_input(career_path)
+    
+    prompt = f"""You are an expert technical interviewer for {sanitized_career_path}.
 
-Question: {question}
-Candidate Answer: {answer}
+Question: {sanitized_question}
+Candidate Answer: {sanitized_answer}
 
 Return ONLY valid JSON with exactly these fields:
 "score" (number 1-10),

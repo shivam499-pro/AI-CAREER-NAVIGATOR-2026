@@ -372,3 +372,248 @@ COMMENT ON TABLE weekly_results IS 'Weekly challenge submissions';
 -- for the user_id foreign key references.
 -- 
 -- =============================================================================
+
+
+-- =============================================================================
+-- ROW LEVEL SECURITY (RLS) POLICIES
+-- Enable RLS on all user data tables and add policies
+-- =============================================================================
+
+-- =============================================================================
+-- PROFILES TABLE RLS
+-- =============================================================================
+
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own profile
+CREATE POLICY "profiles_select_own" ON profiles
+FOR SELECT USING (auth.uid() = user_id);
+
+-- Users can insert their own profile
+CREATE POLICY "profiles_insert_own" ON profiles
+FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can update their own profile
+CREATE POLICY "profiles_update_own" ON profiles
+FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can delete their own profile
+CREATE POLICY "profiles_delete_own" ON profiles
+FOR DELETE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+
+-- =============================================================================
+-- ANALYSES TABLE RLS
+-- =============================================================================
+
+ALTER TABLE analyses ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own analysis
+CREATE POLICY "analyses_select_own" ON analyses
+FOR SELECT USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can insert their own analysis
+CREATE POLICY "analyses_insert_own" ON analyses
+FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.role() = 'service_role');
+
+
+-- Users can update their own analysis
+CREATE POLICY "analyses_update_own" ON analyses
+FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can delete their own analysis
+CREATE POLICY "analyses_delete_own" ON analyses
+FOR DELETE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+
+-- =============================================================================
+-- INTERVIEW_SESSIONS TABLE RLS
+-- =============================================================================
+
+ALTER TABLE interview_sessions ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own sessions
+CREATE POLICY "interview_sessions_select_own" ON interview_sessions
+FOR SELECT USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can insert their own sessions
+CREATE POLICY "interview_sessions_insert_own" ON interview_sessions
+FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can update their own sessions
+CREATE POLICY "interview_sessions_update_own" ON interview_sessions
+FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+
+-- Users can delete their own sessions
+CREATE POLICY "interview_sessions_delete_own" ON interview_sessions
+FOR DELETE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+
+-- =============================================================================
+-- USER_STREAKS TABLE RLS
+-- =============================================================================
+
+ALTER TABLE user_streaks ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own streak
+CREATE POLICY "user_streaks_select_own" ON user_streaks
+FOR SELECT USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can insert their own streak
+CREATE POLICY "user_streaks_insert_own" ON user_streaks
+FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can update their own streak
+CREATE POLICY "user_streaks_update_own" ON user_streaks
+FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can delete their own streak
+CREATE POLICY "user_streaks_delete_own" ON user_streaks
+FOR DELETE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+
+-- =============================================================================
+-- USER_RANKS TABLE RLS
+-- =============================================================================
+
+ALTER TABLE user_ranks ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own rank
+CREATE POLICY "user_ranks_select_own" ON user_ranks
+FOR SELECT USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can insert their own rank
+CREATE POLICY "user_ranks_insert_own" ON user_ranks
+FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can update their own rank
+CREATE POLICY "user_ranks_update_own" ON user_ranks
+FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can delete their own rank
+CREATE POLICY "user_ranks_delete_own" ON user_ranks
+FOR DELETE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+
+-- =============================================================================
+-- USER_BADGES TABLE RLS
+-- =============================================================================
+
+ALTER TABLE user_badges ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own badges
+CREATE POLICY "user_badges_select_own" ON user_badges
+FOR SELECT USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can insert their own badges
+CREATE POLICY "user_badges_insert_own" ON user_badges
+FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can update their own badges
+CREATE POLICY "user_badges_update_own" ON user_badges
+FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can delete their own badges
+CREATE POLICY "user_badges_delete_own" ON user_badges
+FOR DELETE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+
+-- =============================================================================
+-- CHALLENGES TABLE RLS
+-- =============================================================================
+
+ALTER TABLE challenges ENABLE ROW LEVEL SECURITY;
+
+-- All authenticated users can view challenges (public content)
+CREATE POLICY "challenges_select_all" ON challenges
+FOR SELECT TO authenticated USING (true);
+
+-- Only challenge creator can insert
+CREATE POLICY "challenges_insert_own" ON challenges
+FOR INSERT WITH CHECK (auth.uid() = creator_id OR auth.role() = 'service_role');
+
+-- Only challenge creator can update
+CREATE POLICY "challenges_update_own" ON challenges
+FOR UPDATE USING (auth.uid() = creator_id OR auth.role() = 'service_role');
+
+-- Only challenge creator can delete
+CREATE POLICY "challenges_delete_own" ON challenges
+FOR DELETE USING (auth.uid() = creator_id OR auth.role() = 'service_role');
+
+
+-- =============================================================================
+-- CHALLENGE_RESULTS TABLE RLS
+-- =============================================================================
+
+ALTER TABLE challenge_results ENABLE ROW LEVEL SECURITY;
+
+-- All authenticated users can view all challenge results (leaderboard)
+CREATE POLICY "challenge_results_select_all" ON challenge_results
+FOR SELECT TO authenticated USING (true);
+
+-- Users can insert their own results
+CREATE POLICY "challenge_results_insert_own" ON challenge_results
+FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can update their own results
+CREATE POLICY "challenge_results_update_own" ON challenge_results
+FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can delete their own results
+CREATE POLICY "challenge_results_delete_own" ON challenge_results
+FOR DELETE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+
+-- =============================================================================
+-- WEEKLY_CHALLENGES TABLE RLS
+-- =============================================================================
+
+ALTER TABLE weekly_challenges ENABLE ROW LEVEL SECURITY;
+
+-- All authenticated users can view weekly challenges (public content)
+CREATE POLICY "weekly_challenges_select_all" ON weekly_challenges
+FOR SELECT TO authenticated USING (true);
+
+-- Only service role can insert/update/delete weekly challenges
+CREATE POLICY "weekly_challenges_service_role" ON weekly_challenges
+FOR ALL USING (auth.role() = 'service_role');
+
+
+-- =============================================================================
+-- WEEKLY_RESULTS TABLE RLS
+-- =============================================================================
+
+ALTER TABLE weekly_results ENABLE ROW LEVEL SECURITY;
+
+-- All authenticated users can view all weekly results (leaderboard)
+CREATE POLICY "weekly_results_select_all" ON weekly_results
+FOR SELECT TO authenticated USING (true);
+
+-- Users can insert their own weekly results
+CREATE POLICY "weekly_results_insert_own" ON weekly_results
+FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can update their own weekly results
+CREATE POLICY "weekly_results_update_own" ON weekly_results
+FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can delete their own weekly results
+CREATE POLICY "weekly_results_delete_own" ON weekly_results
+FOR DELETE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+
+-- =============================================================================
+-- VERIFICATION QUERY
+-- Run this to verify RLS is enabled on all tables
+-- =============================================================================
+-- 
+-- SELECT 
+--     schemaname,
+--     tablename,
+--     rowsecurity
+-- FROM pg_tables 
+-- WHERE schemaname = 'public' 
+-- ORDER BY tablename;
+-- 
+-- =============================================================================
