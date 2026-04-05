@@ -3,12 +3,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import Navbar from '@/components/Navbar'
 import { 
   Brain, Loader2, ChevronRight, CheckCircle, XCircle,
-  Lightbulb, ArrowRight, Copy, RefreshCw, MessageSquare, Mic, MicOff, Volume2
+  Lightbulb, ArrowRight, Copy, RefreshCw, MessageSquare, Mic, MicOff, Volume2,
+  Zap, Trophy, Target, Sparkles, Clock, AlertTriangle, Play, Square, MoreHorizontal
 } from 'lucide-react'
 
 interface Question {
@@ -147,10 +149,11 @@ export default function InterviewPage() {
   useEffect(() => {
     return () => {
       if (timerInterval) clearInterval(timerInterval)
+      if (questionTimer) clearInterval(questionTimer)
     }
-  }, [timerInterval])
+  }, [timerInterval, questionTimer])
 
-  // Initialize speech recognition on component mount
+  // Initialize speech recognition
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (SpeechRecognition) {
@@ -161,14 +164,12 @@ export default function InterviewPage() {
       
       recognitionInstance.onresult = (event: any) => {
         let finalTranscript = ''
-        
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript
           if (event.results[i].isFinal) {
             finalTranscript += transcript + ' '
           }
         }
-        
         if (finalTranscript) {
           setAnswer(prev => prev + finalTranscript.trim())
           setVoiceStatus('done')
@@ -187,14 +188,12 @@ export default function InterviewPage() {
           setVoiceStatus('idle')
         }
       }
-      
       setRecognition(recognitionInstance)
     }
   }, [])
 
   const loadUserData = async (userId: string) => {
     try {
-      // Get user's analysis for career paths
       const { data: analysisData } = await supabase
         .from('analyses')
         .select('career_paths')
@@ -207,7 +206,6 @@ export default function InterviewPage() {
         if (paths.length > 0) setCareerPath(paths[0])
       }
       
-      // Get past sessions count
       const { count } = await supabase
         .from('interview_sessions')
         .select('*', { count: 'exact', head: true })
@@ -223,7 +221,6 @@ export default function InterviewPage() {
 
   const startInterview = async () => {
     if (!user) return
-    
     setLoading(true)
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -237,23 +234,17 @@ export default function InterviewPage() {
           personality
         })
       })
-      
       const data = await response.json()
-      
       if (data.questions && data.questions.length > 0) {
         setQuestions(data.questions)
         setCurrentQuestion(0)
         setAnswers([])
         setAnswer('')
         setScreen('interview')
-        
-        // Start timer
         const interval = setInterval(() => {
           setElapsedTime(prev => prev + 1)
         }, 1000)
         setTimerInterval(interval)
-      } else {
-        alert('Failed to generate questions. Please try again.')
       }
     } catch (err) {
       console.error('Error generating questions:', err)
@@ -262,24 +253,13 @@ export default function InterviewPage() {
     }
   }
 
-  const submitAnswer = async () => {
-    if (!user) return
-    
-    // Clear question timer if running
+  const handleTimeUp = async () => {
     if (questionTimer) {
       clearInterval(questionTimer)
       setQuestionTimer(null)
     }
-    
-    if (!answer.trim()) {
-      // In simulation mode, submit even if empty when time is up
-      if (simMode) {
-        await handleTimeUp()
-        return
-      }
-      return
-    }
-    
+    setShowTimeUpMsg(true)
+    if (!user) return
     setSubmitting(true)
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -293,24 +273,73 @@ export default function InterviewPage() {
           user_id: user.id
         })
       })
-      
       const feedback = await response.json()
-      
       const newAnswer: Answer = {
         question: questions[currentQuestion].question,
         answer,
         feedback
       }
-
       const updatedAnswers = [...answers, newAnswer]
       setAnswers(updatedAnswers)
-      
-      // Move to next or finish
+      setVoiceStatus('idle')
+      setUsedVoiceInput(false)
+      setCommScore(null)
+      setTimeout(() => {
+        setShowTimeUpMsg(false)
+        if (currentQuestion < questions.length - 1) {
+          setCurrentQuestion(prev => prev + 1)
+          setAnswer('')
+          setShowHint(false)
+          setQuestionTimeLeft(120)
+        } else {
+          finishInterview(updatedAnswers)
+        }
+      }, 1500)
+    } catch (err) {
+      console.error('Error submitting answer:', err)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const submitAnswer = async () => {
+    if (!user) return
+    if (questionTimer) {
+      clearInterval(questionTimer)
+      setQuestionTimer(null)
+    }
+    if (!answer.trim()) {
+      if (simMode) {
+        await handleTimeUp()
+        return
+      }
+      return
+    }
+    setSubmitting(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/interview/evaluate-answer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: questions[currentQuestion].question,
+          answer,
+          career_path: careerPath,
+          user_id: user.id
+        })
+      })
+      const feedback = await response.json()
+      const newAnswer: Answer = {
+        question: questions[currentQuestion].question,
+        answer,
+        feedback
+      }
+      const updatedAnswers = [...answers, newAnswer]
+      setAnswers(updatedAnswers)
       if (currentQuestion < questions.length - 1) {
         setCurrentQuestion(prev => prev + 1)
         setAnswer('')
         setShowHint(false)
-        // Reset voice-related states for next question
         setVoiceStatus('idle')
         setUsedVoiceInput(false)
         setCommScore(null)
@@ -326,20 +355,13 @@ export default function InterviewPage() {
 
   const finishInterview = async (finalAnswers?: Answer[]) => {
     if (!user) return
-
     const answersToUse = finalAnswers || answers
-    
-    // Stop timer
     if (timerInterval) {
       clearInterval(timerInterval)
       setTimerInterval(null)
     }
-    
-    // Calculate total score
     const total = answersToUse.reduce((sum, a) => sum + (a.feedback?.score || 0), 0)
     setTotalScore(total)
-    
-    // Save session
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
       await fetch(`${apiUrl}/api/interview/save-session`, {
@@ -354,120 +376,39 @@ export default function InterviewPage() {
           total_score: total
         })
       })
-      
-      // Update streak after successful session save
-      try {
-        const streakResponse = await fetch(`${apiUrl}/api/streaks/update`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: user.id })
+      const streakResponse = await fetch(`${apiUrl}/api/streaks/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user.id })
+      })
+      if (streakResponse.ok) {
+        const sData = await streakResponse.json()
+        setStreakData({
+          current_streak: sData.current_streak,
+          longest_streak: sData.longest_streak,
+          last_practice_date: sData.last_practice_date,
+          total_sessions: sData.total_sessions
         })
-        if (streakResponse.ok) {
-          const streakData = await streakResponse.json()
-          setStreakData({
-            current_streak: streakData.current_streak,
-            longest_streak: streakData.longest_streak,
-            last_practice_date: streakData.last_practice_date,
-            total_sessions: streakData.total_sessions
-          })
-          setStreakMessage(streakData.message)
-        }
-      } catch (streakErr) {
-        console.error('Error updating streak:', streakErr)
+        setStreakMessage(sData.message)
       }
-      
-      // Update rank after successful session save
-      try {
-        const rankResponse = await fetch(`${apiUrl}/api/ranks/update`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: user.id, score: total })
+      const rankResponse = await fetch(`${apiUrl}/api/ranks/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user.id, score: total })
+      })
+      if (rankResponse.ok) {
+        const rData = await rankResponse.json()
+        setRankData({
+          xp: rData.xp,
+          level: rData.level,
+          rank_title: rData.rank_title,
+          next_level_xp: rData.next_level_xp,
+          progress_percent: ((rData.xp % 100) / 100) * 100
         })
-        if (rankResponse.ok) {
-          const rankData = await rankResponse.json()
-          setRankData({
-            xp: rankData.xp,
-            level: rankData.level,
-            rank_title: rankData.rank_title,
-            next_level_xp: rankData.next_level_xp,
-            progress_percent: ((rankData.xp % 100) / 100) * 100
-          })
-          setXpEarned(rankData.xp_earned)
-          setLeveledUp(rankData.leveled_up)
-        }
-      } catch (rankErr) {
-        console.error('Error updating rank:', rankErr)
+        setXpEarned(rData.xp_earned)
+        setLeveledUp(rData.leveled_up)
       }
-      
-      // Check for badges - session_complete always
-      try {
-        const sessionBadgeResponse = await fetch(`${apiUrl}/api/badges/check`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: user.id, event: 'session_complete' })
-        })
-        if (sessionBadgeResponse.ok) {
-          const sessionBadgeData = await sessionBadgeResponse.json()
-          if (sessionBadgeData.newly_earned && sessionBadgeData.newly_earned.length > 0) {
-            const badge = sessionBadgeData.newly_earned[0]
-            setNewBadge({ emoji: badge.emoji, name: badge.name })
-            setTimeout(() => setNewBadge(null), 3000)
-          }
-        }
-      } catch (badgeErr) {
-        console.error('Error checking session badges:', badgeErr)
-      }
-      
-      // Check for hard_mode badge if difficulty was hard
-      if (difficulty === 'hard') {
-        try {
-          await fetch(`${apiUrl}/api/badges/check`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: user.id, event: 'hard_mode' })
-          })
-        } catch (hardBadgeErr) {
-          console.error('Error checking hard mode badge:', hardBadgeErr)
-        }
-      }
-      
-      // Check for simulation badge if simMode was true
-      if (simMode) {
-        try {
-          await fetch(`${apiUrl}/api/badges/check`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: user.id, event: 'simulation' })
-          })
-        } catch (simBadgeErr) {
-          console.error('Error checking simulation badge:', simBadgeErr)
-        }
-      }
-      
-      // Check for perfect_score badge if total === 50
-      if (total === 50) {
-        try {
-          const perfectBadgeResponse = await fetch(`${apiUrl}/api/badges/check`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: user.id, event: 'perfect_score' })
-          })
-          if (perfectBadgeResponse.ok) {
-            const perfectBadgeData = await perfectBadgeResponse.json()
-            if (perfectBadgeData.newly_earned && perfectBadgeData.newly_earned.length > 0) {
-              const badge = perfectBadgeData.newly_earned[0]
-              setNewBadge({ emoji: badge.emoji, name: badge.name })
-              setTimeout(() => setNewBadge(null), 3000)
-            }
-          }
-        } catch (perfectBadgeErr) {
-          console.error('Error checking perfect score badge:', perfectBadgeErr)
-        }
-      }
-    } catch (err) {
-      console.error('Error saving session:', err)
-    }
-    
+    } catch (err) { console.error(err) }
     setScreen('results')
   }
 
@@ -478,280 +419,88 @@ export default function InterviewPage() {
   }
 
   const getScoreColor = (score: number) => {
-    if (score >= 8) return 'text-green-600 bg-green-100'
-    if (score >= 5) return 'text-yellow-600 bg-yellow-100'
-    return 'text-red-600 bg-red-100'
+    if (score >= 8) return 'text-green-400 bg-green-500/10 border-green-500/20'
+    if (score >= 5) return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20'
+    return 'text-red-400 bg-red-500/10 border-red-500/20'
   }
 
   const getPerformanceRating = (score: number) => {
     const percentage = (score / 50) * 100
-    if (percentage >= 80) return 'Excellent'
-    if (percentage >= 60) return 'Good'
-    return 'Needs Work'
+    if (percentage >= 80) return 'Elite Performance'
+    if (percentage >= 60) return 'Strong Contender'
+    return 'Growth Phase'
   }
 
-  // Create challenge function
-  const createChallenge = async () => {
-    console.log('Challenge button clicked')
-    if (!user || !questions.length) return
-    
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const questionTexts = questions.map(q => q.question)
-      const response = await fetch(`${apiUrl}/api/challenges/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: user.id,
-          career_path: careerPath,
-          questions: questionTexts
-        })
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setChallengeURL(data.share_url)
-        setChallengeModal(true)
-        setCopied(false)
+  const calculateCommScore = useCallback((text: string) => {
+    const fillerWords = ['um', 'uh', 'like', 'you know', 'basically', 'literally', 'actually', 'sort of', 'kind of', 'right', 'okay', 'so yeah']
+    const textLower = text.toLowerCase()
+    const fillers: Record<string, number> = {}
+    let fillerCount = 0
+    fillerWords.forEach(word => {
+      const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp('\\b' + escaped + '\\b', 'gi')
+      const matches = textLower.match(regex)
+      if (matches) {
+        fillers[word] = matches.length
+        fillerCount += matches.length
       }
-    } catch (err) {
-      console.error('Error creating challenge:', err)
-    }
-  }
-
-  // Copy challenge link to clipboard
-  const copyChallengeLink = async () => {
-    if (!challengeURL) return
-    
-    await navigator.clipboard.writeText(challengeURL)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const copyResults = async () => {
-    const text = `🎯 My AI Interview Coach Results
-
-Career: ${careerPath}
-Overall Score: ${totalScore}/50 (${getPerformanceRating(totalScore)})
-
-${answers.map((a, i) => `Q${i+1}: ${a.question.substring(0, 50)}... - Score: ${a.feedback?.score || 0}/10`).join('\n')}
-
-Powered by AI Career Navigator`
-    
-    // Try Web Share API first
-    if (navigator.share) {
-      try {
-        await navigator.share({ 
-          title: 'My Interview Results', 
-          text: text, 
-          url: window.location.href 
-        })
-        return
-      } catch (err) {
-        // User cancelled or error, fall through to clipboard
-      }
-    }
-    
-    // Fallback to clipboard
-    await navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  // Handle time up in simulation mode
-  const handleTimeUp = async () => {
-    if (questionTimer) {
-      clearInterval(questionTimer)
-      setQuestionTimer(null)
-    }
-    
-    setShowTimeUpMsg(true)
-    
-    // Auto submit the answer (may be empty)
-    if (!user) return
-    
-    setSubmitting(true)
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiUrl}/api/interview/evaluate-answer`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: questions[currentQuestion].question,
-          answer,
-          career_path: careerPath,
-          user_id: user.id
-        })
-      })
-      
-      const feedback = await response.json()
-      
-      const newAnswer: Answer = {
-        question: questions[currentQuestion].question,
-        answer,
-        feedback
-      }
-
-      const updatedAnswers = [...answers, newAnswer]
-      setAnswers(updatedAnswers)
-      
-      // Reset voice-related states for next question
-      setVoiceStatus('idle')
-      setUsedVoiceInput(false)
-      setCommScore(null)
-      
-      // Move to next or finish after delay
-      setTimeout(() => {
-        setShowTimeUpMsg(false)
-        if (currentQuestion < questions.length - 1) {
-          setCurrentQuestion(prev => prev + 1)
-          setAnswer('')
-          setShowHint(false)
-          setQuestionTimeLeft(120) // Reset timer for next question
-        } else {
-          finishInterview(updatedAnswers)
-        }
-      }, 1500)
-    } catch (err) {
-      console.error('Error submitting answer:', err)
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  // Start question timer when entering a new question in simulation mode
-  useEffect(() => {
-    if (simMode && screen === 'interview' && questions.length > 0) {
-      setQuestionTimeLeft(120)
-      
-      // Clear any existing timer
-      if (questionTimer) {
-        clearInterval(questionTimer)
-      }
-      
-      // Start countdown
-      const timer = setInterval(() => {
-        setQuestionTimeLeft(prev => {
-          if (prev <= 1) {
-            // Time's up - trigger auto submit
-            handleTimeUp()
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-      
-      setQuestionTimer(timer)
-      
-      return () => {
-        if (timer) clearInterval(timer)
-      }
-    }
-  }, [currentQuestion, simMode, screen, questions.length])
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (questionTimer) {
-        clearInterval(questionTimer)
-      }
-    }
+    })
+    let score = 100
+    score -= Math.min(fillerCount * 5, 40)
+    const wordCount = text.split(/\s+/).filter(w => w.length > 0).length
+    if (wordCount < 20) score -= 20
+    if (wordCount > 200) score -= 10
+    score = Math.max(0, score)
+    let tip = score >= 80 ? 'Masterful delivery! 🎙️' : 'Try pausing briefly instead of using fillers.'
+    return { score, fillers, tip }
   }, [])
 
-  // Toggle voice recording
   const toggleVoice = async () => {
-    if (!recognition) {
-      alert('Voice input not supported in this browser. Please type your answer.')
-      return
-    }
-    
+    if (!recognition) return
     if (isRecording) {
-      // Stop voice recognition
       recognition.stop()
       setIsRecording(false)
       setVoiceStatus('done')
-      
-      // Stop audio recording if active
-      if (mediaRecorder && mediaRecorder.state === 'recording') {
-        mediaRecorder.stop()
-      }
+      if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop()
     } else {
-      setAnswer('') // Clear previous answer for new recording
-      setAudioURL(null) // Clear previous audio
-      setAudioChunks([]) // Reset audio chunks
-      
-      // Start audio recording if supported
+      setAnswer('')
+      setAudioURL(null)
+      setAudioChunks([])
       if (audioSupported) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
           const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
           const chunks: Blob[] = []
-          
-          recorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
-              chunks.push(event.data)
-            }
-          }
-          
+          recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data) }
           recorder.onstop = () => {
             if (chunks.length > 0) {
               const blob = new Blob(chunks, { type: 'audio/webm' })
-              const url = URL.createObjectURL(blob)
-              setAudioURL(url)
+              setAudioURL(URL.createObjectURL(blob))
               setAudioChunks(chunks)
             }
-            // Stop all tracks in the stream
             stream.getTracks().forEach(track => track.stop())
           }
-          
           recorder.start()
           setMediaRecorder(recorder)
-        } catch (err) {
-          // Silently fail - playback button will be hidden
-          console.log('Audio recording not available')
-        }
+        } catch (err) { console.log(err) }
       }
-      
-      try {
-        recognition.start()
-        setIsRecording(true)
-        setVoiceStatus('listening')
-      } catch (e) {
-        console.error('Error starting recognition:', e)
-      }
+      recognition.start()
+      setIsRecording(true)
+      setVoiceStatus('listening')
     }
   }
 
-  // Check for SpeechSynthesis support and initialize
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !window.speechSynthesis) {
-      setSpeechSupported(false)
-    }
-    // Check for MediaRecorder support
-    if (typeof window !== 'undefined' && !window.MediaRecorder) {
-      setAudioSupported(false)
-    }
-  }, [])
-
-  // Speak the current question
   const speakQuestion = () => {
     if (!speechSupported || !questions[currentQuestion]) return
-    
-    // Stop any current speech
     window.speechSynthesis.cancel()
-    
     const utterance = new SpeechSynthesisUtterance(questions[currentQuestion].question)
     utterance.lang = 'en-US'
-    utterance.rate = 0.9
-    
+    utterance.rate = 0.95
     utterance.onstart = () => setIsSpeaking(true)
     utterance.onend = () => setIsSpeaking(false)
-    utterance.onerror = () => setIsSpeaking(false)
-    
     window.speechSynthesis.speak(utterance)
   }
 
-  // Fetch AI coaching hint for current question
   const fetchCoachingHint = async () => {
     setHintLoading(true)
     try {
@@ -759,808 +508,547 @@ Powered by AI Career Navigator`
       const response = await fetch(`${apiUrl}/api/interview/question-hint`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: questions[currentQuestion].question,
-          career_path: careerPath
-        })
-      })
-      
-      const data = await response.json()
-      setCoachingHint(data)
-    } catch (err) {
-      console.error('Error fetching coaching hint:', err)
-    } finally {
-      setHintLoading(false)
-    }
-  }
-
-  // Calculate communication score from voice input
-  const calculateCommScore = useCallback((text: string) => {
-    const fillerWords = ['um', 'uh', 'like', 'you know', 'basically', 'literally', 'actually', 'sort of', 'kind of', 'right', 'okay', 'so yeah']
-    const textLower = text.toLowerCase()
-    
-    // Count filler words
-    const fillers: Record<string, number> = {}
-    let fillerCount = 0
-    
-    fillerWords.forEach(word => {
-      const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      const regex = new RegExp('\\b' + escaped + '\\b', 'gi')
-      const matches = textLower.match(regex)
-      if (matches && matches.length > 0) {
-        fillers[word] = matches.length
-        fillerCount += matches.length
-      }
-    })
-    const fetchCoachingHint = async () => {
-    setHintLoading(true)
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiUrl}/api/interview/question-hint`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: questions[currentQuestion].question,
-          career_path: careerPath
-        })
+        body: JSON.stringify({ question: questions[currentQuestion].question, career_path: careerPath })
       })
       const data = await response.json()
       setCoachingHint(data)
-    } catch (err) {
-      console.error('Error fetching coaching hint:', err)
-    } finally {
-      setHintLoading(false)
-    }
-  }    
-    // Calculate score
-    let score = 100
-    score -= Math.min(fillerCount * 5, 40) // -5 per filler, max -40
-    
-    const wordCount = text.split(/\s+/).filter(w => w.length > 0).length
-    if (wordCount < 20) score -= 20 // Too short
-    if (wordCount > 200) score -= 10 // Too long
-    
-    score = Math.max(0, score)
-    
-    // Generate tip
-    let tip = ''
-    if (fillerCount > 3) {
-      tip = 'Try pausing instead of using filler words'
-    } else if (wordCount < 20) {
-      tip = 'Try to elaborate more on your answer'
-    } else if (wordCount > 200) {
-      tip = 'Try to be more concise with your answers'
-    } else if (score >= 80) {
-      tip = 'Great communication! Keep it up 🎉'
-    } else {
-      tip = 'Keep practicing to improve your communication skills'
-    }
-    
-    return { score, fillers, tip }
-  }, [])
-
-  // Playback control functions
-  const playAudio = () => {
-    if (!audioURL) return
-    
-    const audio = new Audio(audioURL)
-    audio.onended = () => setIsPlaying(false)
-    audio.onerror = () => setIsPlaying(false)
-    audio.play()
-    setIsPlaying(true)
+    } catch (err) { console.error(err) }
+    finally { setHintLoading(false) }
   }
 
-  const stopAudio = () => {
-    const audioElements = document.querySelectorAll('audio')
-    audioElements.forEach(audio => {
-      audio.pause()
-      audio.currentTime = 0
-    })
-    setIsPlaying(false)
-  }
-
-  const togglePlayback = () => {
-    if (isPlaying) {
-      stopAudio()
-    } else {
-      playAudio()
-    }
-  }
-
-  // Cleanup audio when question changes
+  // Simulation Timer Logic
   useEffect(() => {
-    if (audioURL) {
-      URL.revokeObjectURL(audioURL)
-      setAudioURL(null)
+    if (simMode && screen === 'interview' && questions.length > 0) {
+      setQuestionTimeLeft(120)
+      if (questionTimer) clearInterval(questionTimer)
+      const timer = setInterval(() => {
+        setQuestionTimeLeft(prev => {
+          if (prev <= 1) {
+            handleTimeUp()
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+      setQuestionTimer(timer)
+      return () => clearInterval(timer)
     }
-    setIsPlaying(false)
-    setAudioChunks([])
-  }, [currentQuestion])
+  }, [currentQuestion, simMode, screen, questions.length])
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (audioURL) {
-        URL.revokeObjectURL(audioURL)
-      }
-    }
-  }, [audioURL])
-
-  // Update communication score when voiceStatus changes to done
+  // Communication score update
   useEffect(() => {
     if (voiceStatus === 'done' && answer.trim()) {
       setUsedVoiceInput(true)
-      const scoreResult = calculateCommScore(answer)
-      setCommScore(scoreResult)
+      setCommScore(calculateCommScore(answer))
     }
-  }, [voiceStatus, answer, calculateCommScore])
+  }, [voiceStatus, calculateCommScore])
 
-  // When question changes, auto-speak and fetch coaching hint
+  // Auto-speak question
   useEffect(() => {
     if (screen === 'interview' && questions.length > 0) {
-      // Reset coaching hint state
       setCoachingHint(null)
       setShowCoachingHint(false)
-      
-      // Auto-speak the question after a short delay
-      if (speechSupported) {
-        setTimeout(() => {
-          speakQuestion()
-        }, 500)
-      }
+      if (speechSupported) setTimeout(speakQuestion, 500)
     }
   }, [currentQuestion, screen, questions.length, speechSupported])
 
+  const copyResults = () => {
+    const text = `I just finished an AI Interview for ${careerPath} and scored ${totalScore}/50! Check out AI Career Navigator!`
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const createChallenge = () => {
+    const url = `${window.location.origin}/interview?challenge=${user?.id}&score=${totalScore}`
+    setChallengeURL(url)
+    setChallengeModal(true)
+  }
+
+  const copyChallengeLink = () => {
+    navigator.clipboard.writeText(challengeURL)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const togglePlayback = () => {
+    if (!audioURL) return
+    if (isPlaying) {
+      setIsPlaying(false)
+    } else {
+      const audio = new Audio(audioURL)
+      audio.onended = () => setIsPlaying(false)
+      audio.play()
+      setIsPlaying(true)
+    }
+  }
+
   if (loading && screen === 'setup') {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-[#0F172A] flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
+          <Loader2 className="w-12 h-12 animate-spin text-primary-violet mx-auto mb-4" />
+          <p className="text-slate-400 font-medium tracking-wide">Initializing Coach...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[#0F172A] text-white">
       <Navbar />
       
-      {/* Streak Badge - Always visible at top */}
+      {/* Header Badges */}
       {(streakData || rankData) && (
-        <div className="flex items-center justify-center gap-4 py-2 px-4 bg-gradient-to-r from-gray-900 to-gray-800 text-white">
-          {/* Streak Badge */}
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="sticky top-[64px] z-40 flex items-center justify-center gap-6 py-3 px-4 bg-[#1E293B]/80 backdrop-blur-md border-b border-white/5"
+        >
           {streakData && (
-            <div className={`text-sm font-medium ${
-              streakData.current_streak >= 30 ? 'animate-pulse' : 
-              streakData.current_streak >= 7 ? 'shadow-lg' : ''
-            }`}>
-              {streakData.current_streak >= 30 ? '🏆 ' : streakData.current_streak > 0 ? '🔥 ' : 'Start '}
-              {streakData.current_streak > 0 ? `${streakData.current_streak} day streak` : 'streak today! 🔥'}
+            <div className="flex items-center gap-2 group">
+              <div className={`p-2 rounded-full ${streakData.current_streak > 0 ? 'bg-orange-500/20 shadow-[0_0_15px_rgba(249,115,22,0.3)]' : 'bg-slate-700/50'}`}>
+                <Zap className={`w-5 h-5 ${streakData.current_streak > 0 ? 'text-orange-400' : 'text-slate-400'}`} />
+              </div>
+              <div className="text-sm font-black uppercase tracking-widest text-slate-300">
+                {streakData.current_streak} Day <span className="text-orange-400">Streak</span>
+              </div>
             </div>
           )}
-          
-          {/* Rank Badge */}
           {rankData && (
-            <div className="text-sm border-l border-gray-600 pl-4">
-              <span className="font-semibold">{rankData.rank_title} — Level {rankData.level}</span>
-              <div className="text-xs text-gray-400 mt-1">
-                {rankData.xp} / {rankData.next_level_xp} XP to next level
+            <div className="flex items-center gap-4 border-l border-white/10 pl-6">
+              <div className="text-sm font-black uppercase tracking-widest">
+                <span className="text-primary-violet">{rankData.rank_title}</span>
+                <span className="text-slate-500 ml-2">Lvl {rankData.level}</span>
               </div>
-              <div className="w-24 h-1.5 bg-gray-700 rounded-full mt-1">
-                <div 
-                  className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"
-                  style={{ width: `${rankData.progress_percent}%` }}
+              <div className="w-32 h-2 bg-slate-800 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${rankData.progress_percent}%` }}
+                  className="h-full bg-gradient-to-r from-primary-violet to-purple-400"
                 />
               </div>
             </div>
           )}
-        </div>
+        </motion.div>
       )}
-      
-      <main className="container mx-auto px-4 py-8">
-        {/* STATE 1: SETUP SCREEN */}
-        {screen === 'setup' && (
-          <div className="max-w-2xl mx-auto text-center">
-            <div className="mb-8">
-              <h1 className="text-4xl font-bold text-[#1E3A5F] mb-2">AI Interview Coach</h1>
-              <p className="text-muted-foreground text-lg">
-                Practice with personalized questions based on your profile
-              </p>
-            </div>
 
-            {pastSessions > 0 && (
-              <div className="mb-6 p-4 bg-[#6C3FC8]/10 rounded-lg">
-                <p className="text-[#6C3FC8] font-medium">
-                  You have completed {pastSessions} interview session{pastSessions > 1 ? 's' : ''} before
-                </p>
-              </div>
-            )}
-
-            <div className="bg-card rounded-xl border p-6 text-left">
-              <div className="mb-6">
-                <label className="block text-sm font-medium mb-2">Career Path</label>
-                <select
-                  value={careerPath}
-                  onChange={(e) => setCareerPath(e.target.value)}
-                  aria-label="Select career path"
-                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-[#6C3FC8] outline-none"
-                >
-                  {careerPaths.length > 0 ? (
-                    careerPaths.map((path, i) => (
-                      <option key={i} value={path}>{path}</option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="Full Stack Developer">Full Stack Developer</option>
-                      <option value="Data Scientist">Data Scientist</option>
-                      <option value="DevOps Engineer">DevOps Engineer</option>
-                      <option value="Product Manager">Product Manager</option>
-                    </>
-                  )}
-                </select>
+      <main className="container mx-auto px-4 py-12 max-w-5xl">
+        <AnimatePresence mode="wait">
+          {/* SETUP SCREEN */}
+          {screen === 'setup' && (
+            <motion.div 
+               key="setup"
+               initial={{ opacity: 0, scale: 0.95 }}
+               animate={{ opacity: 1, scale: 1 }}
+               exit={{ opacity: 0, scale: 1.05 }}
+               className="max-w-2xl mx-auto"
+            >
+              <div className="text-center mb-12">
+                <h1 className="text-5xl font-black text-white mb-4 tracking-tighter leading-tight">
+                  Premium AI <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-violet to-purple-400">Coach</span>
+                </h1>
+                <p className="text-slate-400 text-lg font-medium">Practice with personalized intelligence based on your verified maturity.</p>
               </div>
 
-              <div className="mb-6">
-                <label className="block text-sm font-medium mb-2">Difficulty</label>
-                <div className="flex gap-2">
-                  {['easy', 'medium', 'hard'].map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => setDifficulty(d)}
-                      className={`flex-1 py-2 px-4 rounded-lg font-medium capitalize transition-colors ${
-                        difficulty === d 
-                          ? 'bg-[#6C3FC8] text-white' 
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      {d}
-                    </button>
-                  ))}
+              <div className="bg-[#1E293B] rounded-3xl p-8 border border-white/5 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-5">
+                   <Brain className="w-48 h-48" />
                 </div>
-              </div>
-
-              {/* Personality Selector */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium mb-2">Choose Your Interviewer</label>
-                <div className="grid grid-cols-3 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setPersonality('friendly')}
-                    className={`p-4 rounded-lg border-2 transition-colors ${
-                      personality === 'friendly'
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="text-2xl mb-1">😊</div>
-                    <div className="text-sm font-medium">Friendly</div>
-                    <div className="text-xs text-muted-foreground mt-1">Warm & encouraging</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPersonality('strict')}
-                    className={`p-4 rounded-lg border-2 transition-colors ${
-                      personality === 'strict'
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="text-2xl mb-1">😐</div>
-                    <div className="text-sm font-medium">Strict</div>
-                    <div className="text-xs text-muted-foreground mt-1">Direct & challenging</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPersonality('google')}
-                    className={`p-4 rounded-lg border-2 transition-colors ${
-                      personality === 'google'
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="text-2xl mb-1">😈</div>
-                    <div className="text-sm font-medium">Google-style</div>
-                    <div className="text-xs text-muted-foreground mt-1">Pressure & depth</div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Mode Selection */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium mb-2">Interview Mode</label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSimMode(false)}
-                    className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
-                      !simMode 
-                        ? 'bg-[#6C3FC8] text-white' 
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    🎯 Practice Mode
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSimMode(true)}
-                    className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
-                      simMode 
-                        ? 'bg-[#FF6B35] text-white' 
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    ⚡ Simulation Mode
-                  </button>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  {simMode 
-                    ? '⚡ Real interview feel — 2 min per question, no hints, auto-submit'
-                    : '🎯 Relaxed practice — no timer, hints available'}
-                </p>
-              </div>
-
-              <Button 
-                onClick={startInterview}
-                disabled={loading}
-                className="w-full bg-[#1E3A5F] hover:bg-[#1E3A5F]/90 py-3 text-lg"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Generating Questions...
-                  </>
-                ) : (
-                  <>
-                    Start Interview
-                    <ArrowRight className="w-5 h-5 ml-2" />
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* STATE 2: INTERVIEW SCREEN */}
-        {screen === 'interview' && questions.length > 0 && (
-          <div className="max-w-3xl mx-auto">
-            {/* Progress */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-muted-foreground">
-                  Question {currentQuestion + 1} of {questions.length}
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  ⏱️ {formatTime(elapsedTime)}
-                </span>
-              </div>
-              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-[#1E3A5F] to-[#6C3FC8] transition-all"
-                  style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
-                                  
-                />                
-              </div>
-            </div>
-
-            {/* Simulation Mode Banner */}
-            {simMode && (
-              <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg text-center text-orange-700 font-medium">
-                ⚡ Simulation Mode — Answer like a real interview
-              </div>
-            )}
-
-            {/* Personality Badge */}
-            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-center">
-              <span className="text-blue-700 dark:text-blue-300 font-medium">
-                {personality === 'friendly' && '😊 Friendly Interviewer'}
-                {personality === 'strict' && '😐 Strict Interviewer'}
-                {personality === 'google' && '😈 Google-style Interviewer'}
-              </span>
-            </div>
-
-            {/* Simulation Mode Timer */}
-            {simMode && (
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">⏱ Time Remaining:</span>
-                  <span className={`text-lg font-bold ${
-                    questionTimeLeft > 60 ? 'text-green-600' :
-                    questionTimeLeft > 30 ? 'text-yellow-600' :
-                    'text-red-600 animate-pulse'
-                  }`}>
-                    {Math.floor(questionTimeLeft / 60)}:{String(questionTimeLeft % 60).padStart(2, '0')}
-                  </span>
-                </div>
-                <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full transition-all ${
-                      questionTimeLeft > 60 ? 'bg-green-500' :
-                      questionTimeLeft > 30 ? 'bg-yellow-500' :
-                      'bg-red-500 animate-pulse'
-                    }`}
-                    style={{ width: `${(questionTimeLeft / 120) * 100}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Time's up message */}
-            {showTimeUpMsg && (
-              <div className="mb-4 p-4 bg-red-100 border border-red-300 rounded-lg text-center text-red-700 animate-pulse">
-                ⏰ Time's up! Moving to next question...
-              </div>
-            )}
-
-            {/* Question Card */}
-            <div className="bg-card rounded-xl border p-6 mb-6">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="px-3 py-1 bg-[#1E3A5F]/10 text-[#1E3A5F] rounded-full text-sm font-medium">
-                  {(questions[currentQuestion]?.type || 'technical').replace('_', ' ').toUpperCase()}
-                </span>
-                <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm capitalize">
-                  {questions[currentQuestion]?.difficulty || 'medium'}
-                </span>
-                {speechSupported && (
-                  <button
-                    type="button"
-                    onClick={speakQuestion}
-                    className={`ml-2 p-2 rounded-full transition-colors ${
-                      isSpeaking 
-                        ? 'bg-[#6C3FC8]/20 text-[#6C3FC8] animate-pulse' 
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                    title={isSpeaking ? 'Speaking...' : 'Read question aloud'}
-                  >
-                    <Volume2 className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-              
-              <h2 className="text-xl font-semibold text-foreground mb-4">
-                {questions[currentQuestion]?.question || 'Loading question...'}
-              </h2>
-
-              {showHint && (
-                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-4">
-                  <div className="flex items-center gap-2 text-yellow-800">
-                    <Lightbulb className="w-4 h-4" />
-                    <span className="font-medium">Hint:</span>
-                  </div>
-                  <p className="text-yellow-700 mt-1">{questions[currentQuestion]?.hint || 'No hint available'}</p>
-                </div>
-              )}
-
-              {/* AI Coaching Hint Card - Only in Practice Mode */}
-              {!simMode && (
-                <>
-                  {!showCoachingHint ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCoachingHint(true)
-                    fetchCoachingHint()
-                  }}
-                  className="w-full p-3 mb-4 bg-[#6C3FC8]/10 border border-[#6C3FC8]/30 rounded-lg text-[#6C3FC8] font-medium hover:bg-[#6C3FC8]/20 transition-colors flex items-center justify-center gap-2"
-                >
-                  <Lightbulb className="w-4 h-4" />
-                  💡 Get AI Coaching Hint
-                </button>
-              ) : hintLoading ? (
-                <div className="p-4 mb-4 bg-gray-50 border rounded-lg flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-[#6C3FC8]" />
-                  <span className="text-gray-600">Loading coaching hint...</span>
-                </div>
-              ) : coachingHint ? (
-                <div className="p-4 mb-4 bg-gradient-to-r from-[#6C3FC8]/10 to-[#1E3A5F]/10 border border-[#6C3FC8]/30 rounded-lg">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Lightbulb className="w-5 h-5 text-[#6C3FC8]" />
-                    <span className="font-semibold text-[#6C3FC8]">AI Coaching Hint</span>
-                  </div>
-                  
+                
+                <div className="relative space-y-8">
+                  {/* Career Selector */}
                   <div className="space-y-3">
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">💡 What the interviewer is looking for:</p>
-                      <p className="text-sm text-gray-600 mt-1">{coachingHint.looking_for}</p>
-                    </div>
-                    
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">📝 How to structure your answer:</p>
-                      <p className="text-sm text-gray-600 mt-1">{coachingHint.structure}</p>
-                    </div>
-                    
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">✅ Example direction:</p>
-                      <p className="text-sm text-gray-600 mt-1 italic">{coachingHint.example}</p>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-                </>
-              )}
-
-              <div className="flex items-center gap-2">
-                <textarea
-                  value={answer}
-                  onChange={(e) => setAnswer(e.target.value)}
-                  placeholder="Type your answer here..."
-                  className="w-full p-4 border rounded-lg focus:ring-2 focus:ring-[#6C3FC8] outline-none min-h-[200px]"
-                />
-              </div>
-
-              {/* Communication Score Card (Voice Input) - Only in Practice Mode */}
-              {!simMode && usedVoiceInput && commScore && (
-                <div className="mt-3 p-4 rounded-xl border border-gray-700 bg-gray-800/50">
-                  {/* Score Header */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-sm font-semibold text-gray-300">
-                      🎙️ Voice Communication Score
-                    </span>
-                    <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${
-                      commScore.score >= 80 ? 'bg-green-500/20 text-green-400' :
-                      commScore.score >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
-                      commScore.score >= 40 ? 'bg-orange-500/20 text-orange-400' :
-                      'bg-red-500/20 text-red-400'
-                    }`}>
-                      {commScore.score}/100 — {
-                        commScore.score >= 80 ? '🟢 Excellent' :
-                        commScore.score >= 60 ? '🟡 Good' :
-                        commScore.score >= 40 ? '🟠 Needs Improvement' :
-                        '🔴 Needs Practice'
-                      }
-                    </span>
+                    <label className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                       <Target className="w-4 h-4" /> Target Career Path
+                    </label>
+                    <select
+                      value={careerPath}
+                      onChange={(e) => setCareerPath(e.target.value)}
+                      className="w-full bg-[#0F172A] p-4 text-white rounded-xl border border-white/10 focus:ring-2 focus:ring-primary-violet outline-none appearance-none font-bold"
+                    >
+                      {careerPaths.map((path, i) => (
+                        <option key={i} value={path}>{path}</option>
+                      ))}
+                    </select>
                   </div>
 
-                  {/* Filler Words */}
-                  {Object.keys(commScore.fillers).length > 0 && (
-                    <div className="mb-2 text-sm text-gray-400">
-                      <span className="text-gray-300 font-medium">Filler words detected: </span>
-                      {Object.entries(commScore.fillers).map(([word, count]) => (
-                        <span key={word} className="mr-2 text-orange-400">
-                          "{word}" ({count}x)
-                        </span>
+                  {/* Difficulty */}
+                  <div className="space-y-3">
+                    <label className="text-xs font-black uppercase tracking-widest text-slate-500">Analysis Depth</label>
+                    <div className="flex gap-3">
+                      {['easy', 'medium', 'hard'].map((d) => (
+                        <button
+                          key={d}
+                          onClick={() => setDifficulty(d)}
+                          className={`flex-1 py-4 rounded-xl font-black uppercase tracking-tighter text-sm transition-all border-2 ${
+                            difficulty === d 
+                              ? 'bg-primary-violet border-primary-violet text-white shadow-[0_0_20px_rgba(108,63,200,0.3)]' 
+                              : 'bg-[#0F172A] border-white/5 text-slate-500 hover:border-white/20'
+                          }`}
+                        >
+                          {d}
+                        </button>
                       ))}
                     </div>
-                  )}
-
-                  {/* Tip */}
-                  <div className="text-sm text-blue-400 mt-1">
-                    💡 {commScore.tip}
                   </div>
 
-                  {/* Audio Playback Button */}
-                  {audioSupported && audioURL && (
-                    <button
-                      type="button"
-                      onClick={togglePlayback}
-                      className={`mt-3 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                        isPlaying 
-                          ? 'bg-red-50 border-red-300 text-red-600 hover:bg-red-100'
-                          : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      {isPlaying ? '⏹ Stop Playback' : '🎧 Play Back Your Answer'}
-                    </button>
-                  )}
+                  {/* Interviewer Personas */}
+                  <div className="space-y-3">
+                    <label className="text-xs font-black uppercase tracking-widest text-slate-500">Interviewer DNA</label>
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { id: 'friendly', e: '😊', title: 'Empathetic', d: 'Warm support' },
+                        { id: 'strict', e: '😐', title: 'Technical', d: 'Point blank' },
+                        { id: 'google', e: '😈', title: 'FAANG', d: 'Stress depth' }
+                      ].map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => setPersonality(p.id)}
+                          className={`p-4 rounded-2xl border-2 text-center transition-all ${
+                            personality === p.id
+                              ? 'bg-primary-violet/10 border-primary-violet shadow-[0_0_15px_rgba(108,63,200,0.2)]'
+                              : 'bg-[#0F172A] border-white/5 grayscale opacity-50 hover:opacity-100 hover:grayscale-0'
+                          }`}
+                        >
+                          <div className="text-3xl mb-2">{p.e}</div>
+                          <div className="text-[10px] font-black uppercase tracking-widest mb-1 text-white">{p.title}</div>
+                          <div className="text-[9px] text-slate-500 font-bold">{p.d}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
+                  {/* Modes */}
+                  <div className="flex gap-3">
+                     {[
+                       { id: false, icon: Target, label: 'Practice', sub: 'Relaxed session', color: 'bg-primary-violet' },
+                       { id: true, icon: Zap, label: 'Simulation', sub: 'Real pressure', color: 'bg-orange-500' }
+                     ].map((m) => (
+                       <button
+                         key={String(m.id)}
+                         onClick={() => setSimMode(m.id)}
+                         className={`flex-1 p-5 rounded-2xl border-2 text-left transition-all relative overflow-hidden group ${
+                           simMode === m.id
+                             ? `border-white/20 ${m.color}/10 shadow-xl`
+                             : 'bg-[#0F172A] border-white/5 opacity-50'
+                         }`}
+                       >
+                         {simMode === m.id && <div className={`absolute top-0 right-0 w-16 h-16 ${m.color} opacity-10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2`} />}
+                         <div className="flex items-center gap-3 mb-1">
+                           <m.icon className={`w-5 h-5 ${simMode === m.id ? 'text-white' : 'text-slate-400'}`} />
+                           <span className="font-black text-sm uppercase tracking-widest">{m.label}</span>
+                         </div>
+                         <div className="text-[10px] font-bold text-slate-500">{m.sub}</div>
+                       </button>
+                     ))}
+                  </div>
+
+                  <Button 
+                    onClick={startInterview}
+                    disabled={loading}
+                    className="w-full bg-gradient-to-r from-primary-violet to-purple-400 hover:scale-[1.02] active:scale-95 transition-all h-16 rounded-2xl text-xl font-black uppercase tracking-tighter"
+                  >
+                    {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Launch Interview'}
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* INTERVIEW SCREEN */}
+          {screen === 'interview' && questions.length > 0 && (
+            <motion.div 
+               key="interview"
+               initial={{ opacity: 0, x: 20 }}
+               animate={{ opacity: 1, x: 0 }}
+               exit={{ opacity: 0, x: -20 }}
+               className="max-w-3xl mx-auto space-y-8"
+            >
+              {/* Timeline Header */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="px-4 py-1.5 bg-primary-violet/20 border border-primary-violet/30 rounded-full text-xs font-black text-primary-violet uppercase tracking-widest">
+                       Phase {currentQuestion + 1} / {questions.length}
+                    </div>
+                    {simMode && (
+                      <div className="px-4 py-1.5 bg-orange-500/20 border border-orange-500/30 rounded-full text-xs font-black text-orange-400 uppercase tracking-widest flex items-center gap-2">
+                        <Zap className="w-3 h-3" /> Simulated
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-400 font-bold">
+                    <Clock className="w-4 h-4" />
+                    {formatTime(elapsedTime)}
+                  </div>
+                </div>
+                {/* Progress bar */}
+                <div className="h-3 bg-slate-800 rounded-full overflow-hidden flex gap-0.5">
+                   {questions.map((_, i) => (
+                      <div 
+                        key={i} 
+                        className={`h-full flex-1 transition-all duration-700 ${
+                          i < currentQuestion ? 'bg-primary-violet' : 
+                          i === currentQuestion ? 'bg-primary-violet/50 animate-pulse' : 
+                          'bg-slate-700/50'
+                        }`} 
+                      />
+                   ))}
+                </div>
+              </div>
+
+              {/* Sim Timer Gradient */}
+              {simMode && (
+                <div className="bg-[#1E293B] p-6 rounded-3xl border border-white/5">
+                   <div className="flex justify-between items-baseline mb-3">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Answer Threshold</span>
+                      <span className={`text-2xl font-black tracking-tighter ${
+                        questionTimeLeft > 60 ? 'text-green-400' : questionTimeLeft > 20 ? 'text-yellow-400' : 'text-red-500 animate-pulse'
+                      }`}>
+                         {formatTime(questionTimeLeft)}
+                      </span>
+                   </div>
+                   <div className="h-2 w-full bg-[#0F172A] rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={false}
+                        animate={{ width: `${(questionTimeLeft / 120) * 100}%` }}
+                        className={`h-full ${
+                          questionTimeLeft > 60 ? 'bg-green-500' : questionTimeLeft > 20 ? 'bg-yellow-500' : 'bg-red-500'
+                        }`}
+                      />
+                   </div>
                 </div>
               )}
 
-              <div className="flex items-center justify-between mt-3">
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={toggleVoice}
-                    disabled={!recognition}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                      !recognition 
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                        : isRecording 
-                          ? 'bg-red-100 text-red-600 animate-pulse' 
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                    title={!recognition ? 'Voice input not supported in this browser' : 'Click to speak your answer'}
-                  >
-                    {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                    <span className="text-sm">
-                      {isRecording ? 'Stop' : 'Voice'}
-                    </span>
-                  </button>
-                  <span className="text-sm text-muted-foreground">
-                    {voiceStatus === 'idle' && 'Click mic to speak your answer'}
-                    {voiceStatus === 'listening' && '🔴 Listening...'}
-                    {voiceStatus === 'done' && '✅ Done! Review your answer'}
-                  </span>
-                </div>
-                
-                {/* Show Hint button - Only in Practice Mode */}
-                {!simMode && (
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowHint(!showHint)}
-                  >
-                    <Lightbulb className="w-4 h-4 mr-2" />
-                    {showHint ? 'Hide Hint' : 'Show Hint'}
-                  </Button>
-                )}
-                
-                <Button 
-                  onClick={submitAnswer}
-                  disabled={submitting || !answer.trim()}
-                  className="bg-[#6C3FC8] hover:bg-[#6C3FC8]/90"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Evaluating...
-                    </>
-                  ) : (
-                    <>
-                      Submit Answer
-                      <ChevronRight className="w-4 h-4 ml-2" />
-                    </>
+              {/* Question Card */}
+              <div className="bg-[#1E293B] rounded-3xl p-10 border border-white/5 border-l-8 border-l-primary-violet relative overflow-hidden group">
+                <div className="relative z-10">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="bg-primary-violet/20 px-4 py-1 rounded-lg text-[10px] font-black text-primary-violet uppercase tracking-widest">
+                       {questions[currentQuestion].type}
+                    </div>
+                    {speechSupported && (
+                      <button onClick={speakQuestion} className={`p-2 rounded-xl transition-all ${isSpeaking ? 'bg-primary-violet text-white shadow-lg' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+                        <Volume2 className="w-5 h-5" />
+                      </button>
+                    )}
+                  </div>
+                  <h2 className="text-3xl font-black leading-tight text-white mb-8 group-hover:scale-[1.01] transition-transform origin-left">
+                    {questions[currentQuestion].question}
+                  </h2>
+
+                  {/* Coaching Hints */}
+                  <AnimatePresence>
+                  {!simMode && showCoachingHint && (
+                    <motion.div 
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      className="mb-8 p-6 bg-[#0F172A] rounded-2xl border border-primary-violet/20 space-y-4"
+                    >
+                      {hintLoading ? (
+                        <div className="flex items-center gap-3 text-slate-400 italic">
+                          <Loader2 className="w-5 h-5 animate-spin text-primary-violet" /> Decoding strategy...
+                        </div>
+                      ) : coachingHint ? (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2 text-primary-violet">
+                            <Sparkles className="w-5 h-5" />
+                            <span className="text-sm font-black uppercase tracking-widest">Strategic Intel</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-black text-slate-500 uppercase">Core Objective</span>
+                            <p className="text-sm text-slate-100 mt-1">{coachingHint.looking_for}</p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-black text-slate-500 uppercase">Optimal Structure</span>
+                            <p className="text-sm text-slate-300 mt-1 italic">"{coachingHint.structure}"</p>
+                          </div>
+                        </div>
+                      ) : null}
+                    </motion.div>
                   )}
-                </Button>
-              </div>
-            </div>
+                  </AnimatePresence>
+                  
+                  {/* Textarea */}
+                  <div className="relative">
+                    <textarea
+                      value={answer}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      placeholder="Synthesize your response..."
+                      className="w-full bg-[#0F172A] p-8 rounded-2xl border border-white/5 focus:border-primary-violet/50 focus:ring-4 focus:ring-primary-violet/10 outline-none min-h-[250px] text-lg font-medium leading-relaxed"
+                    />
+                    {isRecording && (
+                      <div className="absolute inset-0 bg-primary-violet/5 flex items-center justify-center rounded-2xl border-4 border-dashed border-primary-violet/40 pointer-events-none">
+                         <div className="flex flex-col items-center gap-3">
+                            <Mic className="w-12 h-12 text-primary-violet animate-pulse" />
+                            <span className="text-xs font-black uppercase tracking-widest text-primary-violet">Listening to Intel...</span>
+                         </div>
+                      </div>
+                    )}
+                  </div>
 
-            {/* Previous Answers Summary */}
-            {answers.length > 0 && (
-              <div className="bg-card rounded-xl border p-4">
-                <h3 className="font-medium mb-2">Your Progress</h3>
-                <div className="flex gap-2 flex-wrap">
-                  {answers.map((a, i) => (
-                    <div 
-                      key={i} 
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${getScoreColor(a.feedback?.score || 0)}`}
+                  {/* Comm Score Bubble */}
+                  {!simMode && usedVoiceInput && commScore && (
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-4 p-4 bg-slate-900 rounded-xl border border-white/5 flex items-center justify-between">
+                       <div className="flex items-center gap-3">
+                          <div className="text-2xl">🎙️</div>
+                          <div>
+                             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Comm Signal</div>
+                             <div className="text-sm font-bold text-slate-100">{commScore.tip}</div>
+                          </div>
+                       </div>
+                       <div className="text-2xl font-black text-primary-violet">{commScore.score}</div>
+                    </motion.div>
+                  )}
+
+                  {/* Bottom Actions */}
+                  <div className="mt-8 flex items-center justify-between pt-8 border-t border-white/5">
+                    <div className="flex gap-4">
+                      <button 
+                        onClick={toggleVoice} 
+                        className={`flex items-center gap-3 px-6 py-3 rounded-xl font-black uppercase tracking-tighter text-sm transition-all shadow-lg ${
+                          isRecording ? 'bg-red-500/20 text-red-400 border border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.3)] animate-pulse' : 'bg-slate-800 text-slate-300 border border-white/5 hover:border-white/20'
+                        }`}
+                      >
+                         {isRecording ? <Square className="w-4 h-4 border-2 border-red-400" /> : <Mic className="w-4 h-4" />}
+                         {isRecording ? 'Capturing' : 'Voice Input'}
+                      </button>
+                      {!simMode && (
+                        <button onClick={() => setShowCoachingHint(!showCoachingHint)} className={`flex items-center gap-3 px-6 py-3 rounded-xl font-black uppercase tracking-tighter text-sm border-2 transition-all ${showCoachingHint ? 'bg-primary-violet border-primary-violet text-white shadow-xl' : 'bg-transparent border-white/10 text-slate-400 hover:border-white/30'}`}>
+                           <Lightbulb className="w-4 h-4" /> Coaching
+                        </button>
+                      )}
+                    </div>
+
+                    <Button 
+                      onClick={submitAnswer}
+                      disabled={submitting || !answer.trim()}
+                      className="bg-gradient-to-r from-primary-violet to-purple-400 px-10 py-7 text-lg font-black uppercase tracking-tighter rounded-2xl shadow-2xl hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
                     >
-                      {i + 1}
-                    </div>
-                  ))}
-                  {Array.from({ length: questions.length - answers.length }).map((_, i) => (
-                    <div 
-                      key={answers.length + i} 
-                      className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm text-gray-500"
-                    >
-                      {answers.length + i + 1}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* STATE 3: RESULTS SCREEN */}
-        {screen === 'results' && (
-          <div className="max-w-3xl mx-auto">
-            {/* Badge Popup */}
-            {newBadge && (
-              <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-[#6C3FC8] to-[#4A2F8A] text-white px-6 py-4 rounded-xl shadow-2xl animate-bounce">
-                <div className="text-center">
-                  <div className="text-3xl mb-2">{newBadge.emoji}</div>
-                  <div className="font-bold">New Badge Earned!</div>
-                  <div className="text-lg">{newBadge.name}</div>
-                </div>
-              </div>
-            )}
-
-            {/* Overall Score */}
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-32 h-32 rounded-full bg-gradient-to-br from-[#1E3A5F] to-[#6C3FC8] text-white mb-4">
-                <div className="text-center">
-                  <div className="text-4xl font-bold">{totalScore}</div>
-                  <div className="text-sm">out of 50</div>
-                </div>
-              </div>
-              <h2 className="text-2xl font-bold text-[#1E3A5F]">
-                {getPerformanceRating(totalScore)}
-              </h2>
-              <p className="text-muted-foreground">
-                Interview Performance for {careerPath}
-              </p>
-            </div>
-
-            {/* Streak Update Message */}
-            {streakMessage && (
-              <div className="mb-4 p-3 bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-lg text-center">
-                <p className="text-orange-700 font-medium">{streakMessage}</p>
-              </div>
-            )}
-            
-            {/* XP Earned Message */}
-            {xpEarned && (
-              <div className={`mb-4 p-4 rounded-lg text-center ${
-                leveledUp 
-                  ? 'bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-400 animate-pulse' 
-                  : 'bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200'
-              }`}>
-                {leveledUp ? (
-                  <p className="text-amber-700 font-bold text-lg">
-                    🎉 LEVEL UP! You are now a {rankData?.rank_title}! 🚀
-                  </p>
-                ) : (
-                  <p className="text-purple-700 font-medium">
-                    +{xpEarned} XP earned! 🎉
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Question Summaries */}
-            <div className="space-y-4 mb-8">
-              <h3 className="font-semibold text-lg">Question Summary</h3>
-              {answers.map((a, i) => (
-                <div key={i} className="bg-card rounded-xl border p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <span className="text-sm text-muted-foreground">Q{i + 1}:</span>
-                      <p className="font-medium">{a.question.substring(0, 80)}...</p>
-                    </div>
-                    <div className={`px-3 py-1 rounded-full text-sm font-medium ${getScoreColor(a.feedback?.score || 0)}`}>
-                      {a.feedback?.score || 0}/10
-                    </div>
+                      {submitting ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Sumbit Wave'}
+                    </Button>
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            </motion.div>
+          )}
 
-            {/* Actions */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button onClick={copyResults} variant="outline" className="border-[#1E3A5F] text-[#1E3A5F]">
-                {copied ? '✅ Copied!' : (
-                  <>
-                    <Copy className="w-4 h-4 mr-2" />
-                    Share Results
-                  </>
-                )}
-              </Button>
-              <Button onClick={createChallenge} variant="outline" className="border-[#FF6B35] text-[#FF6B35]">
-                🤜 Challenge a Friend
-              </Button>
-              <Link href="/progress">
-                <Button variant="outline">
-                  📊 View My Progress
+          {/* RESULTS SCREEN */}
+          {screen === 'results' && (
+            <motion.div 
+               key="results"
+               initial={{ opacity: 0, y: 30 }}
+               animate={{ opacity: 1, y: 0 }}
+               className="max-w-4xl mx-auto space-y-12 pb-20"
+            >
+              {/* Score Visualization */}
+              <div className="bg-[#1E293B] rounded-3xl p-16 border border-white/5 text-center shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary-violet opacity-5 rounded-full blur-[100px]" />
+                
+                <div className="relative flex flex-col items-center">
+                  <div className="relative w-56 h-56 mb-10">
+                    <svg className="w-full h-full transform -rotate-90">
+                      <circle cx="112" cy="112" r="100" stroke="currentColor" strokeWidth="12" fill="transparent" className="text-slate-800" />
+                      <motion.circle 
+                        cx="112" cy="112" r="100" 
+                        stroke="currentColor" strokeWidth="12" 
+                        fill="transparent" 
+                        strokeLinecap="round"
+                        strokeDasharray={2 * Math.PI * 100}
+                        strokeDashoffset={2 * Math.PI * 100}
+                        animate={{ strokeDashoffset: 2 * Math.PI * 100 * (1 - totalScore / 50) }}
+                        transition={{ duration: 2, ease: "easeOut" }}
+                        className={totalScore >= 40 ? 'text-yellow-400 drop-shadow-[0_0_15px_rgba(250,204,21,0.4)]' : 'text-primary-violet drop-shadow-[0_0_15px_rgba(108,63,200,0.4)]'}
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                       <span className="text-7xl font-black tracking-tighter text-white">{totalScore}</span>
+                       <span className="text-xs font-black uppercase tracking-widest text-slate-500">Total Points</span>
+                    </div>
+                  </div>
+                  
+                  <h2 className={`text-5xl font-black tracking-tighter mb-4 ${totalScore >= 40 ? 'text-yellow-400' : 'text-primary-violet'}`}>
+                    {getPerformanceRating(totalScore)}
+                  </h2>
+                  <p className="text-slate-400 font-bold text-lg max-w-md">Precision intelligence verified for {careerPath} maturity profile.</p>
+                </div>
+              </div>
+
+              {/* Badges Earned? */}
+              {newBadge && (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="p-8 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 rounded-3xl border border-yellow-500/30 flex items-center gap-6">
+                   <div className="text-6xl">{newBadge.emoji}</div>
+                   <div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-yellow-400">Elite Reward Acquired</div>
+                      <div className="text-2xl font-black text-white">{newBadge.name}</div>
+                   </div>
+                </motion.div>
+              )}
+
+              {/* Summary Cards */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-black uppercase tracking-widest text-slate-400 flex items-center gap-3">
+                   <MessageSquare className="w-5 h-5" /> Critical Breakdown
+                </h3>
+                <div className="grid grid-cols-1 gap-4">
+                   {answers.map((a, i) => (
+                      <div key={i} className="bg-[#1E293B] p-6 rounded-2xl border border-white/5 flex items-center justify-between hover:bg-slate-800 transition-colors">
+                         <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-1">
+                              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Question {i + 1}</span>
+                            </div>
+                            <p className="font-bold text-slate-100">{a.question.length > 100 ? a.question.substring(0, 100) + '...' : a.question}</p>
+                         </div>
+                         <div className={`px-5 py-2 rounded-xl text-xl font-black border-2 ${getScoreColor(a.feedback?.score || 0)}`}>
+                            {a.feedback?.score}/10
+                         </div>
+                      </div>
+                   ))}
+                </div>
+              </div>
+
+              {/* Main Actions */}
+              <div className="flex flex-wrap gap-4 justify-center pt-8 border-t border-white/5">
+                <Button onClick={() => setScreen('setup')} className="bg-primary-violet hover:bg-primary-violet/90 text-white font-black uppercase tracking-widest px-8 py-6 rounded-xl">
+                   <RefreshCw className="w-4 h-4 mr-2" /> Reset Cycle
                 </Button>
-              </Link>
-              <Button onClick={() => { setScreen('setup'); setElapsedTime(0); }} className="bg-[#6C3FC8] hover:bg-[#6C3FC8]/90">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Practice Again
-              </Button>
-              <Link href="/analysis">
-                <Button variant="outline">
-                  Go to Analysis
-                  <ArrowRight className="w-4 h-4 ml-2" />
+                <Button onClick={copyResults} variant="outline" className="border-white/10 text-slate-400 hover:text-white font-black uppercase tracking-widest px-8 py-6 rounded-xl">
+                   <Copy className="w-4 h-4 mr-2" /> Share Intel
                 </Button>
-              </Link>
-            </div>
-          </div>
-        )}
+                <Link href="/dashboard" className="flex-1 sm:flex-initial">
+                  <Button variant="outline" className="w-full border-white/10 text-slate-400 hover:text-white font-black uppercase tracking-widest py-6 rounded-xl">
+                    Back to Terminal
+                  </Button>
+                </Link>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
-      
+
       {/* Challenge Modal */}
       {challengeModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-white mb-2">🤜 Challenge Created!</h3>
-            <p className="text-gray-400 text-sm mb-3">Share this link with your friends:</p>
-            <input 
-              readOnly 
-              value={challengeURL}
-              aria-label="Challenge link"
-              title="Share this link with friends"
-              className="w-full bg-gray-700 text-white text-sm rounded-lg px-3 py-2 mb-3" />
-            <div className="flex gap-2">
-              <button onClick={copyChallengeLink}
-                className="flex-1 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm">
-                {copied ? '✅ Copied!' : '📋 Copy Link'}
-              </button>
-              <button onClick={() => setChallengeModal(false)}
-                className="px-4 py-2 rounded-lg bg-gray-600 hover:bg-gray-700 text-white text-sm">
-                Close
-              </button>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100]">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#1E293B] rounded-3xl p-8 max-w-md w-full mx-4 border border-white/5 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+               <h3 className="text-xl font-black uppercase tracking-tighter text-white flex items-center gap-2">
+                 <Trophy className="w-5 h-5 text-yellow-400" /> Challenge Wave
+               </h3>
+               <button onClick={() => setChallengeModal(false)} className="text-slate-500 hover:text-white"><XCircle className="w-6 h-6" /></button>
             </div>
-          </div>
+            <p className="text-slate-400 text-sm mb-6 font-medium">Broadcast your performance to your network. Top scorers gain verification status.</p>
+            <div className="relative mb-6">
+              <input 
+                readOnly 
+                value={challengeURL}
+                className="w-full bg-[#0F172A] text-white text-xs rounded-xl px-4 py-3 border border-white/10 pr-12 font-mono" />
+              <button onClick={copyChallengeLink} className="absolute right-2 top-1.5 p-2 text-primary-violet hover:text-white transition-colors"><Copy className="w-4 h-4" /></button>
+            </div>
+            <Button onClick={copyChallengeLink} className="w-full bg-primary-violet hover:bg-primary-violet/90 text-white font-bold py-4 rounded-xl">
+                {copied ? 'Link Copied!' : 'Broadcast Challenge'}
+            </Button>
+          </motion.div>
         </div>
       )}
     </div>
