@@ -2,7 +2,7 @@
 Interview Router
 Handles AI interview practice functionality
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from pydantic import BaseModel
@@ -54,7 +54,7 @@ class QuestionHintRequest(BaseModel):
 
 @router.post("/generate-questions")
 @limiter.limit("10/minute")
-async def generate_questions(body: GenerateQuestionsRequest):
+async def generate_questions(request: Request, body: GenerateQuestionsRequest):
     """
     Generate 5 personalized interview questions based on user profile.
     """
