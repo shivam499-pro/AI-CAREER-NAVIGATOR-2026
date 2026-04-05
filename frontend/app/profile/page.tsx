@@ -10,7 +10,7 @@ import {
   Brain, Loader2, Save, Plus, X, CheckCircle,
   GraduationCap, Code, Briefcase, Award, Target,
   ArrowRight, User, Github, Globe, Link as LinkIcon,
-  Sparkles, Zap, ChevronRight
+  Sparkles, Zap, ChevronRight, Star
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
