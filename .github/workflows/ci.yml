@@ -104,4 +104,4 @@ jobs:
       - name: Run linter
         run: |
           cd frontend
-          pnpm lint
+          npx next lint
