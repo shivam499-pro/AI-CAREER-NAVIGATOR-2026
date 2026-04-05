@@ -1,0 +1,96 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Backend tests
+  backend-test:
+    name: Backend Tests (pytest)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Create virtual environment
+        run: |
+          cd backend
+          python -m venv venv
+          source venv/bin/activate
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          source venv/bin/activate
+          pip install -r requirements.txt
+      
+      - name: Run backend tests
+        run: |
+          cd backend
+          source venv/bin/activate
+          python -m pytest -v --tb=short
+
+  # Frontend build check
+  frontend-build:
+    name: Frontend Build (Next.js)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      
+      - name: Install pnpm
+        run: npm install -g pnpm
+      
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          pnpm install
+      
+      - name: Run Next.js build
+        run: |
+          cd frontend
+          pnpm build
+
+  # Lint check (optional)
+  lint:
+    name: Lint Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      
+      - name: Install pnpm
+        run: npm install -g pnpm
+      
+      - name: Install dependencies
+        run: |
+          cd frontend
+          pnpm install
+      
+      - name: Run linter
+        run: |
+          cd frontend
+          pnpm lint
