@@ -284,13 +284,15 @@ export default function JobsPage() {
                     </div>
                   </div>
 
-                  <a
-                    href={job.url || job.apply_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block"
-                  >
-                    <Button className="w-full bg-[#6C3FC8] hover:bg-[#6C3FC8]/90">
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1 bg-[#6C3FC8] hover:bg-[#6C3FC8]/90 cursor-pointer"
+                      onClick={() => {
+                        const applyUrl = job.link || job.job_link || job.apply_link || job.url || job.redirect_url || 
+                          `https://www.google.com/search?q=${encodeURIComponent(job.title + ' ' + job.company + ' job apply')}`
+                        window.open(applyUrl, '_blank')
+                      }}
+                    >
                       Apply Now
                       <ExternalLink className="ml-2 w-4 h-4" />
                     </Button>
@@ -298,11 +300,11 @@ export default function JobsPage() {
                       variant="ghost"
                       size="sm"
                       onClick={() => fetchRealJobs(targetCareer)}
-                      className="ml-2"
+                      className="cursor-pointer"
                     >
-                      Refresh Jobs
+                      <RefreshCw className="w-4 h-4" />
                     </Button>
-                  </a>
+                  </div>
                 </div>
               ))}
             </div>
