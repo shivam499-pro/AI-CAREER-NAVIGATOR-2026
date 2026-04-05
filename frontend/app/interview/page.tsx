@@ -240,7 +240,7 @@ export default function InterviewPage() {
       
       const data = await response.json()
       
-      if (data.questions) {
+      if (data.questions && data.questions.length > 0) {
         setQuestions(data.questions)
         setCurrentQuestion(0)
         setAnswers([])
@@ -252,6 +252,8 @@ export default function InterviewPage() {
           setElapsedTime(prev => prev + 1)
         }, 1000)
         setTimerInterval(interval)
+      } else {
+        alert('Failed to generate questions. Please try again.')
       }
     } catch (err) {
       console.error('Error generating questions:', err)
@@ -490,6 +492,7 @@ export default function InterviewPage() {
 
   // Create challenge function
   const createChallenge = async () => {
+    console.log('Challenge button clicked')
     if (!user || !questions.length) return
     
     try {
@@ -525,7 +528,7 @@ export default function InterviewPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const copyResults = () => {
+  const copyResults = async () => {
     const text = `🎯 My AI Interview Coach Results
 
 Career: ${careerPath}
@@ -535,7 +538,24 @@ ${answers.map((a, i) => `Q${i+1}: ${a.question.substring(0, 50)}... - Score: ${a
 
 Powered by AI Career Navigator`
     
-    navigator.clipboard.writeText(text)
+    // Try Web Share API first
+    if (navigator.share) {
+      try {
+        await navigator.share({ 
+          title: 'My Interview Results', 
+          text: text, 
+          url: window.location.href 
+        })
+        return
+      } catch (err) {
+        // User cancelled or error, fall through to clipboard
+      }
+    }
+    
+    // Fallback to clipboard
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   // Handle time up in simulation mode
@@ -1488,8 +1508,12 @@ Powered by AI Career Navigator`
             {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button onClick={copyResults} variant="outline" className="border-[#1E3A5F] text-[#1E3A5F]">
-                <Copy className="w-4 h-4 mr-2" />
-                Share Results
+                {copied ? '✅ Copied!' : (
+                  <>
+                    <Copy className="w-4 h-4 mr-2" />
+                    Share Results
+                  </>
+                )}
               </Button>
               <Button onClick={createChallenge} variant="outline" className="border-[#FF6B35] text-[#FF6B35]">
                 🤜 Challenge a Friend

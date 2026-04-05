@@ -5,6 +5,8 @@ AI Service using Google Gemini 2.5 Flash (Free Tier)
 import os
 import json
 import re
+import random
+import time
 from google import genai
 from dotenv import load_dotenv
 
@@ -444,6 +446,10 @@ def generate_interview_questions(
     prompt = f"""You are an expert technical interviewer.
 {personality_instruction}
 
+Session ID: {random.randint(10000, 99999)}
+Timestamp: {int(time.time())}
+Generate FRESH unique questions - do not repeat previous sessions.
+
 Generate exactly 5 interview questions for: {career_path}
 Difficulty: {difficulty}
 Profile: {json.dumps(profile)}
@@ -464,14 +470,28 @@ Return ONLY the JSON array, no other text."""
         if isinstance(questions, list) and len(questions) > 0:
             return questions
         return []
-    except Exception:
-        return [
-            {"id": 1, "question": f"Tell me about your experience with {career_path}", "type": "behavioral", "difficulty": difficulty, "hint": "Focus on specific projects"},
-            {"id": 2, "question": "What are the SOLID principles?", "type": "technical", "difficulty": difficulty, "hint": "There are 5 principles"},
-            {"id": 3, "question": "Explain your most challenging project", "type": "project_based", "difficulty": difficulty, "hint": "Mention problem, solution, outcome"},
-            {"id": 4, "question": "How would you design a URL shortener?", "type": "system_design", "difficulty": difficulty, "hint": "Think about scalability"},
-            {"id": 5, "question": "Reverse a linked list", "type": "dsa", "difficulty": difficulty, "hint": "Iterative vs recursive"}
-        ]
+    except Exception as e:
+        print(f"Gemini attempt 1 failed: {str(e)}, retrying...")
+        try:
+            # Retry once with simpler prompt
+            simple_prompt = f"""Generate exactly 5 interview questions for {career_path} role.
+Difficulty: {difficulty}
+Return ONLY a JSON array with 5 objects.
+Each object must have:
+"id" (number 1-5),
+"question" (string),
+"type" (technical/behavioral/dsa/system_design/project_based),
+"difficulty" (string),
+"hint" (string)
+Return ONLY the JSON array, no other text."""
+            text = _generate(simple_prompt)
+            questions = json.loads(_clean_json(text))
+            if isinstance(questions, list) and len(questions) > 0:
+                return questions
+            return []
+        except Exception as e2:
+            print(f"Gemini attempt 2 also failed: {str(e2)}")
+            return []
 
 
 def evaluate_interview_answer(

@@ -4,13 +4,14 @@ from supabase import create_client, Client
 import os
 import random
 import string
+import traceback
 from datetime import datetime
 
 router = APIRouter()
 
 # Initialize Supabase client
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://example.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY", "example-key")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "example-key")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
@@ -65,10 +66,8 @@ async def create_challenge(request: CreateChallengeRequest):
         data = {
             "challenge_code": challenge_code,
             "creator_id": request.user_id,
-            "creator_name": creator_name,
             "career_path": request.career_path,
-            "questions": request.questions,
-            "created_at": datetime.utcnow().isoformat()
+            "questions": request.questions
         }
         
         response = supabase.table("challenges").insert(data).execute()
@@ -86,7 +85,8 @@ async def create_challenge(request: CreateChallengeRequest):
         }
     
     except Exception as e:
-        print(f"Error creating challenge: {e}")
+        print(f"Challenge create error: {str(e)}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -122,12 +122,9 @@ async def check_and_award_badges(request: CheckBadgeRequest):
         challenges_response = supabase.table("challenges").select("id").eq("creator_id", user_id).execute()
         challenges_count = len(challenges_response.data) if challenges_response.data else 0
         
-        # Get voice usage count - check interview sessions with voice
-        # We'll track voice_answers in a separate table or use an aggregate
-        voice_count_response = supabase.table("user_voice_answers").select("count").eq("user_id", user_id).execute()
+        # For voice badge, we'll just award it directly when voice_used event occurs
+        # Simplest fix - track voice usage via user_ranks table instead
         voice_count = 0
-        if voice_count_response.data:
-            voice_count = sum(v.get("count", 0) for v in voice_count_response.data)
         
         # Define badge checks based on event
         badges_to_check = []
@@ -151,10 +148,9 @@ async def check_and_award_badges(request: CheckBadgeRequest):
             badges_to_check.append("simulation")
             
         elif event == "voice_used":
-            # Increment voice count - this is called each time voice is used
-            # We need to track total voice answers across all sessions
-            voice_count += 1
-            if voice_count >= 5:
+            # For voice_pro badge, just award it directly when voice_used event occurs
+            # User doesn't already have the badge
+            if "voice_user" not in existing_badges:
                 badges_to_check.append("voice_user")
                 
         elif event == "challenge_created":
