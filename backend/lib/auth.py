@@ -100,7 +100,7 @@ def decode_token(token: str) -> dict:
 def get_current_user(authorization: Optional[str] = Header(None)):
     """
     Get current user from authorization header.
-    Validates token expiry using standard JWT exp claim.
+    Validates token using Supabase first, then falls back to custom JWT.
     """
     if not authorization:
         raise HTTPException(
@@ -116,39 +116,42 @@ def get_current_user(authorization: Optional[str] = Header(None)):
         # Extract token from "Bearer <token>"
         token = authorization.replace("Bearer ", "")
         
-        # First, check if it's a JWT token we created (with expiry check)
-        # Try to decode as our JWT
+        # First, try Supabase token validation (for Supabase access tokens)
+        try:
+            user = supabase.auth.get_user(token)
+            if user and user.user:
+                return user.user
+        except Exception as supabase_error:
+            # Supabase validation failed, try custom JWT as fallback
+            pass
+        
+        # Fallback: Try to decode as custom JWT token
         try:
             payload = decode_token(token)
-            # If we get here, it's our JWT token
             return type('User', (), {
                 'id': payload.get('sub'),
                 'email': payload.get('email')
             })()
         except HTTPException:
-            # Re-raise our own exceptions
             raise
         except Exception:
-            # Not our JWT, try Supabase validation
+            # Neither Supabase nor custom JWT worked
             pass
         
-        # Validate with Supabase (handles their token expiry)
-        user = supabase.auth.get_user(token)
-        if not user or not user.user:
-            raise HTTPException(
-                status_code=401,
-                detail={
-                    "message": "Unauthorized: Invalid token",
-                    "error_type": "invalid_token",
-                    "suggestion": "Please log in again."
-                }
-            )
-        return user.user
+        # Both validation methods failed
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "message": "Unauthorized: Invalid token",
+                "error_type": "invalid_token",
+                "suggestion": "Please log in again."
+            }
+        )
     except HTTPException:
         raise
     except Exception as e:
         error_str = str(e).lower()
-        # Check for token expiration in Supabase error
+        # Check for token expiration in error
         if "expired" in error_str or "token" in error_str:
             raise HTTPException(
                 status_code=401,

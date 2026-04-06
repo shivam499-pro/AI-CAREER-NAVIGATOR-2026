@@ -2,11 +2,13 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Brain, Mail, Lock, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -17,7 +19,7 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error, data } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
@@ -27,8 +29,19 @@ export default function LoginPage() {
         ? 'Invalid email or password' 
         : error.message)
       setLoading(false)
-    } else {
-      window.location.href = '/dashboard'
+    } else if (data.user) {
+      // Check if user has a profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', data.user.id)
+        .single()
+      
+      if (profile) {
+        router.push('/dashboard')
+      } else {
+        router.push('/onboarding')
+      }
     }
   }
 

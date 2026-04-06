@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -7,10 +8,22 @@ export async function GET(request: Request) {
   const next = searchParams.get('next') ?? '/dashboard'
 
   if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { error, data } = await supabase.auth.exchangeCodeForSession(code)
     
-    if (!error) {
-      return NextResponse.redirect(`${origin}${next}`)
+    if (!error && data.user) {
+      // Check if user has a profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', data.user.id)
+        .single()
+      
+      // Redirect based on profile existence
+      if (profile) {
+        return NextResponse.redirect(`${origin}/dashboard`)
+      } else {
+        return NextResponse.redirect(`${origin}/onboarding`)
+      }
     }
   }
 
