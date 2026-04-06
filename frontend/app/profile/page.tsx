@@ -334,6 +334,7 @@ export default function ProfilePage() {
                       value={profile.degree} 
                       onChange={(e) => setProfile({ ...profile, degree: e.target.value })} 
                       className="w-full bg-[#0F172A]/50 border border-white/10 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-[#6C3FC8] outline-none appearance-none cursor-pointer"
+                      aria-label="Select degree"
                     >
                       <option value="">Select</option>
                       <option value="B.Tech">B.Tech</option>
@@ -350,6 +351,7 @@ export default function ProfilePage() {
                       value={profile.branch} 
                       onChange={(e) => setProfile({ ...profile, branch: e.target.value })} 
                       className="w-full bg-[#0F172A]/50 border border-white/10 rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-[#6C3FC8] outline-none appearance-none cursor-pointer"
+                      aria-label="Select branch"
                     >
                       <option value="">Select</option>
                       <option value="CSE">CSE</option>
@@ -368,6 +370,7 @@ export default function ProfilePage() {
                       value={profile.current_year} 
                       onChange={(e) => setProfile({ ...profile, current_year: e.target.value })} 
                       className="w-full bg-[#0F172A]/50 border border-white/10 rounded-xl p-3 text-xs font-bold focus:ring-2 focus:ring-[#6C3FC8] outline-none"
+                      aria-label="Select timeline"
                     >
                       <option value="">Year</option>
                       <option value="1st Year">1st</option>
@@ -426,6 +429,7 @@ export default function ProfilePage() {
                       <button 
                         onClick={() => setProfile({ ...profile, extra_skills: profile.extra_skills.filter((_, idx) => idx !== i) })} 
                         className="p-1 hover:bg-red-500/20 rounded-lg group-hover/skill:text-red-500 transition-colors"
+                        aria-label="Remove skill"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -501,6 +505,7 @@ export default function ProfilePage() {
                         <button 
                           onClick={() => setProfile({ ...profile, target_companies: profile.target_companies.filter((_, idx) => idx !== i) })} 
                           className="p-1 hover:text-red-500 transition-colors"
+                          aria-label="Remove company"
                         >
                           <X className="w-3 h-3" />
                         </button>
