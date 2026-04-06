@@ -659,10 +659,11 @@ export default function InterviewPage() {
                 <div className="relative space-y-8">
                   {/* Career Selector */}
                   <div className="space-y-3">
-                    <label className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                    <label htmlFor="career-path" className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
                        <Target className="w-4 h-4" /> Target Career Path
                     </label>
                     <select
+                      id="career-path"
                       value={careerPath}
                       onChange={(e) => setCareerPath(e.target.value)}
                       className="w-full bg-[#0F172A] p-4 text-white rounded-xl border border-white/10 focus:ring-2 focus:ring-primary-violet outline-none appearance-none font-bold"
@@ -829,7 +830,7 @@ export default function InterviewPage() {
                        {questions[currentQuestion].type}
                     </div>
                     {speechSupported && (
-                      <button onClick={speakQuestion} className={`p-2 rounded-xl transition-all ${isSpeaking ? 'bg-primary-violet text-white shadow-lg' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+                      <button onClick={speakQuestion} aria-label="Read question aloud" className={`p-2 rounded-xl transition-all ${isSpeaking ? 'bg-primary-violet text-white shadow-lg' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
                         <Volume2 className="w-5 h-5" />
                       </button>
                     )}
@@ -876,6 +877,7 @@ export default function InterviewPage() {
                       value={answer}
                       onChange={(e) => setAnswer(e.target.value)}
                       placeholder="Synthesize your response..."
+                      aria-label="Your answer to the interview question"
                       className="w-full bg-[#0F172A] p-8 rounded-2xl border border-white/5 focus:border-primary-violet/50 focus:ring-4 focus:ring-primary-violet/10 outline-none min-h-[250px] text-lg font-medium leading-relaxed"
                     />
                     {isRecording && (
@@ -1035,15 +1037,16 @@ export default function InterviewPage() {
                <h3 className="text-xl font-black uppercase tracking-tighter text-white flex items-center gap-2">
                  <Trophy className="w-5 h-5 text-yellow-400" /> Challenge Wave
                </h3>
-               <button onClick={() => setChallengeModal(false)} className="text-slate-500 hover:text-white"><XCircle className="w-6 h-6" /></button>
+               <button onClick={() => setChallengeModal(false)} aria-label="Close modal" className="text-slate-500 hover:text-white"><XCircle className="w-6 h-6" /></button>
             </div>
             <p className="text-slate-400 text-sm mb-6 font-medium">Broadcast your performance to your network. Top scorers gain verification status.</p>
             <div className="relative mb-6">
               <input 
                 readOnly 
                 value={challengeURL}
+                aria-label="Challenge URL"
                 className="w-full bg-[#0F172A] text-white text-xs rounded-xl px-4 py-3 border border-white/10 pr-12 font-mono" />
-              <button onClick={copyChallengeLink} className="absolute right-2 top-1.5 p-2 text-primary-violet hover:text-white transition-colors"><Copy className="w-4 h-4" /></button>
+              <button onClick={copyChallengeLink} aria-label="Copy challenge link" className="absolute right-2 top-1.5 p-2 text-primary-violet hover:text-white transition-colors"><Copy className="w-4 h-4" /></button>
             </div>
             <Button onClick={copyChallengeLink} className="w-full bg-primary-violet hover:bg-primary-violet/90 text-white font-bold py-4 rounded-xl">
                 {copied ? 'Link Copied!' : 'Broadcast Challenge'}
