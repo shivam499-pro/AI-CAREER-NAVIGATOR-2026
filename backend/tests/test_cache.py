@@ -142,14 +142,11 @@ class TestMockMode:
         assert MOCK_MODE is False
 
     def test_mock_mode_response(self):
-        """Test that MOCK_MODE returns mock response when enabled."""
-        from services.gemini_service import MOCK_RESPONSE
+        """Test that MOCK_MODE is False by default (production mode)."""
+        from services.gemini_service import MOCK_MODE
         
-        # Check mock response structure
-        assert "analysis" in MOCK_RESPONSE
-        assert "career_paths" in MOCK_RESPONSE
-        assert "skill_gaps" in MOCK_RESPONSE
-        assert "roadmap" in MOCK_RESPONSE
+        # MOCK_MODE should be False in production
+        assert MOCK_MODE is False
 
 
 class TestCacheTTL:

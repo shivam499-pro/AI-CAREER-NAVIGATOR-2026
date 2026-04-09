@@ -36,6 +36,11 @@ def _get_mock_supabase_client(url=None, key=None):
     )
     mock_client.table.return_value = mock_table
     
+    # Mock auth.get_user() for token validation
+    mock_user = MagicMock()
+    mock_user.user = None  # Return None to trigger JWT fallback
+    mock_client.auth.get_user.return_value = mock_user
+    
     return mock_client
 
 # Patch at the supabase module level before any routers import it
@@ -127,7 +132,8 @@ class MockSupabaseClient:
 class MockSupabaseAuth:
     """Mock Supabase auth."""
     def get_user(self, token):
-        return MockUser(user=MockUserObject())
+        # Raise exception to simulate "not our JWT" so it falls back to custom JWT
+        raise Exception("Invalid JWT")
 
 
 class MockUser:
@@ -354,7 +360,9 @@ def mock_gemini_rate_limit(monkeypatch):
 @pytest.fixture
 def auth_headers():
     """Provide valid authorization headers."""
-    return {"Authorization": "Bearer test-jwt-token"}
+    from lib.auth import create_access_token
+    token = create_access_token("test-user-123", "test@example.com")
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture

@@ -236,18 +236,22 @@ class TestInterviewEndpoints:
             
             assert response.status_code in [200, 500]
 
-    def test_save_session_endpoint(self):
+    def test_save_session_endpoint(self, auth_headers):
         """Test save session endpoint."""
         from fastapi.testclient import TestClient
         from main import app
+        from routers.interview import get_current_user
+        from unittest.mock import MagicMock
         
-        with patch('supabase.create_client') as mock_create:
-            mock_client = MagicMock()
-            mock_table = MagicMock()
-            mock_table.insert.return_value.execute.return_value = MagicMock(data=[])
-            mock_client.table.return_value = mock_table
-            mock_create.return_value = mock_client
-            
+        # Create a mock user object that get_current_user should return
+        mock_user = MagicMock()
+        mock_user.id = "test-user-123"
+        mock_user.email = "test@example.com"
+        
+        # Use dependency_overrides to bypass authentication
+        app.dependency_overrides[get_current_user] = lambda: "test-user-123"
+        
+        try:
             client = TestClient(app)
             response = client.post(
                 "/api/interview/save-session",
@@ -258,39 +262,44 @@ class TestInterviewEndpoints:
                     "answers": ["A1"],
                     "scores": [8],
                     "total_score": 8.0
-                }
+                },
+                headers=auth_headers
             )
             
             assert response.status_code in [200, 500]
+        finally:
+            # Clear the override after the test
+            app.dependency_overrides.clear()
 
-    def test_get_interview_history(self):
+    def test_get_interview_history(self, auth_headers):
         """Test get interview history endpoint."""
         from fastapi.testclient import TestClient
         from main import app
+        from routers.interview import get_current_user
+        from unittest.mock import MagicMock
         
-        with patch('supabase.create_client') as mock_create:
-            mock_client = MagicMock()
-            mock_table = MagicMock()
-            
-            # Mock count query
-            count_mock = MagicMock()
-            count_mock.select.return_value.eq.return_value.execute.return_value = MagicMock(count=0)
-            mock_client.table.return_value = count_mock
-            
-            # Mock data query  
-            data_mock = MagicMock()
-            data_mock.select.return_value.eq.return_value.order.return_value.range.return_value.execute.return_value = MagicMock(data=[])
-            mock_client.table.return_value = data_mock
-            
-            mock_create.return_value = mock_client
-            
+        # Create a mock user object that get_current_user should return
+        mock_user = MagicMock()
+        mock_user.id = "test-user-123"
+        mock_user.email = "test@example.com"
+        
+        # Use dependency_overrides to bypass authentication
+        app.dependency_overrides[get_current_user] = lambda: "test-user-123"
+        
+        try:
             client = TestClient(app)
-            response = client.get("/api/interview/history/test-user-123")
+            response = client.get(
+                "/api/interview/history/test-user-123",
+                headers=auth_headers
+            )
             
             assert response.status_code == 200
             data = response.json()
             assert "sessions" in data
             assert "pagination" in data
+        finally:
+            # Clear the override after the test
+            app.dependency_overrides.clear()
 
 
 class TestProfileEndpoints:
