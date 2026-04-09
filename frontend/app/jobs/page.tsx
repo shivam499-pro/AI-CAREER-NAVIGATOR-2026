@@ -28,6 +28,7 @@ export default function JobsPage() {
   const [targetCareer, setTargetCareer] = useState('Full Stack Developer')
   const [jobs, setJobs] = useState<any[]>([])
   const [jobsLoading, setJobsLoading] = useState(false)
+  const [jobsError, setJobsError] = useState<string | null>(null)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -79,13 +80,18 @@ export default function JobsPage() {
 
   const fetchRealJobs = async (query: string) => {
     setJobsLoading(true)
+    setJobsError(null)
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
       const response = await fetch(`${apiUrl}/api/jobs?query=${encodeURIComponent(query)}`)
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`)
+      }
       const data = await response.json()
       setJobs(data.jobs || [])
     } catch (err) {
       console.error("Failed to fetch jobs:", err)
+      setJobsError("Job search is currently unavailable. Please try again later.")
     } finally {
       setJobsLoading(false)
     }
@@ -338,6 +344,10 @@ export default function JobsPage() {
                     </motion.div>
                   ))}
                 </AnimatePresence>
+              </div>
+            ) : jobsError ? (
+              <div className="bg-[#1E293B] rounded-[2rem] border border-white/5 border-dashed p-20 text-center flex flex-col items-center">
+                 <p className="text-red-400 font-black uppercase tracking-widest text-xs mb-4">{jobsError}</p>
               </div>
             ) : (
               <div className="bg-[#1E293B] rounded-[2rem] border border-white/5 border-dashed p-20 text-center flex flex-col items-center">

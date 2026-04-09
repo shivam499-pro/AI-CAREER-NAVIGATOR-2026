@@ -16,7 +16,7 @@ async def search_jobs(query: str, location: str = None) -> list:
     api_key = os.getenv("SERPAPI_KEY")
     
     if not api_key:
-        return get_mock_jobs(query, location)
+        raise ValueError("SERPAPI_KEY is not configured. Job search is unavailable.")
     
     params = {
         "q": f"{query} jobs",
@@ -48,40 +48,6 @@ async def search_jobs(query: str, location: str = None) -> list:
             })
         
         return jobs
-
-def get_mock_jobs(query: str, location: str = None) -> list:
-    """
-    Return mock job data for development.
-    """
-    return [
-        {
-            "id": "1",
-            "title": f"Junior {query or 'Software Engineer'}",
-            "company": "Tech Solutions India",
-            "location": location or "Remote, India",
-            "type": "Full-time",
-            "url": "https://www.linkedin.com/jobs/search/",
-            "match_score": 92
-        },
-        {
-            "id": "2",
-            "title": f"{query or 'Full Stack Developer'}",
-            "company": "Global Dev Center",
-            "location": location or "Bangalore, KA",
-            "type": "Full-time",
-            "url": "https://www.linkedin.com/jobs/search/",
-            "match_score": 88
-        },
-        {
-            "id": "3",
-            "title": f"Intern - {query or 'Analyst'}",
-            "company": "Chennai Innovate Labs",
-            "location": location or "Chennai, TN",
-            "type": "Internship",
-            "url": "https://www.linkedin.com/jobs/search/",
-            "match_score": 85
-        }
-    ]
 
 def get_linkedin_jobs_url(keywords: str, location: str = None) -> str:
     """

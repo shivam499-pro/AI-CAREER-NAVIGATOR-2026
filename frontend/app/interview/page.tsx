@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import Navbar from '@/components/Navbar'
+import { toast } from 'sonner'
 import { 
   Brain, Loader2, ChevronRight, CheckCircle, XCircle,
   Lightbulb, ArrowRight, Copy, RefreshCw, MessageSquare, Mic, MicOff, Volume2,
@@ -234,6 +235,9 @@ export default function InterviewPage() {
           personality
         })
       })
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`)
+      }
       const data = await response.json()
       if (data.questions && data.questions.length > 0) {
         setQuestions(data.questions)
@@ -273,6 +277,9 @@ export default function InterviewPage() {
           user_id: user.id
         })
       })
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`)
+      }
       const feedback = await response.json()
       const newAnswer: Answer = {
         question: questions[currentQuestion].question,
@@ -297,6 +304,7 @@ export default function InterviewPage() {
       }, 1500)
     } catch (err) {
       console.error('Error submitting answer:', err)
+      toast.error("Failed to submit answer. Please try again.")
     } finally {
       setSubmitting(false)
     }
@@ -328,6 +336,9 @@ export default function InterviewPage() {
           user_id: user.id
         })
       })
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`)
+      }
       const feedback = await response.json()
       const newAnswer: Answer = {
         question: questions[currentQuestion].question,
@@ -348,8 +359,10 @@ export default function InterviewPage() {
       }
     } catch (err) {
       console.error('Error submitting answer:', err)
-    } finally {
+      toast.error("Failed to submit answer. Please try again.")
       setSubmitting(false)
+    } finally {
+      // State reset handled in catch block
     }
   }
 
@@ -482,7 +495,11 @@ export default function InterviewPage() {
           }
           recorder.start()
           setMediaRecorder(recorder)
-        } catch (err) { console.log(err) }
+        } catch (err) { 
+          console.log(err)
+          toast.error("Voice feature failed. Please try again.")
+          setIsRecording(false)
+        }
       }
       recognition.start()
       setIsRecording(true)
@@ -512,7 +529,10 @@ export default function InterviewPage() {
       })
       const data = await response.json()
       setCoachingHint(data)
-    } catch (err) { console.error(err) }
+    } catch (err) { 
+      console.error(err)
+      toast.error("Failed to fetch hint. Please try again.")
+    }
     finally { setHintLoading(false) }
   }
 

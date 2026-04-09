@@ -122,79 +122,6 @@ def sanitize_user_input(text: str, max_length: int = MAX_INPUT_LENGTH) -> str:
     
     return text.strip()
 
-MOCK_RESPONSE = {
-    "analysis": {
-        "experience_level": "Intermediate",
-        "experience_reason": "Candidate has a strong foundation in Python and React with multiple projects showing full-stack capabilities.",
-        "strengths": ["REST API development", "TypeScript/React expertise", "Database design", "System Architecture basics"],
-        "weaknesses": ["Advanced data structures", "Microservices orchestration", "Kubernetes experience is limited"]
-    },
-    "career_paths": [
-        {
-            "name": "Full Stack Engineer",
-            "match_percentage": 92,
-            "reason": "Perfect alignment with existing React+FastAPI project portfolio."
-        },
-        {
-            "name": "Backend Architect",
-            "match_percentage": 85,
-            "reason": "Strong logical structure in codebase and efficient database handling."
-        },
-        {
-            "name": "Frontend Lead",
-            "match_percentage": 78,
-            "reason": "Deep understanding of component lifecycle and state management."
-        }
-    ],
-    "skill_gaps": [
-        {
-            "skill": "Redis Caching",
-            "have": False,
-            "priority": 1,
-            "resources": [
-                "Official Redis Docs",
-                "Learn Redis with Python (Hussain Nasser)"
-            ]
-        },
-        {
-            "skill": "Docker Containerization",
-            "have": False,
-            "priority": 2,
-            "resources": [
-                "Docker for Beginners (Udemy)",
-                "Full Stack Containerization Guide"
-            ]
-        }
-    ],
-    "roadmap": {
-        "target_career": "Full Stack Developer",
-        "duration_months": 6,
-        "total_weeks": 24,
-        "milestones": [
-            {
-                "week": 1,
-                "title": "FastAPI Masterclass",
-                "description": "Deep dive into asynchronous programming and background tasks in Python.",
-                "skills": ["Python", "FastAPI"],
-                "deliverable": "Build a task queue processor"
-            },
-            {
-                "week": 2,
-                "title": "Frontend State Optimization",
-                "description": "Implement advanced caching and TanStack Query for data fetching.",
-                "skills": ["React", "React Query"],
-                "deliverable": "Optimize existing jobs dashboard"
-            },
-            {
-                "week": 4,
-                "title": "Infrastructure & Docker",
-                "description": "Learn to containerize and deploy with high availability.",
-                "skills": ["Docker", "Nginx"],
-                "deliverable": "Deploy project to a demo server"
-            }
-        ]
-    }
-}
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY is missing from .env file")
 
@@ -327,8 +254,6 @@ def run_combined_analysis(
     Single combined Gemini API call.
     Replaces all 6 separate calls with 1.
     """
-    if MOCK_MODE:
-        return {"success": True, "data": MOCK_RESPONSE}
 
     # Sanitize all user-provided inputs
     # Create sanitized copy of user_profile

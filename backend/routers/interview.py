@@ -2,7 +2,7 @@
 Interview Router
 Handles AI interview practice functionality
 """
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, Header, Depends
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from pydantic import BaseModel
@@ -21,6 +21,8 @@ router = APIRouter()
 # Initialize Supabase client
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+if not supabase_url or not supabase_key:
+    raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set in environment variables")
 supabase = create_client(supabase_url, supabase_key)
 
 
@@ -126,7 +128,8 @@ async def generate_questions(request: Request, body: GenerateQuestionsRequest):
 
 
 @router.post("/evaluate-answer")
-async def evaluate_answer(body : EvaluateAnswerRequest):
+@limiter.limit("10/minute")
+async def evaluate_answer(request: Request, body: EvaluateAnswerRequest):
     """
     Evaluate a user's interview answer.
     """
@@ -144,11 +147,37 @@ async def evaluate_answer(body : EvaluateAnswerRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def get_current_user(authorization: str = Header(None)) -> str:
+    """
+    Dependency to extract and verify the JWT token from Authorization header.
+    Returns the user_id from the token.
+    Raises HTTPException 401 if token is missing or invalid.
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing authorization header")
+    
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization header format")
+    
+    token = authorization.replace("Bearer ", "")
+    
+    try:
+        user_response = supabase.auth.get_user(token)
+        if not user_response.user:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        return user_response.user.id
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
 @router.post("/save-session")
-async def save_session(body: SaveSessionRequest):
+async def save_session(body: SaveSessionRequest, current_user_id: str = Depends(get_current_user)):
     """
     Save an interview session to the database.
     """
+    # Verify the user_id from the token matches the body
+    if current_user_id != body.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     try:
         session_data = {
             "user_id": body.user_id,
@@ -171,11 +200,15 @@ async def save_session(body: SaveSessionRequest):
 async def get_interview_history(
     user_id: str,
     page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(10, ge=1, le=50, description="Items per page")
+    limit: int = Query(10, ge=1, le=50, description="Items per page"),
+    current_user_id: str = Depends(get_current_user)
 ):
     """
     Get past interview sessions for a user with pagination.
     """
+    # Verify the user_id from the token matches the requested user_id
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     try:
         # Get total count
         count_response = supabase.table("interview_sessions").select(
@@ -210,12 +243,7 @@ async def get_interview_history(
         }
         
     except Exception as e:
-        return {
-            "sessions": [],
-            "count": 0,
-            "error": str(e),
-            "pagination": {"page": page, "limit": limit, "total": 0, "total_pages": 0}
-        }
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/question-hint")
@@ -266,10 +294,13 @@ No other text or markdown."""
 
 
 @router.get("/progress/{user_id}")
-async def get_user_progress(user_id: str):
+async def get_user_progress(user_id: str, current_user_id: str = Depends(get_current_user)):
     """
     Fetch user's progress data including sessions, rank, and streaks.
     """
+    # Verify the user_id from the token matches the requested user_id
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     try:
         # Fetch last 10 sessions
         sessions_response = supabase.table("interview_sessions").select(

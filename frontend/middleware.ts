@@ -6,6 +6,12 @@ const PUBLIC_ROUTES = ['/', '/auth/login', '/auth/signup', '/auth/callback', '/o
 
 export async function middleware(request: NextRequest) {
   const res = NextResponse.next()
+
+  // Skip auth check for API routes - FastAPI handles auth separately
+  if (request.nextUrl.pathname.startsWith('/api/')) {
+    return res
+  }
+
   const supabase = createMiddlewareClient({ req: request, res })
 
   // Use getUser() to properly validate the session token
