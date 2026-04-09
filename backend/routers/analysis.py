@@ -38,6 +38,7 @@ class StartAnalysisRequest(BaseModel):
 async def start_analysis(
     request: Request,
     body: StartAnalysisRequest,
+    current_user: any = Depends(get_current_user),
     authorization: Optional[str] = Header(None)
 ):
     """
@@ -48,6 +49,8 @@ async def start_analysis(
     4. Run AI analysis
     5. Save results to database
     """
+    if current_user.id != body.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     try:
         user_id = body.user_id
         
@@ -183,11 +186,14 @@ async def start_analysis(
 @router.get("/results/{user_id}")
 async def get_analysis_results(
     user_id: str,
+    current_user: any = Depends(get_current_user),
     authorization: Optional[str] = Header(None)
 ):
     """
     Get saved analysis results for a user.
     """
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     try:
         response = supabase.table("analyses").select("*").eq("user_id", user_id).execute()
         
@@ -216,11 +222,14 @@ async def get_analysis_results(
 @router.get("/status/{user_id}")
 async def check_analysis_status(
     user_id: str,
+    current_user: any = Depends(get_current_user),
     authorization: Optional[str] = Header(None)
 ):
     """
     Check if analysis exists for a user.
     """
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     try:
         response = supabase.table("analyses").select("id, experience_level, created_at").eq("user_id", user_id).execute()
         

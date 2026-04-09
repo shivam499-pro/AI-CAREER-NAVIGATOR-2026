@@ -2,7 +2,7 @@
 Streaks Router
 Handles user's interview streak tracking (like Duolingo)
 """
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Depends
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from pydantic import BaseModel
@@ -10,6 +10,7 @@ from supabase import create_client
 import os
 from dotenv import load_dotenv
 from datetime import date, timedelta
+from lib.auth import get_current_user
 
 # Load environment variables
 load_dotenv()
@@ -37,10 +38,12 @@ class StreakResponse(BaseModel):
 
 
 @router.get("/{user_id}")
-async def get_streak(user_id: str):
+async def get_streak(user_id: str, current_user: any = Depends(get_current_user)):
     """
     Fetch user's current streak data from Supabase table "user_streaks"
     """
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     try:
         response = supabase.table("user_streaks").select("*").eq("user_id", user_id).execute()
         
@@ -66,10 +69,14 @@ async def get_streak(user_id: str):
 
 
 @router.post("/update")
-async def update_streak(request: Request, body: UpdateStreakRequest):
+async def update_streak(body: UpdateStreakRequest, current_user: any = Depends(get_current_user)):
     """
     Update user's streak after completing an interview session
     """
+    if current_user.id != body.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
+    user_id = body.user_id
     try:
         user_id = body.user_id
         today = date.today()

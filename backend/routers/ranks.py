@@ -2,11 +2,12 @@
 Ranks Router
 Handles user's rank/level and XP progression system
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from supabase import create_client
 import os
 from dotenv import load_dotenv
+from lib.auth import get_current_user
 
 # Load environment variables
 load_dotenv()
@@ -82,10 +83,12 @@ class UpdateRankRequest(BaseModel):
 
 
 @router.get("/{user_id}")
-async def get_rank(user_id: str):
+async def get_rank(user_id: str, current_user: any = Depends(get_current_user)):
     """
     Fetch user's rank data from Supabase table "user_ranks"
     """
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     try:
         response = supabase.table("user_ranks").select("*").eq("user_id", user_id).execute()
         
@@ -116,10 +119,14 @@ async def get_rank(user_id: str):
 
 
 @router.post("/update")
-async def update_rank(body: UpdateRankRequest):
+async def update_rank(body: UpdateRankRequest, current_user: any = Depends(get_current_user)):
     """
     Update user's rank after completing an interview session
     """
+    if current_user.id != body.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
+    user_id = body.user_id
     try:
         user_id = body.user_id
         score = body.score
