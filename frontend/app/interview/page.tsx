@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -46,6 +46,7 @@ export default function InterviewPage() {
   const [careerPath, setCareerPath] = useState('Full Stack Developer')
   const [difficulty, setDifficulty] = useState('medium')
   const [personality, setPersonality] = useState('friendly')
+  const [interviewMode, setInterviewMode] = useState<'hr' | 'technical' | 'system_design'>('technical')
   const [pastSessions, setPastSessions] = useState(0)
   const [careerPaths, setCareerPaths] = useState<string[]>([])
   
@@ -84,6 +85,102 @@ export default function InterviewPage() {
   const [audioChunks, setAudioChunks] = useState<Blob[]>([])
   const [audioSupported, setAudioSupported] = useState(true)
   
+  // Chat messages state
+  const [messages, setMessages] = useState<{ role: 'ai' | 'user'; text: string }[]>([])
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  
+  // AI transition message state
+  const [showingTransition, setShowingTransition] = useState(false)
+  const [transitionMessage, setTransitionMessage] = useState<string | null>(null)
+  
+  // AI transition messages based on interviewMode
+  const hrMessages = [
+    "Tell me more about your experience.",
+    "How did you handle that situation?",
+    "Can you elaborate on your role?"
+  ]
+  
+  const technicalModeMessages = [
+    "Explain the logic clearly.",
+    "Be precise.",
+    "What is the complexity?"
+  ]
+  
+  const systemDesignMessages = [
+    "Design perspective: Think about scalability.",
+    "How would this work at scale?",
+    "Consider architecture decisions."
+  ]
+
+  // AI transition messages based on personality (tone adjustment)
+  const friendlyMessages = [
+    "That's a great start!",
+    "Nice! Let's explore more.",
+    "You're doing well, next question..."
+  ]
+  
+  const technicalMessages = [
+    "Be more precise.",
+    "That's vague. Clarify.",
+    "Focus on technical depth."
+  ]
+  
+  const faangMessages = [
+    "That's not strong enough.",
+    "You need a better answer.",
+    "Let's push deeper."
+  ]
+  
+  const getRandomTransitionMessage = () => {
+    // First choose messages based on interviewMode
+    let modeMessages: string[]
+    switch (interviewMode) {
+      case 'hr':
+        modeMessages = hrMessages
+        break
+      case 'system_design':
+        modeMessages = systemDesignMessages
+        break
+      default:
+        modeMessages = technicalModeMessages
+    }
+    
+    // Then adjust tone based on personality
+    let toneMessages: string[]
+    switch (personality) {
+      case 'strict':
+        toneMessages = technicalMessages
+        break
+      case 'google':
+        toneMessages = faangMessages
+        break
+      default:
+        toneMessages = friendlyMessages
+    }
+    
+    // Combine: 50% chance from mode, 50% chance from personality tone
+    const useModeMessage = Math.random() > 0.5
+    const messages = useModeMessage ? modeMessages : toneMessages
+    return messages[Math.floor(Math.random() * messages.length)]
+  }
+  
+  // Get AI label based on personality
+  const getAiLabel = () => {
+    switch (personality) {
+      case 'strict':
+        return 'Technical Interviewer'
+      case 'google':
+        return 'FAANG Interviewer'
+      default:
+        return 'AI Coach'
+    }
+  }
+
+  // Auto-scroll to latest message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+  
   // Simulation mode state
   const [simMode, setSimMode] = useState(false)
   const [questionTimeLeft, setQuestionTimeLeft] = useState(120)
@@ -92,6 +189,23 @@ export default function InterviewPage() {
   
   // Results state
   const [totalScore, setTotalScore] = useState(0)
+
+  // ─────────────────────────────────────────────
+  // Anti-Cheat: Authenticity Tracking (Phase 1)
+  // ─────────────────────────────────────────────
+  // Paste prevention state
+  const [pasteAttempted, setPasteAttempted] = useState(false)
+
+  // Typing behavior tracking
+  const [typingBehavior, setTypingBehavior] = useState<{startTime: number | null, keystrokes: number, typingDuration: number}>({
+    startTime: null,
+    keystrokes: 0,
+    typingDuration: 0
+  })
+  // Answer time tracking per question
+  const [questionStartTimes, setQuestionStartTimes] = useState<{[key: number]: number}>({})
+  // Authenticity state
+  const [authenticityStatus, setAuthenticityStatus] = useState<'analyzing' | 'genuine' | 'suspicious'>('analyzing')
   
   // Streak state
   const [streakData, setStreakData] = useState<{current_streak: number, longest_streak: number, last_practice_date: string | null, total_sessions: number} | null>(null)
@@ -245,6 +359,8 @@ export default function InterviewPage() {
         setAnswers([])
         setAnswer('')
         setScreen('interview')
+        // Add first question as AI message
+        setMessages([{ role: 'ai', text: data.questions[0].question }])
         const interval = setInterval(() => {
           setElapsedTime(prev => prev + 1)
         }, 1000)
@@ -264,6 +380,13 @@ export default function InterviewPage() {
     }
     setShowTimeUpMsg(true)
     if (!user) return
+    
+    // Anti-Cheat: Calculate typing duration before submit
+    if (typingBehavior.startTime) {
+      const duration = Date.now() - typingBehavior.startTime
+      setTypingBehavior(prev => ({...prev, typingDuration: duration}))
+    }
+    
     setSubmitting(true)
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -288,16 +411,39 @@ export default function InterviewPage() {
       }
       const updatedAnswers = [...answers, newAnswer]
       setAnswers(updatedAnswers)
+      // Push user message to chat
+      setMessages(prev => [...prev, { role: 'user', text: answer }])
       setVoiceStatus('idle')
       setUsedVoiceInput(false)
       setCommScore(null)
+      
+      // CONVERSATIONAL TRANSITION: Show transition message before next question
       setTimeout(() => {
         setShowTimeUpMsg(false)
         if (currentQuestion < questions.length - 1) {
-          setCurrentQuestion(prev => prev + 1)
-          setAnswer('')
-          setShowHint(false)
-          setQuestionTimeLeft(120)
+          // Show random transition message
+          const transition = getRandomTransitionMessage()
+          setTransitionMessage(transition)
+          setShowingTransition(true)
+          
+          // Add transition message to chat
+          setMessages(prev => [...prev, { role: 'ai', text: transition }])
+          
+          // Wait 1.5 seconds, then show next question
+          setTimeout(() => {
+            setShowingTransition(false)
+            setTransitionMessage(null)
+            setCurrentQuestion(prev => prev + 1)
+            // Push next AI question to chat
+            setMessages(prev => [...prev, { role: 'ai', text: questions[currentQuestion + 1].question }])
+            setAnswer('')
+            setShowHint(false)
+            setQuestionTimeLeft(120)
+            // Anti-Cheat: Reset typing behavior for next question
+            setTypingBehavior({startTime: null, keystrokes: 0, typingDuration: 0})
+            // Reset authenticity status for next question
+            setAuthenticityStatus('analyzing')
+          }, 1500)
         } else {
           finishInterview(updatedAnswers)
         }
@@ -323,6 +469,35 @@ export default function InterviewPage() {
       }
       return
     }
+    
+    // Anti-Cheat: Calculate typing duration before submit
+    if (typingBehavior.startTime) {
+      const duration = Date.now() - typingBehavior.startTime
+      setTypingBehavior(prev => ({...prev, typingDuration: duration}))
+      
+      // ─────────────────────────────────────────────────────────────
+      // Authenticity Detection Logic
+      // ─────────────────────────────────────────────────────────────
+      const answerLength = answer.trim().length
+      const keystrokes = typingBehavior.keystrokes
+      
+      // Rule 1: Too fast - less than 5 seconds for a meaningful answer
+      const isTooFast = duration < 5000 && answerLength > 50
+      
+      // Rule 2: Low keystrokes but high answer length (possible paste/copy)
+      // Calculate expected keystrokes based on answer length
+      const keystrokesPerChar = answerLength > 0 ? keystrokes / answerLength : 0
+      const isLowKeystrokes = keystrokesPerChar < 0.3 && answerLength > 100
+      
+      // Apply detection rules
+      if (isTooFast || isLowKeystrokes) {
+        setAuthenticityStatus('suspicious')
+      } else {
+        setAuthenticityStatus('genuine')
+      }
+      // ─────────────────────────────────────────────────────────────
+    }
+    
     setSubmitting(true)
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -347,13 +522,36 @@ export default function InterviewPage() {
       }
       const updatedAnswers = [...answers, newAnswer]
       setAnswers(updatedAnswers)
+      // Push user message to chat
+      setMessages(prev => [...prev, { role: 'user', text: answer }])
+      
+      // CONVERSATIONAL TRANSITION: Show transition message before next question
       if (currentQuestion < questions.length - 1) {
-        setCurrentQuestion(prev => prev + 1)
-        setAnswer('')
-        setShowHint(false)
-        setVoiceStatus('idle')
-        setUsedVoiceInput(false)
-        setCommScore(null)
+        // Show random transition message
+        const transition = getRandomTransitionMessage()
+        setTransitionMessage(transition)
+        setShowingTransition(true)
+        
+        // Add transition message to chat
+        setMessages(prev => [...prev, { role: 'ai', text: transition }])
+        
+        // Wait 1.5 seconds, then show next question
+        setTimeout(() => {
+          setShowingTransition(false)
+          setTransitionMessage(null)
+          setCurrentQuestion(prev => prev + 1)
+          // Push next AI question to chat
+          setMessages(prev => [...prev, { role: 'ai', text: questions[currentQuestion + 1].question }])
+          setAnswer('')
+          setShowHint(false)
+          setVoiceStatus('idle')
+          setUsedVoiceInput(false)
+          setCommScore(null)
+          // Anti-Cheat: Reset typing behavior for next question
+          setTypingBehavior({startTime: null, keystrokes: 0, typingDuration: 0})
+          // Reset authenticity status for next question
+          setAuthenticityStatus('analyzing')
+        }, 1500)
       } else {
         finishInterview(updatedAnswers)
       }
@@ -740,6 +938,34 @@ export default function InterviewPage() {
                     </div>
                   </div>
 
+                  {/* Interview Mode Selection */}
+                  <div className="space-y-3">
+                    <label className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                      <Brain className="w-4 h-4" /> Interview Round
+                    </label>
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { id: 'hr', e: '👋', title: 'HR Round', d: 'Behavioral questions' },
+                        { id: 'technical', e: '💻', title: 'Technical', d: 'Coding depth' },
+                        { id: 'system_design', e: '🏗️', title: 'System Design', d: 'Architecture' }
+                      ].map((mode) => (
+                        <button
+                          key={mode.id}
+                          onClick={() => setInterviewMode(mode.id as 'hr' | 'technical' | 'system_design')}
+                          className={`p-4 rounded-2xl border-2 text-center transition-all ${
+                            interviewMode === mode.id
+                              ? 'bg-primary-violet/10 border-primary-violet shadow-[0_0_15px_rgba(108,63,200,0.2)]'
+                              : 'bg-[#0F172A] border-white/5 opacity-60 hover:opacity-100 hover:border-white/20'
+                          }`}
+                        >
+                          <div className="text-3xl mb-2">{mode.e}</div>
+                          <div className="text-[10px] font-black uppercase tracking-widest mb-1 text-white">{mode.title}</div>
+                          <div className="text-[9px] text-slate-500 font-bold">{mode.d}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Modes */}
                   <div className="flex gap-3">
                      {[
@@ -792,6 +1018,9 @@ export default function InterviewPage() {
                   <div className="flex items-center gap-3">
                     <div className="px-4 py-1.5 bg-primary-violet/20 border border-primary-violet/30 rounded-full text-xs font-black text-primary-violet uppercase tracking-widest">
                        Phase {currentQuestion + 1} / {questions.length}
+                    </div>
+                    <div className="px-4 py-1.5 bg-blue-500/20 border border-blue-500/30 rounded-full text-xs font-black text-blue-400 uppercase tracking-widest">
+                       {interviewMode === 'hr' ? 'HR Round' : interviewMode === 'technical' ? 'Technical Round' : 'System Design'}
                     </div>
                     {simMode && (
                       <div className="px-4 py-1.5 bg-orange-500/20 border border-orange-500/30 rounded-full text-xs font-black text-orange-400 uppercase tracking-widest flex items-center gap-2">
@@ -891,11 +1120,68 @@ export default function InterviewPage() {
                   )}
                   </AnimatePresence>
                   
+                  {/* Chat Messages Display */}
+                  {messages.length > 0 && (
+                    <div className="mb-6 space-y-4 max-h-[300px] overflow-y-auto pr-2">
+                      {messages.map((msg, idx) => (
+                        <div 
+                          key={idx}
+                          className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div 
+                            className={`max-w-[85%] rounded-2xl p-4 ${
+                              msg.role === 'ai' 
+                                ? 'bg-slate-700/50 border border-white/5' 
+                                : 'bg-primary-violet/20 border border-primary-violet/30'
+                            }`}
+                          >
+                            <div className="text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2">
+                              {msg.role === 'ai' ? (
+                                <><Brain className="w-3 h-3 text-primary-violet" /> <span className="text-primary-violet">{getAiLabel()}</span></>
+                              ) : (
+                                <><span className="text-green-400">You</span></>
+                              )}
+                            </div>
+                            <p className="text-sm text-slate-200 leading-relaxed">{msg.text}</p>
+                          </div>
+                        </div>
+                      ))}
+                      <div ref={messagesEndRef} />
+                    </div>
+                  )}
+
                   {/* Textarea */}
                   <div className="relative">
                     <textarea
                       value={answer}
-                      onChange={(e) => setAnswer(e.target.value)}
+                      onChange={(e) => {
+                         const newValue = e.target.value
+                         setAnswer(newValue)
+                         // Anti-Cheat: Track typing behavior
+                         if (!typingBehavior.startTime && newValue.length > 0) {
+                           setTypingBehavior(prev => ({...prev, startTime: Date.now()}))
+                         }
+                         // Track keystrokes
+                         if (newValue.length > answer.length) {
+                           setTypingBehavior(prev => ({
+                             ...prev,
+                             keystrokes: prev.keystrokes + (newValue.length - answer.length)
+                           }))
+                         }
+                       }}
+                       // Anti-Cheat: Disable paste (Ctrl+V and right-click)
+                       onPaste={(e) => {
+                         e.preventDefault()
+                         setPasteAttempted(true)
+                         toast.error("Paste is disabled to encourage genuine interview practice")
+                         setTimeout(() => setPasteAttempted(false), 3000)
+                       }}
+                       onContextMenu={(e) => {
+                         e.preventDefault()
+                         setPasteAttempted(true)
+                         toast.error("Paste is disabled to encourage genuine interview practice")
+                         setTimeout(() => setPasteAttempted(false), 3000)
+                       }}
                       placeholder="Synthesize your response..."
                       aria-label="Your answer to the interview question"
                       className="w-full bg-[#0F172A] p-8 rounded-2xl border border-white/5 focus:border-primary-violet/50 focus:ring-4 focus:ring-primary-violet/10 outline-none min-h-[250px] text-lg font-medium leading-relaxed"
@@ -909,6 +1195,35 @@ export default function InterviewPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Authenticity Detection Indicator */}
+                  {screen === 'interview' && authenticityStatus !== 'analyzing' && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }} 
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`mt-4 p-4 rounded-xl border flex items-center gap-3 ${
+                        authenticityStatus === 'genuine' 
+                          ? 'bg-green-500/10 border-green-500/30' 
+                          : 'bg-yellow-500/10 border-yellow-500/30'
+                      }`}
+                    >
+                      <div className={`text-xl ${
+                        authenticityStatus === 'genuine' ? 'text-green-400' : 'text-yellow-400'
+                      }`}>
+                        {authenticityStatus === 'genuine' ? '🟢' : '🟡'}
+                      </div>
+                      <div>
+                        <div className={`text-sm font-bold ${
+                          authenticityStatus === 'genuine' ? 'text-green-400' : 'text-yellow-400'
+                        }`}>
+                          {authenticityStatus === 'genuine' ? 'Genuine Response' : 'Suspicious Activity Detected'}
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-medium">
+                          Your response is being analyzed for authenticity
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
 
                   {/* Comm Score Bubble */}
                   {!simMode && usedVoiceInput && commScore && (
@@ -996,6 +1311,135 @@ export default function InterviewPage() {
                   <p className="text-slate-400 font-bold text-lg max-w-md">Precision intelligence verified for {careerPath} maturity profile.</p>
                 </div>
               </div>
+
+              {/* Skill Breakdown */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-black uppercase tracking-widest text-slate-400 flex items-center gap-3">
+                   <Target className="w-5 h-5" /> Performance Insights
+                </h3>
+                <div className="grid grid-cols-3 gap-4">
+                  {/* Communication Score */}
+                  {(() => {
+                    const avgLength = answers.length > 0 ? answers.reduce((sum, a) => sum + a.answer.length, 0) / answers.length : 0
+                    const commScore = Math.min(100, Math.round((avgLength / 200) * 100))
+                    return (
+                      <div className="bg-[#1E293B] p-6 rounded-2xl border border-white/5">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-xs font-black uppercase tracking-widest text-slate-400">Communication</span>
+                          <span className={`text-xl font-black ${commScore >= 70 ? 'text-green-400' : commScore >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>{commScore}%</span>
+                        </div>
+                        <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${commScore}%` }}
+                            transition={{ duration: 1, delay: 0.2 }}
+                            className={`h-full ${commScore >= 70 ? 'bg-green-500' : commScore >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })()}
+                  
+                  {/* Technical Depth */}
+                  {(() => {
+                    const avgScore = answers.length > 0 ? answers.reduce((sum, a) => sum + (a.feedback?.score || 0), 0) / answers.length : 0
+                    const techScore = Math.min(100, Math.round(avgScore * 10))
+                    return (
+                      <div className="bg-[#1E293B] p-6 rounded-2xl border border-white/5">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-xs font-black uppercase tracking-widest text-slate-400">Technical Depth</span>
+                          <span className={`text-xl font-black ${techScore >= 70 ? 'text-green-400' : techScore >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>{techScore}%</span>
+                        </div>
+                        <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${techScore}%` }}
+                            transition={{ duration: 1, delay: 0.4 }}
+                            className={`h-full ${techScore >= 70 ? 'bg-green-500' : techScore >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })()}
+                  
+                  {/* Confidence Level */}
+                  {(() => {
+                    // Based on typing duration - longer time = more confident
+                    const avgDuration = answers.length > 0 ? answers.reduce((sum, a) => sum + Math.max(1, a.answer.length / 10), 0) / answers.length : 0 // rough estimate: chars/keystroke
+                    const confScore = Math.min(100, Math.round((avgDuration / 30) * 100))
+                    return (
+                      <div className="bg-[#1E293B] p-6 rounded-2xl border border-white/5">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-xs font-black uppercase tracking-widest text-slate-400">Confidence</span>
+                          <span className={`text-xl font-black ${confScore >= 70 ? 'text-green-400' : confScore >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>{confScore}%</span>
+                        </div>
+                        <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${confScore}%` }}
+                            transition={{ duration: 1, delay: 0.6 }}
+                            className={`h-full ${confScore >= 70 ? 'bg-green-500' : confScore >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+
+              {/* Performance Summary */}
+              {(() => {
+                const avgScore = answers.length > 0 ? answers.reduce((sum, a) => sum + (a.feedback?.score || 0), 0) / answers.length : 0
+                const avgLength = answers.length > 0 ? answers.reduce((sum, a) => sum + a.answer.length, 0) / answers.length : 0
+                
+                let summary = ""
+                if (avgScore >= 7) {
+                  if (avgLength < 100) summary = "Strong in technical depth, but needs improvement in communication clarity."
+                  else summary = "Excellent performance across both technical and communication skills."
+                } else if (avgScore >= 4) {
+                  if (avgLength < 100) summary = "Average technical depth. Consider expanding your answers for better clarity."
+                  else summary = "Good communication skills. Focus on technical depth for higher scores."
+                } else {
+                  if (avgLength < 100) summary = "Needs improvement in both technical depth and communication clarity."
+                  else summary = "Good communication but technical depth needs more preparation."
+                }
+                
+                return (
+                  <div className="bg-[#1E293B] p-6 rounded-2xl border border-white/5">
+                    <div className="flex items-center gap-3 mb-2">
+                      <Lightbulb className="w-5 h-5 text-primary-violet" />
+                      <span className="text-xs font-black uppercase tracking-widest text-primary-violet">Performance Summary</span>
+                    </div>
+                    <p className="text-slate-200 font-medium">{summary}</p>
+                  </div>
+                )
+              })()}
+
+              {/* Improvement Suggestions */}
+              {(() => {
+                const avgScore = answers.length > 0 ? answers.reduce((sum, a) => sum + (a.feedback?.score || 0), 0) / answers.length : 0
+                const avgLength = answers.length > 0 ? answers.reduce((sum, a) => sum + a.answer.length, 0) / answers.length : 0
+                
+                const suggestions: string[] = []
+                if (avgLength < 100) suggestions.push("Try structuring answers using STAR method")
+                if (avgScore < 5) suggestions.push("Explain concepts more clearly with examples")
+                suggestions.push("Take more time before answering to structure your thoughts")
+                
+                return (
+                  <div className="bg-[#1E293B] p-6 rounded-2xl border border-white/5 space-y-3">
+                    <div className="flex items-center gap-3 mb-2">
+                      <Zap className="w-5 h-5 text-orange-400" />
+                      <span className="text-xs font-black uppercase tracking-widest text-orange-400">Improvement Suggestions</span>
+                    </div>
+                    {suggestions.slice(0, 3).map((s, i) => (
+                      <div key={i} className="flex items-center gap-3 text-slate-300 font-medium">
+                        <ChevronRight className="w-4 h-4 text-orange-400" />
+                        {s}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
 
               {/* Badges Earned? */}
               {newBadge && (
