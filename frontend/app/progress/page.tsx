@@ -10,7 +10,11 @@ import { Button } from '@/components/ui/button'
 import { 
   Loader2, ArrowLeft, Flame, Target, 
   Mail, Calendar, Trophy, Zap, ChevronRight, Sparkles,
-  BarChart3, LineChart as LineChartIcon, Activity
+  BarChart3, LineChart as LineChartIcon, Activity,
+  Brain,
+  AlertTriangle, TrendingUp, TrendingDown, Minus,
+  Rocket, CheckCircle, Lightbulb, MessageSquare, Briefcase,
+  Bot
 } from 'lucide-react'
 import { 
   XAxis, YAxis, CartesianGrid, 
@@ -33,6 +37,20 @@ interface ProgressData {
     longest_streak: number
     total_sessions: number
   }
+}
+
+// Career Evolution API response type
+interface CareerEvolution {
+  user_id: string
+  career_paths: Array<{
+    career_path: string
+    avg_score: number
+    trend: 'improving' | 'stable' | 'declining'
+    volatility: number
+    total_sessions: number
+    confidence: number
+  }>
+  overall_growth_state: 'growing' | 'stagnating' | 'declining'
 }
 
 // ============================================
@@ -391,6 +409,7 @@ export default function ProgressPage() {
   const [error, setError] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [progressData, setProgressData] = useState<ProgressData | null>(null)
+  const [careerEvolution, setCareerEvolution] = useState<CareerEvolution | null>(null)
   const [userEmail, setUserEmail] = useState('')
   const [sendingReport, setSendingReport] = useState(false)
   const [reportSent, setReportSent] = useState(false)
@@ -416,13 +435,33 @@ export default function ProgressPage() {
     }
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiUrl}/api/interview/progress/${userId}`)
-      if (response.ok) {
-        const data = await response.json()
+      
+      // Fetch both APIs in parallel
+      const [progressResponse, evolutionResponse] = await Promise.all([
+        fetch(`${apiUrl}/api/interview/progress/${userId}`),
+        fetch(`${apiUrl}/api/career/evolution/${userId}`).catch(() => null)
+      ])
+      
+      // Handle progress data
+      if (progressResponse.ok) {
+        const data = await progressResponse.json()
         setProgressData(data)
         setError(false)
       } else {
         setError(true)
+      }
+      
+      // Handle evolution data (non-critical, don't fail if this errors)
+      if (evolutionResponse && evolutionResponse.ok) {
+        try {
+          const evolutionData = await evolutionResponse.json()
+          setCareerEvolution(evolutionData)
+        } catch {
+          // Fallback - evolution data not available yet
+          setCareerEvolution(null)
+        }
+      } else {
+        setCareerEvolution(null)
       }
     } catch (err) {
       console.error('Error fetching progress:', err)
@@ -482,6 +521,85 @@ export default function ProgressPage() {
   const copilot = useMemo(() => {
     return generateCopilotInsights(analysis, progressData?.sessions?.length || 0)
   }, [analysis, progressData?.sessions?.length])
+
+  // Career Intelligence Score - Combined metric from readiness, evolution confidence, and trend stability
+  const intelligenceScore = useMemo(() => {
+    const readiness = analysis.readinessScore
+    
+    // Get evolution metrics if available
+    let evolutionConfidence = 0
+    let trendStability = 50 // Default to middle (50%)
+    
+    if (careerEvolution?.career_paths && careerEvolution.career_paths.length > 0) {
+      // Average confidence from all career paths
+      evolutionConfidence = (careerEvolution.career_paths.reduce(
+        (sum, path) => sum + (path.confidence || 0), 0
+      ) / careerEvolution.career_paths.length) * 100
+      
+      // Overall growth state: growing = 100, stagnating = 50, declining = 0
+      const growthState = careerEvolution.overall_growth_state || 'stagnating'
+      if (growthState === 'growing') trendStability = 100
+      else if (growthState === 'declining') trendStability = 0
+      else trendStability = 50
+    }
+    
+    // Weighted average calculation
+    const score = Math.round(
+      (readiness * 0.4) +
+      (evolutionConfidence * 0.35) +
+      (trendStability * 0.25)
+    )
+    
+    return Math.min(100, Math.max(0, score))
+  }, [analysis.readinessScore, careerEvolution])
+
+  // ============================================
+  // TASK 1: CAREER MODE SYSTEM
+  // Derive UI mode from readinessScore
+  // ============================================
+  const careerMode = useMemo(() => {
+    if (!progressData) return 'loading'
+    
+    const score = analysis.readinessScore ?? 0
+    
+    if (score < 40) return 'foundation'
+    if (score < 70) return 'growth'
+    return 'job_ready'
+  }, [progressData, analysis.readinessScore])
+
+  // ============================================
+  // TASK 3: AI NEXT BEST ACTION ENGINE
+  // ============================================
+  const nextBestAction = useMemo(() => {
+    const score = analysis.readinessScore ?? 0
+    const growthState = careerEvolution?.overall_growth_state || 'stagnating'
+    
+    if (score < 40) {
+      return 'Focus on fundamentals: Data Structures, Problem Solving'
+    }
+    
+    if (score < 70) {
+      return 'Practice mock interviews + improve weak categories'
+    }
+    
+    return 'Apply for internships + advanced interview rounds'
+  }, [analysis.readinessScore, careerEvolution])
+
+  // ============================================
+  // TASK 5: INTELLIGENCE SCORE LABEL
+  // ============================================
+  const intelligenceLabel = useMemo(() => {
+    switch (careerMode) {
+      case 'foundation':
+        return 'Building Core Skills'
+      case 'growth':
+        return 'Improving Consistently'
+      case 'job_ready':
+        return 'Interview Ready'
+      default:
+        return 'Analyzing...'
+    }
+  }, [careerMode])
 
   const getNextLevelXP = (level: number) => {
     const levels = [0, 100, 250, 500, 900, 1400, 2000]
@@ -631,6 +749,69 @@ export default function ProgressPage() {
 
   // Empty state - no interview data yet
   const hasNoData = !progressData || !progressData.sessions || progressData.sessions.length === 0
+
+  // ============================================
+  // TASK 2: ADAPTIVE HEADER BANNER
+  // Dynamic header based on career mode
+  // ============================================
+  const renderAdaptiveBanner = () => {
+    if (!progressData || hasNoData) return null
+
+    const bannerConfig = {
+      foundation: {
+        title: 'Foundation Building Phase',
+        subtitle: 'Focus on core skills before advanced challenges',
+        gradient: 'from-red-600 to-orange-600',
+        Icon: AlertTriangle,
+        iconColor: 'text-red-400',
+        bgGlow: 'bg-red-500/20',
+        borderColor: 'border-red-500/30'
+      },
+      growth: {
+        title: 'Skill Growth Phase',
+        subtitle: 'You are improving steadily. Keep consistency.',
+        gradient: 'from-yellow-500 to-orange-500',
+        Icon: TrendingUp,
+        iconColor: 'text-yellow-400',
+        bgGlow: 'bg-yellow-500/20',
+        borderColor: 'border-yellow-500/30'
+      },
+      job_ready: {
+        title: 'Job Ready Phase 🚀',
+        subtitle: 'You are ready for real interview opportunities',
+        gradient: 'from-green-500 to-emerald-600',
+        Icon: Rocket,
+        iconColor: 'text-green-400',
+        bgGlow: 'bg-green-500/20',
+        borderColor: 'border-green-500/30'
+      }
+    }
+
+    const config = bannerConfig[careerMode as keyof typeof bannerConfig] || bannerConfig.foundation
+    const BannerIcon = config.Icon
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className={`mb-8 p-6 rounded-3xl border ${config.borderColor} bg-gradient-to-r ${config.gradient} relative overflow-hidden`}
+      >
+        <div className={`absolute -top-20 -right-20 w-64 h-64 ${config.bgGlow} rounded-full blur-[100px]`} />
+        <div className="relative z-10 flex items-center gap-4">
+          <div className={`p-4 rounded-2xl ${config.bgGlow}`}>
+            <BannerIcon className={`w-8 h-8 ${config.iconColor}`} />
+          </div>
+          <div>
+            <h2 className="text-2xl font-black text-white">{config.title}</h2>
+            <p className="text-white/80 font-medium">{config.subtitle}</p>
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
+
+
   if (hasNoData) {
     return (
       <div className="min-h-screen bg-[#0F172A] text-white">
@@ -692,6 +873,9 @@ export default function ProgressPage() {
           variants={containerVariants}
           className="max-w-5xl mx-auto"
         >
+          {/* Adaptive Header Banner */}
+          {renderAdaptiveBanner()}
+
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
             <div className="flex items-center gap-6">
               <Link href="/interview">
@@ -751,14 +935,24 @@ export default function ProgressPage() {
                 glow: 'shadow-[0_0_15px_rgba(234,179,8,0.2)]',
                 border: 'border-yellow-500/20'
               },
-              { 
-                label: 'Sessions', 
-                val: totalSessions, 
-                icon: Target, 
-                color: 'text-blue-400', 
+              {
+                label: 'Sessions',
+                val: totalSessions,
+                icon: Target,
+                color: 'text-blue-400',
                 bg: 'bg-blue-500/10',
                 glow: 'shadow-[0_0_15px_rgba(59,130,246,0.2)]',
                 border: 'border-blue-500/20'
+              },
+              {
+                label: 'Intelligence',
+                val: intelligenceScore,
+                icon: Brain,
+                sublabel: intelligenceLabel,
+                color: intelligenceScore >= 70 ? 'text-green-400' : intelligenceScore >= 40 ? 'text-yellow-400' : 'text-red-400',
+                bg: intelligenceScore >= 70 ? 'bg-green-500/10' : intelligenceScore >= 40 ? 'bg-yellow-500/10' : 'bg-red-500/10',
+                glow: intelligenceScore >= 70 ? 'shadow-[0_0_15px_rgba(34,197,94,0.3)]' : intelligenceScore >= 40 ? 'shadow-[0_0_15px_rgba(234,179,8,0.3)]' : 'shadow-[0_0_15px_rgba(239,68,68,0.3)]',
+                border: intelligenceScore >= 70 ? 'border-green-500/20' : intelligenceScore >= 40 ? 'border-yellow-500/20' : 'border-red-500/20'
               }
             ].map((stat, i) => (
               <motion.div 
@@ -776,16 +970,71 @@ export default function ProgressPage() {
                     {typeof stat.val === 'number' ? stat.val.toLocaleString() : stat.val}
                   </div>
                   <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">{stat.label}</div>
+                  {/* Task 5: Intelligence Label - displayed below score */}
+                  {(stat as any).sublabel && (
+                    <div className="text-[9px] font-medium text-slate-400 mt-1">{(stat as any).sublabel}</div>
+                  )}
                 </div>
               </motion.div>
             ))}
           </div>
 
+          {/* AI Career Action Engine - NEW TASK 4 */}
+          {progressData?.sessions && progressData.sessions.length > 0 && (
+            <motion.div
+              variants={itemVariants}
+              className="bg-gradient-to-r from-cyan-600/20 to-blue-600/20 rounded-3xl border border-cyan-500/30 p-6 mb-8 relative overflow-hidden"
+            >
+              <div className="absolute -top-10 -right-10 w-32 h-32 bg-cyan-500 opacity-10 rounded-full blur-[60px]" />
+              <div className="flex items-center gap-3 mb-4 relative z-10">
+                <div className="p-2 rounded-xl bg-cyan-500/20 border border-cyan-500/30">
+                  <Zap className="w-5 h-5" />
+                </div>
+                <h2 className="text-lg font-black uppercase tracking-widest text-white">AI Career Action Engine</h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
+                {/* Next Best Action */}
+                <div className="bg-[#0F172A] rounded-xl border border-white/5 p-4 col-span-1 md:col-span-2">
+                  <div className="text-xs font-black uppercase tracking-widest text-cyan-400 mb-2">Next Best Action</div>
+                  <p className="text-white font-medium text-sm">{nextBestAction}</p>
+                </div>
+                {/* Current Mode */}
+                <div className="bg-[#0F172A] rounded-xl border border-white/5 p-4">
+                  <div className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Current Mode</div>
+                  <div className={`text-lg font-black ${
+                    careerMode === 'foundation' ? 'text-red-400' :
+                    careerMode === 'growth' ? 'text-yellow-400' : 'text-green-400'
+                  }`}>
+                    {careerMode === 'foundation' && '🏗️ Foundation'}
+                    {careerMode === 'growth' && '📈 Growth'}
+                    {careerMode === 'job_ready' && '🚀 Job Ready'}
+                  </div>
+                </div>
+                {/* Growth State */}
+                <div className="bg-[#0F172A] rounded-xl border border-white/5 p-4">
+                  <div className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Growth State</div>
+                  <div className={`text-lg font-black ${
+                    careerEvolution?.overall_growth_state === 'growing' ? 'text-green-400' :
+                    careerEvolution?.overall_growth_state === 'declining' ? 'text-red-400' : 'text-yellow-400'
+                  }`}>
+                    {careerEvolution?.overall_growth_state === 'growing' && '↗️ Growing'}
+                    {careerEvolution?.overall_growth_state === 'declining' && '↘️ Declining'}
+                    {(!careerEvolution?.overall_growth_state || careerEvolution?.overall_growth_state === 'stagnating') && '➡️ Stagnating'}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {/* Career Intelligence Panel - AI Insights */}
           {progressData?.sessions && progressData.sessions.length > 0 && (
             <motion.div 
               variants={itemVariants}
-              className="bg-[#1E293B] rounded-3xl border border-white/5 p-8 relative overflow-hidden mb-12"
+              className={`bg-[#1E293B] rounded-3xl border p-8 relative overflow-hidden mb-12 transition-all ${
+                careerMode === 'foundation' && progressData.sessions.length > 0
+                  ? 'border-red-500/50 ring-2 ring-red-500/20'
+                  : 'border-white/5'
+              }`}
             >
               <div className="absolute top-0 right-0 p-8 opacity-5">
                 <Sparkles className="w-32 h-32" />
@@ -929,15 +1178,19 @@ export default function ProgressPage() {
           {progressData?.sessions && progressData.sessions.length > 0 && (
             <motion.div 
               variants={itemVariants}
-              className="bg-[#1E293B] rounded-3xl border border-white/5 p-8 relative overflow-hidden mb-12"
+              className={`bg-[#1E293B] rounded-3xl border p-8 relative overflow-hidden mb-12 transition-all ${
+                careerMode === 'growth' && progressData.sessions.length > 0
+                  ? 'border-yellow-500/50 ring-2 ring-yellow-500/20'
+                  : 'border-white/5'
+              }`}
             >
               <div className="absolute top-0 right-0 p-8 opacity-5">
-                <RobotIcon className="w-32 h-32" />
+                <Bot className="w-32 h-32" />
               </div>
               
               <div className="flex items-center gap-3 mb-8 relative z-10">
                 <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/30">
-                  <RobotIcon className="w-6 h-6 text-blue-400" />
+                  <Bot className="w-6 h-6 text-blue-400" />
                 </div>
                 <div>
                   <h2 className="text-xl font-black uppercase tracking-widest text-white">Career Copilot</h2>
@@ -1033,6 +1286,122 @@ export default function ProgressPage() {
                       {copilot.summary}
                     </p>
                   </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Career Evolution Engine Panel - NEW Phase 6 */}
+          {(careerEvolution?.career_paths && careerEvolution.career_paths.length > 0) ? (
+            <motion.div 
+              variants={itemVariants}
+              className={`bg-[#1E293B] rounded-3xl border p-8 relative overflow-hidden mb-12 transition-all ${
+                careerMode === 'job_ready' && careerEvolution && careerEvolution.career_paths.length > 0
+                  ? 'border-green-500/50 ring-2 ring-green-500/20'
+                  : 'border-white/5'
+              }`}
+            >
+              <div className="absolute top-0 right-0 p-8 opacity-5">
+                <TrendingUpIcon className="w-32 h-32" />
+              </div>
+              
+              <div className="flex items-center gap-3 mb-8 relative z-10">
+                <div className="p-3 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30">
+                  <TrendingUpIcon className="w-6 h-6 text-green-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black uppercase tracking-widest text-white">Career Evolution Engine</h2>
+                  <p className="text-xs font-bold text-slate-500 mt-1">Long-term skill growth tracking and predictions</p>
+                </div>
+              </div>
+              
+              {/* Growth State Badge */}
+              <div className="mb-8 relative z-10">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-xs font-black uppercase tracking-widest text-slate-400">Growth State</span>
+                </div>
+                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-lg font-black ${
+                  careerEvolution.overall_growth_state === 'growing' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                  careerEvolution.overall_growth_state === 'declining' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                  'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                }`}>
+                  {careerEvolution.overall_growth_state === 'growing' && <><TrendingUpIcon className="w-5 h-5" /> Growing</>}
+                  {careerEvolution.overall_growth_state === 'declining' && <><TrendingDownIcon className="w-5 h-5" /> Declining</>}
+                  {careerEvolution.overall_growth_state === 'stagnating' && <><MinusIcon className="w-5 h-5" /> Stagnating</>}
+                </div>
+              </div>
+              
+              {/* Career Path Breakdown */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 relative z-10">
+                {careerEvolution.career_paths.map((path, idx) => (
+                  <div key={idx} className="bg-[#0F172A] rounded-2xl border border-white/5 p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <span className="text-sm font-black text-white">{path.career_path}</span>
+                      <span className={`text-xs ${
+                        path.trend === 'improving' ? 'text-green-400' :
+                        path.trend === 'declining' ? 'text-red-400' : 'text-yellow-400'
+                      }`}>
+                        {path.trend === 'improving' ? '📈' : path.trend === 'declining' ? '📉' : '➖'} {path.trend}
+                      </span>
+                    </div>
+                    <div className="text-2xl font-black text-white mb-2">{path.avg_score}<span className="text-sm text-slate-500">/100</span></div>
+                    {/* Volatility Bar */}
+                    <div className="mb-2">
+                      <div className="flex justify-between text-[10px] mb-1">
+                        <span className="text-slate-500">Volatility</span>
+                        <span className={path.volatility <= 0.2 ? 'text-green-400' : path.volatility <= 0.5 ? 'text-yellow-400' : 'text-red-400'}>
+                          {path.volatility <= 0.2 ? 'Stable' : path.volatility <= 0.5 ? 'Moderate' : 'Inconsistent'}
+                        </span>
+                      </div>
+                      <div className="h-2 bg-[#1E293B] rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full ${
+                            path.volatility <= 0.2 ? 'bg-green-500' :
+                            path.volatility <= 0.5 ? 'bg-yellow-500' : 'bg-red-500'
+                          }`}
+                          style={{ width: `${path.volatility * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-between text-[10px]">
+                      <span className="text-slate-500">{path.total_sessions} sessions</span>
+                      <span className="text-slate-400">{Math.round(path.confidence * 100)}% conf.</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Intelligence Summary */}
+              <div className="mt-8 bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-2xl border border-green-500/20 p-6 relative overflow-hidden">
+                <div className="absolute -top-10 -right-10 w-32 h-32 bg-green-500 opacity-10 rounded-full blur-[60px]" />
+                <div className="flex items-start gap-4 relative z-10">
+                  <div className="p-3 rounded-xl bg-green-500/20 border border-green-500/30 shrink-0">
+                    <LightbulbIcon className="w-6 h-6 text-green-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-widest text-white mb-2">Evolution Insight</h3>
+                    <p className="text-slate-300 font-medium leading-relaxed">
+                      {careerEvolution.overall_growth_state === 'growing' && "You are in a strong growth phase. Keep building on this momentum!"}
+                      {careerEvolution.overall_growth_state === 'declining' && "Your performance is declining. Focus on stabilizing skills before advancing."}
+                      {careerEvolution.overall_growth_state === 'stagnating' && "Your performance is stable. Push yourself to break through to the next level."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            /* Fallback when no evolution data available */
+            <motion.div 
+              variants={itemVariants}
+              className="bg-[#1E293B] rounded-3xl border border-white/5 p-8 relative overflow-hidden mb-12"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-slate-800 border border-white/5">
+                  <TrendingUpIcon className="w-6 h-6 text-slate-500" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black uppercase tracking-widest text-white">Career Evolution Engine</h2>
+                  <p className="text-xs font-bold text-slate-500 mt-1">Evolution data not available yet. Complete more interviews to unlock.</p>
                 </div>
               </div>
             </motion.div>

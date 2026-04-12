@@ -547,6 +547,52 @@ async def save_session(body: SaveSessionRequest, current_user_id: str = Depends(
         
         supabase.table("interview_sessions").insert(session_data).execute()
         
+        # =============================================================================
+        # CAREER MEMORY ENGINE INTEGRATION (Non-critical)
+        # Update user memory after successful session save.
+        # DO NOT block response if memory update fails.
+        # =============================================================================
+        try:
+            from services import career_memory_engine
+            
+            # Prepare session data for memory engine
+            memory_session_data = {
+                "career_path": body.career_path,
+                "score": int(body.total_score),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            # Update user memory (non-blocking)
+            career_memory_engine.update_user_memory(
+                body.user_id,
+                memory_session_data
+            )
+        except Exception as memory_error:
+            # Log error but do NOT block the response
+            logger.warning(f"[MEMORY_ENGINE_ERROR] Failed to update memory: {str(memory_error)}")
+        # =============================================================================
+        # END CAREER MEMORY INTEGRATION
+        # =============================================================================
+        
+        # =============================================================================
+        # CAREER EVOLUTION ENGINE INTEGRATION (Non-critical)
+        # Invalidate evolution cache after session.
+        # DO NOT block response if update fails.
+        # =============================================================================
+        try:
+            from services import career_evolution_engine
+            
+            # Update evolution profile cache (non-blocking)
+            career_evolution_engine.update_user_evolution_profile(
+                body.user_id
+            )
+        except Exception as evolution_error:
+            # Log error but do NOT block the response
+            logger.warning(f"[EVOLUTION_ENGINE_ERROR] Failed to update profile: {str(evolution_error)}")
+        # =============================================================================
+        # END CAREER EVOLUTION INTEGRATION
+        # =============================================================================
+        
         return {"success": True, "message": "Session saved successfully"}
         
     except Exception as e:

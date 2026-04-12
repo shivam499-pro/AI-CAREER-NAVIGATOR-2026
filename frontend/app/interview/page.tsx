@@ -291,6 +291,109 @@ export default function InterviewPage() {
   const [challengeURL, setChallengeURL] = useState('')
   const [copied, setCopied] = useState(false)
 
+  // ─────────────────────────────────────────────────────────────
+  // AI Interview Coach System
+  // ─────────────────────────────────────────────────────────────
+  
+  // Career Intelligence Context
+  const [careerIntelligence, setCareerIntelligence] = useState<{
+    career_paths: Array<{
+      career_path: string
+      avg_score: number
+      trend: string
+      volatility: number
+      total_sessions: number
+      confidence: number
+    }>
+    overall_growth_state: string
+  } | null>(null)
+  
+  // Profile Progress State
+  const [profileProgress, setProfileProgress] = useState<{
+    total: number
+    status: string
+    steps: Array<{id: string, value: number, status: string}>
+  } | null>(null)
+  
+  // Readiness Mode (derived from progress status)
+  const [readinessMode, setReadinessMode] = useState<'FOUNDATION' | 'GROWTH' | 'JOB_READY'>('FOUNDATION')
+  
+  // Weakest Career Path (from evolution)
+  const [weakestArea, setWeakestArea] = useState<{path: string; score: number} | null>(null)
+  
+  // Readiness Score (for AI tips)
+  const [readinessScore, setReadinessScore] = useState(0)
+  
+  // AI Tip based on readiness
+  const [aiTip, setAiTip] = useState('')
+  
+  // Show Hint Before Answer state
+  const [showGetHint, setShowGetHint] = useState(false)
+  const [hintLoadingAI, setHintLoadingAI] = useState(false)
+  
+  // Post-Answer Feedback Card state
+  const [showFeedbackCard, setShowFeedbackCard] = useState(false)
+  const [currentFeedback, setCurrentFeedback] = useState<{
+    strength: number
+    clarity: number
+    technicalDepth: number
+    suggestion: string
+  } | null>(null)
+  
+  // Confidence Tracker state
+  const [confidenceScores, setConfidenceScores] = useState<number[]>([])
+  const [movingAverage, setMovingAverage] = useState(0)
+  const [confidenceLevel, setConfidenceLevel] = useState<'Low' | 'Medium' | 'High'>('Low')
+  
+  // Helper to calculate confidence emoji
+  const getConfidenceEmoji = (level: 'Low' | 'Medium' | 'High') => {
+    switch (level) {
+      case 'Low': return '😬'
+      case 'Medium': return '🙂'
+      case 'High': return '🚀'
+    }
+  }
+  
+  // Calculate moving average and confidence level
+  const updateConfidenceTracker = (newScore: number) => {
+    const updatedScores = [...confidenceScores, newScore]
+    // Keep last 5 scores for moving average
+    const recentScores = updatedScores.slice(-5)
+    const avg = recentScores.reduce((a, b) => a + b, 0) / recentScores.length
+    setMovingAverage(Math.round(avg))
+    setConfidenceScores(updatedScores)
+    
+    // Determine confidence level
+    if (avg < 40) {
+      setConfidenceLevel('Low')
+    } else if (avg < 70) {
+      setConfidenceLevel('Medium')
+    } else {
+      setConfidenceLevel('High')
+    }
+  }
+  
+  // Determine readiness mode from progress status
+  const determineReadinessMode = (progress: {total: number; status: string}) => {
+    if (progress.total >= 75 && progress.status === 'ELITE') {
+      return 'JOB_READY'
+    } else if (progress.total >= 50) {
+      return 'GROWTH'
+    }
+    return 'FOUNDATION'
+  }
+  
+  // Get AI Tip based on readiness score
+  const getAITip = (score: number) => {
+    if (score < 40) {
+      return 'Focus on clarity + fundamentals'
+    } else if (score < 70) {
+      return 'Structure answers using STAR method'
+    } else {
+      return 'Focus on system design depth + confidence'
+    }
+  }
+
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -323,6 +426,55 @@ export default function InterviewPage() {
         }
       } catch (err) {
         console.error('Error fetching rank:', err)
+      }
+
+      // ─────────────────────────────────────────────────────────
+      // AI Interview Coach: Fetch Career Intelligence
+      // ─────────────────────────────────────────────────────────
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        
+        // Fetch career evolution
+        const evolutionResponse = await fetch(`${apiUrl}/api/career/evolution/${user.id}`)
+        if (evolutionResponse.ok) {
+          const evolutionData = await evolutionResponse.json()
+          setCareerIntelligence(evolutionData)
+          
+          // Find weakest career path
+          if (evolutionData.career_paths && evolutionData.career_paths.length > 0) {
+            const sorted = [...evolutionData.career_paths].sort((a, b) => a.avg_score - b.avg_score)
+            setWeakestArea({
+              path: sorted[0].career_path,
+              score: sorted[0].avg_score
+            })
+            // Calculate overall readiness score
+            const avgScore = evolutionData.career_paths.reduce((sum: number, cp: any) => sum + cp.avg_score, 0) / evolutionData.career_paths.length
+            setReadinessScore(Math.round(avgScore))
+            setAiTip(getAITip(Math.round(avgScore)))
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching career evolution:', err)
+        // Fallback: use default values
+        setReadinessScore(30)
+        setAiTip(getAITip(30))
+        setWeakestArea({ path: careerPath, score: 30 })
+      }
+
+      // Fetch profile progress
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        const progressResponse = await fetch(`${apiUrl}/api/profile/progress`)
+        if (progressResponse.ok) {
+          const progressData = await progressResponse.json()
+          setProfileProgress(progressData)
+          setReadinessMode(determineReadinessMode(progressData))
+        }
+      } catch (err) {
+        console.error('Error fetching profile progress:', err)
+        // Fallback: default to FOUNDATION mode
+        setReadinessMode('FOUNDATION')
+        setProfileProgress({ total: 25, status: 'INITIALIZED', steps: [] })
       }
     }
     checkAuth()

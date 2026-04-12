@@ -356,6 +356,31 @@ CREATE INDEX IF NOT EXISTS challenge_attempts_user_week_year_idx ON challenge_at
 
 
 -- =============================================================================
+-- USER_CAREER_MEMORY TABLE
+-- Tracks user evolution over time for career paths
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS user_career_memory (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    career_path TEXT NOT NULL,
+    skill_area TEXT,
+    performance_score INTEGER,
+    confidence_score FLOAT DEFAULT 0.0,
+    trend TEXT DEFAULT 'stable',
+    session_count INTEGER DEFAULT 1,
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Index for user_career_memory
+CREATE INDEX IF NOT EXISTS user_career_memory_user_id_idx ON user_career_memory(user_id);
+CREATE INDEX IF NOT EXISTS user_career_memory_career_path_idx ON user_career_memory(career_path);
+
+COMMENT ON TABLE user_career_memory IS 'Tracks user career evolution over time for different career paths';
+
+
+-- =============================================================================
 -- SEQUENCES (if needed for auto-increment)
 -- =============================================================================
 
@@ -643,6 +668,29 @@ FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.role() = 'service_role');
 -- Users can update their own attempts
 CREATE POLICY "challenge_attempts_update_own" ON challenge_attempts
 FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+
+-- =============================================================================
+-- USER_CAREER_MEMORY TABLE RLS
+-- =============================================================================
+
+ALTER TABLE user_career_memory ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own career memory
+CREATE POLICY "user_career_memory_select_own" ON user_career_memory
+FOR SELECT USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can insert their own career memory
+CREATE POLICY "user_career_memory_insert_own" ON user_career_memory
+FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can update their own career memory
+CREATE POLICY "user_career_memory_update_own" ON user_career_memory
+FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can delete their own career memory
+CREATE POLICY "user_career_memory_delete_own" ON user_career_memory
+FOR DELETE USING (auth.uid() = user_id OR auth.role() = 'service_role');
 
 
 -- =============================================================================

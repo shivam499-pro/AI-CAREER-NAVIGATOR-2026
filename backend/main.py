@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import os
 import sys
+from datetime import datetime
 
 # Load environment variables FIRST — before any local imports
 load_dotenv()
@@ -75,7 +76,8 @@ validate_environment()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import analysis, jobs, auth, resume, profile_enhanced, interview, streaks, ranks, challenges, weekly_challenge, badges, email_report, documents
+from fastapi.responses import JSONResponse
+from routers import analysis, jobs, auth, resume, profile_enhanced, interview, streaks, ranks, challenges, weekly_challenge, badges, email_report, documents, career
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -117,6 +119,7 @@ app.include_router(weekly_challenge.router, prefix="/api/weekly-challenge", tags
 app.include_router(badges.router, prefix="/api/badges", tags=["Badges"])
 app.include_router(email_report.router, prefix="/api/email", tags=["Email Report"])
 app.include_router(documents.router, prefix="/api/documents", tags=["Documents"])
+app.include_router(career.router, prefix="/api/career", tags=["Career Evolution"])
 
 @app.get("/")
 async def root():
@@ -128,7 +131,76 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    """
+    Enhanced health check with service status.
+    Returns 200 OK even if services are down.
+    """
+    # Check database (Supabase)
+    db_ok = False
+    try:
+        from supabase import create_client
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+        if supabase_url and supabase_key:
+            supabase = create_client(supabase_url, supabase_key)
+            # Simple health check - just verify we can create client
+            db_ok = True
+    except:
+        pass
+    
+    # Check Gemini
+    gemini_ok = False
+    try:
+        import google.genai as genai
+        api_key = os.getenv("GEMINI_API_KEY")
+        if api_key:
+            gemini_ok = True
+    except:
+        pass
+    
+    # Memory engine always OK if backend is running
+    memory_ok = True
+    
+    services = {
+        "database": db_ok,
+        "gemini": gemini_ok,
+        "memory_engine": memory_ok
+    }
+    
+    return {
+        "status": "healthy",
+        "services": services
+    }
+
+
+# Global Error Handler Middleware
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    """
+    Catch ALL unhandled exceptions and return safe JSON.
+    Never leak stack traces to frontend.
+    """
+    from fastapi.responses import JSONResponse
+    
+    # Log the actual error server-side
+    logger.error(
+        f"[BACKEND][GLOBAL] action=unhandled_exception "
+        f"path={request.url.path} error={str(exc)}"
+    )
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "data": None,
+            "error": "Internal server error",
+            "source": "global_error_handler",
+            "meta": {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "execution_time_ms": 0
+            }
+        }
+    )
 
 # Run the app
 if __name__ == "__main__":
