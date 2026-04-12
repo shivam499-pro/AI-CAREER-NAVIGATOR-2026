@@ -96,6 +96,11 @@ export default function InterviewPage() {
   const [showResumeModal, setShowResumeModal] = useState(false)
   const [resumeData, setResumeData] = useState<any>(null)
   
+  // Weekly challenge results state
+  const [challengeRank, setChallengeRank] = useState<number | null>(null)
+  const [challengeLeaderboard, setChallengeLeaderboard] = useState<{rank: number, user_email: string, score: number}[]>([])
+  const [challengeTotalParticipants, setChallengeTotalParticipants] = useState(0)
+  
   // Helper function to get localStorage key for challenge progress
   const getChallengeProgressKey = () => {
     if (!user || !isWeeklyMode) return null
@@ -759,6 +764,27 @@ export default function InterviewPage() {
     // Clear challenge progress when interview completes
     if (isWeeklyMode) {
       clearChallengeProgress()
+      // Fetch fresh leaderboard for weekly challenge results
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        const leaderboardRes = await fetch(`${apiUrl}/api/weekly-challenge/leaderboard`)
+        if (leaderboardRes.ok) {
+          const leaderboardData = await leaderboardRes.json()
+          setChallengeLeaderboard(leaderboardData)
+          setChallengeTotalParticipants(leaderboardData.length)
+          // Find current user's rank by comparing with stored user email from auth
+          const { data: { user: authUser } } = await supabase.auth.getUser()
+          const userEmail = authUser?.email
+          if (userEmail) {
+            const userRank = leaderboardData.find((entry: any) => entry.user_email === userEmail)
+            if (userRank) {
+              setChallengeRank(userRank.rank)
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch leaderboard:', err)
+      }
     }
     setScreen('results')
   }
@@ -1497,6 +1523,45 @@ export default function InterviewPage() {
                animate={{ opacity: 1, y: 0 }}
                className="max-w-4xl mx-auto space-y-12 pb-20"
             >
+              {/* Weekly Challenge Completion Section */}
+              {isWeeklyMode && (
+                <div className="bg-gradient-to-br from-[#1E293B] to-[#0F172A] rounded-3xl p-8 border border-purple-500/30 shadow-[0_0_40px_rgba(108,63,200,0.2)]">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-3 bg-purple-500/20 rounded-2xl border border-purple-500/30">
+                      <Trophy className="w-6 h-6 text-purple-400" />
+                    </div>
+                    <h2 className="text-xl font-black uppercase tracking-widest text-white">Weekly Challenge Completed!</h2>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-6">
+                    <div className="text-center">
+                      <div className="text-4xl font-black text-purple-400 mb-1">{totalScore}</div>
+                      <div className="text-xs font-black uppercase tracking-widest text-slate-500">/ 50 Points</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-4xl font-black text-yellow-400 mb-1">
+                        {challengeRank !== null ? `#${challengeRank}` : '-'}
+                      </div>
+                      <div className="text-xs font-black uppercase tracking-widest text-slate-500">
+                        {challengeRank !== null ? 'Your Rank' : 'Not Ranked'}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-4xl font-black text-white mb-1">
+                        {challengeTotalParticipants || '-'}
+                      </div>
+                      <div className="text-xs font-black uppercase tracking-widest text-slate-500">Participants</div>
+                    </div>
+                  </div>
+                  
+                  {challengeRank === null && (
+                    <div className="mt-4 text-center text-sm text-slate-400">
+                      Your results will appear in the leaderboard shortly.
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Score Visualization */}
               <div className="bg-[#1E293B] rounded-3xl p-16 border border-white/5 text-center shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary-violet opacity-5 rounded-full blur-[100px]" />
