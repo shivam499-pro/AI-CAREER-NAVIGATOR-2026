@@ -937,7 +937,7 @@ export default function InterviewPage() {
     setTotalScore(total)
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      await fetch(`${apiUrl}/api/interview/save-session`, {
+      const sessionResponse = await fetch(`${apiUrl}/api/interview/save-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -946,9 +946,29 @@ export default function InterviewPage() {
           questions: questions.map(q => q.question),
           answers: answersToUse.map(a => ({ question: a.question, answer: a.answer })),
           scores: answersToUse.map(a => a.feedback?.score || 0),
-          total_score: total
+          total_score: total,
+          difficulty: difficulty,
+          is_simulation: simMode,
+          is_voice: false // TODO: Track actual voice usage
         })
       })
+      
+      const sessionData = await sessionResponse.json()
+      
+      // Handle badge unlocks from backend
+      if (sessionData.new_badges && sessionData.new_badges.length > 0) {
+        sessionData.new_badges.forEach((badge: { name: string; emoji: string; description: string }) => {
+          toast.success(`🎖️ Badge Unlocked: ${badge.name}!`, {
+            description: badge.description,
+            duration: 5000
+          })
+        })
+      }
+      
+      // Show XP earned from badges if any
+      if (sessionData.total_xp_earned > 0) {
+        toast.info(`✨ +${sessionData.total_xp_earned} XP from badges!`)
+      }
       const streakResponse = await fetch(`${apiUrl}/api/streaks/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

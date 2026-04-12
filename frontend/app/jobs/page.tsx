@@ -1,4 +1,4 @@
-  'use client'
+'use client'
 import CareerRoadmap from '@/components/CareerRoadmap'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
@@ -457,12 +457,7 @@ export default function JobsPage() {
                       Live Phase Tracking
                    </div>
                 </div>
-                <CareerRoadmap 
-                  onboardingCompleted={true}
-                  hasAnalysis={!!analysis}
-                  hasResume={!!profile?.resume_exists}
-                  hasAppliedJobs={false}
-                />
+                <CareerRoadmap roadmap={analysis.roadmap} />
               </div>
             </motion.div>
           )}

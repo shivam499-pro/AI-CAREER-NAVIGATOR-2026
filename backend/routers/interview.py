@@ -241,6 +241,10 @@ class SaveSessionRequest(BaseModel):
     answers: List[Any]
     scores: List[Any]
     total_score: float
+    # Optional fields for badge triggering
+    difficulty: Optional[str] = "medium"
+    is_simulation: Optional[bool] = False
+    is_voice: Optional[bool] = False
 
 
 class QuestionHintRequest(BaseModel):
@@ -609,7 +613,38 @@ async def save_session(body: SaveSessionRequest, current_user_id: str = Depends(
         # END CAREER EVOLUTION INTEGRATION
         # =============================================================================
         
-        return {"success": True, "message": "Session saved successfully"}
+        # =============================================================================
+        # BADGE SERVICE INTEGRATION (Non-critical)
+        # Check and award badges automatically after session save.
+        # DO NOT block response if badge check fails.
+        # =============================================================================
+        badge_result = {"new_badges": [], "total_xp_earned": 0, "rank_update": None}
+        try:
+            from services import badge_service
+            
+            # Check badges with session details
+            badge_result = badge_service.check_badges_on_session_complete(
+                user_id=body.user_id,
+                total_score=body.total_score,
+                difficulty=getattr(body, 'difficulty', 'medium'),
+                is_simulation=getattr(body, 'is_simulation', False),
+                is_voice=getattr(body, 'is_voice', False)
+            )
+            logger.info(f"[BADGE_CHECK] Session complete for user {body.user_id}: {len(badge_result.get('new_badges', []))} new badges")
+        except Exception as badge_error:
+            # Log error but do NOT block the response
+            logger.warning(f"[BADGE_ERROR] Failed to check badges: {str(badge_error)}")
+        # =============================================================================
+        # END BADGE INTEGRATION
+        # =============================================================================
+        
+        return {
+            "success": True,
+            "message": "Session saved successfully",
+            "new_badges": badge_result.get("new_badges", []),
+            "total_xp_earned": badge_result.get("total_xp_earned", 0),
+            "rank_update": badge_result.get("rank_update")
+        }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

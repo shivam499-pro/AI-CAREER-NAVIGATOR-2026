@@ -650,13 +650,12 @@ export default function ChallengesPage() {
             </div>
           </motion.div>
         </motion.div>
+        {/* Decorative Orbs */}
+        <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden opacity-50">
+          <div className="absolute top-[20%] right-[-10%] w-[500px] h-[500px] bg-purple-900/10 rounded-full blur-[120px]" />
+          <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-900/10 rounded-full blur-[100px]" />
+        </div>
       </main>
-
-      {/* Decorative Orbs */}
-      <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden opacity-50">
-        <div className="absolute top-[20%] right-[-10%] w-[500px] h-[500px] bg-purple-900/10 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-900/10 rounded-full blur-[100px]" />
-      </div>
     </div>
   )
 }
