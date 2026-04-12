@@ -7,8 +7,9 @@ import Navbar from '@/components/Navbar'
 import { Button } from '@/components/ui/button'
 import { 
   Loader2, Trophy, Calendar, Clock, 
-  Target, Zap, Flame, Crown, Star, 
-  ChevronRight, Sparkles, Medal, Award
+  Target, Zap, Crown, 
+  ChevronRight, Sparkles, Medal,
+  Brain, RefreshCw
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -38,9 +39,51 @@ export default function ChallengesPage() {
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 })
+  const [error, setError] = useState<string | null>(null)
   
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        setUser(user)
+        
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        
+        const [challengeRes, leaderboardRes] = await Promise.all([
+          fetch(`${apiUrl}/api/weekly-challenge/current`),
+          fetch(`${apiUrl}/api/weekly-challenge/leaderboard`)
+        ])
+        
+        if (challengeRes.ok) {
+          const data = await challengeRes.json()
+          setChallenge(data)
+        } else {
+          console.error('Failed to fetch challenge:', challengeRes.status)
+        }
+        
+        if (leaderboardRes.ok) {
+          const data = await leaderboardRes.json()
+          setLeaderboard(data)
+        } else {
+          console.error('Failed to fetch leaderboard:', leaderboardRes.status)
+        }
+      } catch (err) {
+        console.error('Error fetching data:', err)
+        setError('Failed to load challenge data. Please try again.')
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchData()
+  }, [])
+  
+  const retryFetch = () => {
+    const fetchData = async () => {
+      setLoading(true)
+      setError(null)
       try {
         const { data: { user } } = await supabase.auth.getUser()
         setUser(user)
@@ -63,13 +106,13 @@ export default function ChallengesPage() {
         }
       } catch (err) {
         console.error('Error fetching data:', err)
+        setError('Failed to load challenge data. Please try again.')
       } finally {
         setLoading(false)
       }
     }
-    
     fetchData()
-  }, [])
+  }
   
   // Calculate time until next Sunday midnight
   const getNextSundayMidnight = () => {
@@ -157,6 +200,13 @@ export default function ChallengesPage() {
   const isCurrentUser = (email: string) => {
     return user?.email === email
   }
+  
+  const getUserRank = () => {
+    if (!user) return null
+    return leaderboard.find(entry => entry.user_email === user.email)
+  }
+  
+  const userRank = getUserRank()
   
   if (loading) {
     return (
@@ -283,11 +333,38 @@ export default function ChallengesPage() {
                     🚀 Accept Protocol 
                     <ChevronRight className="w-5 h-5 ml-2 group-hover/btn:translate-x-1 transition-transform" />
                   </Button>
-                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-center text-slate-500 opacity-60">Rewards: 50 XP | Rare Badge</p>
+                  {/* Honest Reward Display */}
+                  <div className="p-4 bg-[#0F172A]/50 rounded-2xl border border-white/5">
+                    <div className="text-xs font-bold text-slate-400 text-center">
+                      Rewards will be revealed after completion
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </motion.div>
+          
+          {/* SECTION 2: Challenge Preview */}
+          {challenge && challenge.questions && challenge.questions.length > 0 && (
+          <motion.div variants={itemVariants} className="mb-12">
+            <h2 className="text-sm font-black uppercase tracking-widest text-slate-500 mb-6 ml-2 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-purple-400" />
+              Challenge Preview
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+              {/* Questions Count */}
+              <div className="bg-[#1E293B] rounded-2xl border border-white/5 p-5 hover:border-purple-500/30 transition-all group cursor-default">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-blue-500/10 rounded-xl border border-blue-500/20 group-hover:scale-110 transition-transform">
+                    <Brain className="w-5 h-5 text-blue-400" />
+                  </div>
+                </div>
+                <div className="text-2xl font-black text-white">{challenge.questions.length}</div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-1">Questions</div>
+              </div>
+            </div>
+          </motion.div>
+          )}
           
           {/* SECTION 2: Leaderboard */}
           <motion.div variants={itemVariants} className="grid lg:grid-cols-3 gap-8 mb-12">
@@ -307,7 +384,18 @@ export default function ChallengesPage() {
                 </div>
                 
                 <div className="space-y-3">
-                  {leaderboard.length > 0 ? (
+                  {error ? (
+                    <div className="py-12 text-center bg-[#0F172A]/30 rounded-3xl border border-red-500/20 border-dashed">
+                      <p className="text-red-400 font-bold uppercase tracking-widest text-xs mb-4">{error}</p>
+                      <Button
+                        onClick={retryFetch}
+                        className="bg-red-500/20 hover:bg-red-500/30 text-red-400 font-black uppercase text-xs px-6 py-3 rounded-xl border border-red-500/30"
+                      >
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Retry
+                      </Button>
+                    </div>
+                  ) : leaderboard.length > 0 ? (
                     leaderboard.map((entry) => (
                       <motion.div 
                         key={entry.rank}
@@ -343,13 +431,47 @@ export default function ChallengesPage() {
                       </motion.div>
                     ))
                   ) : (
-                    <div className="py-20 text-center bg-[#0F172A]/30 rounded-3xl border border-white/5 border-dashed">
-                       <Loader2 className="w-8 h-8 animate-spin text-slate-700 mx-auto mb-4" />
-                       <p className="text-slate-600 font-bold uppercase tracking-widest text-xs">Awaiting First Insertion...</p>
+                    <div className="py-12 text-center bg-[#0F172A]/30 rounded-3xl border border-white/5 border-dashed">
+                       <Trophy className="w-8 h-8 text-slate-600 mx-auto mb-4" />
+                       <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">No participants yet. Be the first to take the challenge!</p>
                     </div>
                   )}
                 </div>
               </div>
+
+              {/* Your Rank Section */}
+              {user && (
+                <motion.div variants={itemVariants} className="mt-6">
+                  {userRank ? (
+                    <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-2xl border border-purple-500/30 p-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 bg-purple-500/20 rounded-xl border border-purple-500/30">
+                            <Crown className="w-6 h-6 text-purple-400" />
+                          </div>
+                          <div>
+                            <div className="text-xs font-black uppercase tracking-widest text-purple-400 mb-1">Your Current Rank</div>
+                            <div className="text-2xl font-black text-white">
+                              #{userRank.rank} <span className="text-slate-500 text-base font-normal">of {leaderboard.length} participants</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xl font-black text-white">{userRank.score} <span className="text-sm text-slate-500">/ 50</span></div>
+                          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Your Score</div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-[#1E293B] rounded-2xl border border-white/5 p-6 text-center">
+                      <div className="p-3 bg-slate-800/50 rounded-xl border border-white/5 w-fit mx-auto mb-4">
+                        <Trophy className="w-6 h-6 text-slate-500" />
+                      </div>
+                      <p className="text-slate-500 font-bold text-sm text-center">You are not in the top 10 yet</p>
+                    </div>
+                  )}
+                </motion.div>
+              )}
             </div>
 
             {/* SECTION 3: How It Works */}
