@@ -40,6 +40,7 @@ export default function ChallengesPage() {
   const [user, setUser] = useState<any>(null)
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 })
   const [error, setError] = useState<string | null>(null)
+  const [isStarting, setIsStarting] = useState(false)
   
   useEffect(() => {
     const fetchData = async () => {
@@ -140,8 +141,27 @@ export default function ChallengesPage() {
   
   const handleAcceptChallenge = () => {
     if (challenge) {
+      setIsStarting(true)
       router.push(`/interview?mode=weekly&career_path=${encodeURIComponent(challenge.career_path)}`)
     }
+  }
+  
+  const getTimeRemainingInHours = () => {
+    const sundayMidnight = getNextSundayMidnight()
+    const diff = new Date(sundayMidnight).getTime() - Date.now()
+    return Math.max(0, diff / (1000 * 60 * 60)) // hours
+  }
+  
+  const getCountdownColor = () => {
+    const hours = getTimeRemainingInHours()
+    if (hours < 6) return 'text-red-400'
+    if (hours < 24) return 'text-yellow-400'
+    return 'text-purple-400'
+  }
+  
+  const getCountdownPulse = () => {
+    const hours = getTimeRemainingInHours()
+    return hours < 6
   }
   
   const getDaysRemaining = (endsAt: string) => {
@@ -291,28 +311,28 @@ export default function ChallengesPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-3 mt-2">
-                        <div className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-xl border border-yellow-500/30">
-                          <Clock className="w-4 h-4 text-yellow-400 animate-pulse" />
-                          <span className="text-xs font-black uppercase tracking-widest text-yellow-400">
-                            Until Sunday Midnight
+                        <div className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-xl border border-white/5">
+                          <Clock className="w-4 h-4 text-slate-400" />
+                          <span className="text-xs font-black uppercase tracking-widest text-slate-400">
+                            Time Remaining
                           </span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 mt-2">
-                        <div className="flex items-center justify-center w-14 h-12 bg-[#0F172A] rounded-xl border border-purple-500/30">
-                          <span className="text-lg font-black text-purple-400">{String(countdown.days).padStart(2, '0')}</span>
+                        <div className={`flex items-center justify-center w-14 h-12 bg-[#0F172A] rounded-xl border ${getCountdownColor()}/20`}>
+                          <span className={`text-lg font-black ${getCountdownColor()}`}>{String(countdown.days).padStart(2, '0')}</span>
                         </div>
                         <span className="text-sm font-black text-slate-500">:</span>
-                        <div className="flex items-center justify-center w-14 h-12 bg-[#0F172A] rounded-xl border border-purple-500/30">
-                          <span className="text-lg font-black text-purple-400">{String(countdown.hours).padStart(2, '0')}</span>
+                        <div className={`flex items-center justify-center w-14 h-12 bg-[#0F172A] rounded-xl border ${getCountdownColor()}/20`}>
+                          <span className={`text-lg font-black ${getCountdownColor()}`}>{String(countdown.hours).padStart(2, '0')}</span>
                         </div>
                         <span className="text-sm font-black text-slate-500">:</span>
-                        <div className="flex items-center justify-center w-14 h-12 bg-[#0F172A] rounded-xl border border-purple-500/30">
-                          <span className="text-lg font-black text-purple-400">{String(countdown.minutes).padStart(2, '0')}</span>
+                        <div className={`flex items-center justify-center w-14 h-12 bg-[#0F172A] rounded-xl border ${getCountdownColor()}/20`}>
+                          <span className={`text-lg font-black ${getCountdownColor()}`}>{String(countdown.minutes).padStart(2, '0')}</span>
                         </div>
                         <span className="text-sm font-black text-slate-500">:</span>
-                        <div className="flex items-center justify-center w-14 h-12 bg-[#0F172A] rounded-xl border border-purple-500/30">
-                          <span className="text-lg font-black text-purple-400 animate-pulse">{String(countdown.seconds).padStart(2, '0')}</span>
+                        <div className={`flex items-center justify-center w-14 h-12 bg-[#0F172A] rounded-xl border ${getCountdownColor()}/20 ${getCountdownPulse() ? 'animate-pulse' : ''}`}>
+                          <span className={`text-lg font-black ${getCountdownPulse() ? 'text-red-400' : getCountdownColor()} ${getCountdownPulse() ? 'animate-pulse' : ''}`}>{String(countdown.seconds).padStart(2, '0')}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-6 text-[10px] font-black uppercase tracking-widest text-slate-500 mt-1 ml-1">
@@ -328,11 +348,24 @@ export default function ChallengesPage() {
                 <div className="flex flex-col gap-4">
                   <Button 
                     onClick={handleAcceptChallenge}
-                    className="bg-[#6C3FC8] hover:bg-[#6C3FC8]/90 text-white font-black uppercase tracking-tighter text-lg px-10 py-8 rounded-2xl shadow-[0_0_30px_rgba(108,63,200,0.4)] transition-all active:scale-95 group/btn"
+                    disabled={isStarting}
+                    className={`bg-[#6C3FC8] hover:bg-[#6C3FC8]/90 text-white font-black uppercase tracking-tighter text-lg px-10 py-8 rounded-2xl shadow-[0_0_30px_rgba(108,63,200,0.4)] transition-all active:scale-95 group/btn ${isStarting ? 'opacity-70 cursor-wait' : ''}`}
                   >
-                    🚀 Accept Protocol 
-                    <ChevronRight className="w-5 h-5 ml-2 group-hover/btn:translate-x-1 transition-transform" />
+                    {isStarting ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Starting...
+                      </>
+                    ) : (
+                      <>
+                        🚀 Accept Protocol 
+                        <ChevronRight className="w-5 h-5 ml-2 group-hover/btn:translate-x-1 transition-transform" />
+                      </>
+                    )}
                   </Button>
+                  <div className="text-[10px] font-bold text-slate-500 text-center">
+                    Start this week's challenge now
+                  </div>
                   {/* Honest Reward Display */}
                   <div className="p-4 bg-[#0F172A]/50 rounded-2xl border border-white/5">
                     <div className="text-xs font-bold text-slate-400 text-center">
@@ -343,7 +376,16 @@ export default function ChallengesPage() {
               </div>
             </div>
           </motion.div>
-          
+
+          {/* Microcopy */}
+          {challenge && (
+          <motion.div variants={itemVariants} className="mb-8 -mt-4">
+            <p className="text-slate-400 text-sm text-center font-medium">
+              Complete this challenge to test your real interview readiness.
+            </p>
+          </motion.div>
+          )}
+
           {/* SECTION 2: Challenge Preview */}
           {challenge && challenge.questions && challenge.questions.length > 0 && (
           <motion.div variants={itemVariants} className="mb-12">
@@ -378,12 +420,17 @@ export default function ChallengesPage() {
                   <h2 className="text-xl font-black uppercase tracking-widest text-white flex items-center gap-3">
                     <Crown className="w-6 h-6 text-yellow-400" /> High <span className="text-slate-500">Command</span>
                   </h2>
-                  <div className="px-3 py-1 bg-slate-800 rounded-full border border-white/5 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                     Phase {challenge?.week_number || 1} Global
+                  <div className="flex items-center gap-2 px-3 py-1 bg-slate-800 rounded-full border border-white/5">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Live Rankings</span>
                   </div>
                 </div>
                 
-                <div className="space-y-3">
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.5 }}
+                  className="space-y-3">
                   {error ? (
                     <div className="py-12 text-center bg-[#0F172A]/30 rounded-3xl border border-red-500/20 border-dashed">
                       <p className="text-red-400 font-bold uppercase tracking-widest text-xs mb-4">{error}</p>
@@ -436,7 +483,7 @@ export default function ChallengesPage() {
                        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">No participants yet. Be the first to take the challenge!</p>
                     </div>
                   )}
-                </div>
+                </motion.div>
               </div>
 
               {/* Your Rank Section */}
