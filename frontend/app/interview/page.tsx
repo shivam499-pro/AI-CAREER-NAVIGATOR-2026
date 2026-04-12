@@ -89,6 +89,68 @@ export default function InterviewPage() {
   const [messages, setMessages] = useState<{ role: 'ai' | 'user'; text: string }[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   
+  // Weekly Challenge mode state
+  const [isWeeklyMode, setIsWeeklyMode] = useState(false)
+  const [weekNumber, setWeekNumber] = useState<number>(0)
+  const [year, setYear] = useState<number>(new Date().getFullYear())
+  const [showResumeModal, setShowResumeModal] = useState(false)
+  const [resumeData, setResumeData] = useState<any>(null)
+  
+  // Helper function to get localStorage key for challenge progress
+  const getChallengeProgressKey = () => {
+    if (!user || !isWeeklyMode) return null
+    return `challenge_progress_${user.id}_${weekNumber}_${year}`
+  }
+  
+  // Save progress to localStorage
+  const saveChallengeProgress = useCallback(() => {
+    if (!isWeeklyMode || !user) return
+    const key = getChallengeProgressKey()
+    if (!key) return
+    
+    const progressData = {
+      currentQuestion,
+      answers: answers.map(a => ({ question: a.question, answer: a.answer })),
+      elapsedTime,
+      timestamp: Date.now()
+    }
+    try {
+      localStorage.setItem(key, JSON.stringify(progressData))
+    } catch (e) {
+      console.error('Failed to save challenge progress:', e)
+    }
+  }, [isWeeklyMode, user, currentQuestion, answers, elapsedTime, weekNumber, year])
+  
+  // Load progress from localStorage
+  const loadChallengeProgress = useCallback(() => {
+    if (!isWeeklyMode || !user) return null
+    const key = getChallengeProgressKey()
+    if (!key) return null
+    
+    try {
+      const saved = localStorage.getItem(key)
+      if (saved) {
+        return JSON.parse(saved)
+      }
+    } catch (e) {
+      console.error('Failed to load challenge progress:', e)
+    }
+    return null
+  }, [isWeeklyMode, user, weekNumber, year])
+  
+  // Clear progress from localStorage
+  const clearChallengeProgress = useCallback(() => {
+    if (!isWeeklyMode || !user) return
+    const key = getChallengeProgressKey()
+    if (!key) return
+    
+    try {
+      localStorage.removeItem(key)
+    } catch (e) {
+      console.error('Failed to clear challenge progress:', e)
+    }
+  }, [isWeeklyMode, user, weekNumber, year])
+  
   // AI transition message state
   const [showingTransition, setShowingTransition] = useState(false)
   const [transitionMessage, setTransitionMessage] = useState<string | null>(null)
@@ -327,6 +389,25 @@ export default function InterviewPage() {
         .eq('user_id', userId)
       
       setPastSessions(count || 0)
+      
+      // Check for weekly challenge mode and saved progress
+      const params = new URLSearchParams(window.location.search)
+      const mode = params.get('mode')
+      const weekParam = params.get('week_number')
+      const yearParam = params.get('year')
+      
+      if (mode === 'weekly') {
+        setIsWeeklyMode(true)
+        if (weekParam) setWeekNumber(parseInt(weekParam))
+        if (yearParam) setYear(parseInt(yearParam))
+        
+        // Check for saved progress
+        const savedProgress = loadChallengeProgress()
+        if (savedProgress) {
+          setResumeData(savedProgress)
+          setShowResumeModal(true)
+        }
+      }
     } catch (err) {
       console.error('Error loading user data:', err)
     } finally {
@@ -355,12 +436,45 @@ export default function InterviewPage() {
       const data = await response.json()
       if (data.questions && data.questions.length > 0) {
         setQuestions(data.questions)
-        setCurrentQuestion(0)
-        setAnswers([])
+        
+        // Check if we should resume from saved progress
+        if (isWeeklyMode && resumeData) {
+          setCurrentQuestion(resumeData.currentQuestion || 0)
+          // Restore answers with placeholder feedback (will be populated as user progresses)
+          const restoredAnswers = (resumeData.answers || []).map((a: any) => ({
+            question: a.question,
+            answer: a.answer,
+            feedback: { score: 0, good_points: [], missing_points: [], model_answer: '', tip: '' }
+          }))
+          setAnswers(restoredAnswers)
+          setElapsedTime(resumeData.elapsedTime || 0)
+          setQuestionTimeLeft(120)
+          // Clear the resume data after using it
+          setResumeData(null)
+        } else {
+          setCurrentQuestion(0)
+          setAnswers([])
+          setElapsedTime(0)
+          setQuestionTimeLeft(120)
+        }
+        
         setAnswer('')
         setScreen('interview')
-        // Add first question as AI message
-        setMessages([{ role: 'ai', text: data.questions[0].question }])
+        
+        // Set up the appropriate message based on resume state
+        if (isWeeklyMode && resumeData) {
+          // Resume: show current question
+          const currentQ = resumeData.currentQuestion || 0
+          if (data.questions[currentQ]) {
+            setMessages([{ role: 'ai', text: data.questions[currentQ].question }])
+          } else {
+            setMessages([{ role: 'ai', text: data.questions[0].question }])
+          }
+        } else {
+          // New start: show first question
+          setMessages([{ role: 'ai', text: data.questions[0].question }])
+        }
+        
         const interval = setInterval(() => {
           setElapsedTime(prev => prev + 1)
         }, 1000)
@@ -371,6 +485,21 @@ export default function InterviewPage() {
     } finally {
       setLoading(false)
     }
+  }
+  
+  // Handle resume modal confirmation
+  const handleResumeConfirm = () => {
+    setShowResumeModal(false)
+    // Start interview will pick up the resumeData
+    startInterview()
+  }
+  
+  // Handle starting fresh
+  const handleStartFresh = () => {
+    setShowResumeModal(false)
+    setResumeData(null)
+    clearChallengeProgress()
+    startInterview()
   }
 
   const handleTimeUp = async () => {
@@ -411,6 +540,10 @@ export default function InterviewPage() {
       }
       const updatedAnswers = [...answers, newAnswer]
       setAnswers(updatedAnswers)
+      // Save progress for weekly challenge mode
+      if (isWeeklyMode) {
+        saveChallengeProgress()
+      }
       // Push user message to chat
       setMessages(prev => [...prev, { role: 'user', text: answer }])
       setVoiceStatus('idle')
@@ -429,7 +562,7 @@ export default function InterviewPage() {
           // Add transition message to chat
           setMessages(prev => [...prev, { role: 'ai', text: transition }])
           
-          // Wait 1.5 seconds, then show next question
+          // Wait 500ms, then show next question
           setTimeout(() => {
             setShowingTransition(false)
             setTransitionMessage(null)
@@ -443,11 +576,11 @@ export default function InterviewPage() {
             setTypingBehavior({startTime: null, keystrokes: 0, typingDuration: 0})
             // Reset authenticity status for next question
             setAuthenticityStatus('analyzing')
-          }, 1500)
+          }, 500)
         } else {
           finishInterview(updatedAnswers)
         }
-      }, 1500)
+      }, 500)
     } catch (err) {
       console.error('Error submitting answer:', err)
       toast.error("Failed to submit answer. Please try again.")
@@ -522,6 +655,11 @@ export default function InterviewPage() {
       }
       const updatedAnswers = [...answers, newAnswer]
       setAnswers(updatedAnswers)
+      setSubmitting(false)
+      // Save progress for weekly challenge mode
+      if (isWeeklyMode) {
+        saveChallengeProgress()
+      }
       // Push user message to chat
       setMessages(prev => [...prev, { role: 'user', text: answer }])
       
@@ -535,7 +673,7 @@ export default function InterviewPage() {
         // Add transition message to chat
         setMessages(prev => [...prev, { role: 'ai', text: transition }])
         
-        // Wait 1.5 seconds, then show next question
+        // Wait 500ms, then show next question
         setTimeout(() => {
           setShowingTransition(false)
           setTransitionMessage(null)
@@ -551,7 +689,7 @@ export default function InterviewPage() {
           setTypingBehavior({startTime: null, keystrokes: 0, typingDuration: 0})
           // Reset authenticity status for next question
           setAuthenticityStatus('analyzing')
-        }, 1500)
+        }, 500)
       } else {
         finishInterview(updatedAnswers)
       }
@@ -559,8 +697,6 @@ export default function InterviewPage() {
       console.error('Error submitting answer:', err)
       toast.error("Failed to submit answer. Please try again.")
       setSubmitting(false)
-    } finally {
-      // State reset handled in catch block
     }
   }
 
@@ -620,6 +756,10 @@ export default function InterviewPage() {
         setLeveledUp(rData.leveled_up)
       }
     } catch (err) { console.error(err) }
+    // Clear challenge progress when interview completes
+    if (isWeeklyMode) {
+      clearChallengeProgress()
+    }
     setScreen('results')
   }
 
@@ -862,6 +1002,44 @@ export default function InterviewPage() {
                exit={{ opacity: 0, scale: 1.05 }}
                className="max-w-2xl mx-auto"
             >
+              {/* Resume Modal for Weekly Challenge - Show on setup screen too */}
+              {showResumeModal && resumeData && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+                  <div className="bg-[#1E293B] border border-white/10 rounded-3xl p-8 max-w-md mx-4 shadow-2xl">
+                    <h2 className="text-2xl font-black text-white mb-4">Resume Previous Session?</h2>
+                    <p className="text-slate-400 mb-6">
+                      You have a saved progress for this challenge. Would you like to continue where you left off?
+                    </p>
+                    <div className="bg-[#0F172A] rounded-xl p-4 mb-6 border border-white/5">
+                      <div className="text-sm text-slate-400 mb-2">Saved progress:</div>
+                      <div className="flex gap-4 text-white">
+                        <div>
+                          <span className="text-purple-400 font-black">{resumeData.currentQuestion || 0}</span>
+                          <span className="text-slate-500 text-xs">/ {questions.length} questions</span>
+                        </div>
+                        <div>
+                          <span className="text-purple-400 font-black">{Math.floor((resumeData.elapsedTime || 0) / 60)}</span>
+                          <span className="text-slate-500 text-xs"> min elapsed</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <Button 
+                        onClick={handleStartFresh}
+                        className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-black uppercase tracking-tighter"
+                      >
+                        Start Fresh
+                      </Button>
+                      <Button 
+                        onClick={handleResumeConfirm}
+                        className="flex-1 bg-primary-violet hover:bg-primary-violet/90 text-white font-black uppercase tracking-tighter"
+                      >
+                        Resume
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="text-center mb-12">
                 <h1 className="text-5xl font-black text-white mb-4 tracking-tighter leading-tight">
                   Premium AI <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-violet to-purple-400">Coach</span>
@@ -1012,6 +1190,46 @@ export default function InterviewPage() {
                exit={{ opacity: 0, x: -20 }}
                className="max-w-3xl mx-auto space-y-8"
             >
+              {/* Resume Modal for Weekly Challenge */}
+              {showResumeModal && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+                  <div className="bg-[#1E293B] border border-white/10 rounded-3xl p-8 max-w-md mx-4 shadow-2xl">
+                    <h2 className="text-2xl font-black text-white mb-4">Resume Previous Session?</h2>
+                    <p className="text-slate-400 mb-6">
+                      You have a saved progress for this challenge. Would you like to continue where you left off?
+                    </p>
+                    {resumeData && (
+                      <div className="bg-[#0F172A] rounded-xl p-4 mb-6 border border-white/5">
+                        <div className="text-sm text-slate-400 mb-2">Saved progress:</div>
+                        <div className="flex gap-4 text-white">
+                          <div>
+                            <span className="text-purple-400 font-black">{resumeData.currentQuestion || 0}</span>
+                            <span className="text-slate-500 text-xs">/ {questions.length} questions</span>
+                          </div>
+                          <div>
+                            <span className="text-purple-400 font-black">{Math.floor((resumeData.elapsedTime || 0) / 60)}</span>
+                            <span className="text-slate-500 text-xs"> min elapsed</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex gap-3">
+                      <Button 
+                        onClick={handleStartFresh}
+                        className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-black uppercase tracking-tighter"
+                      >
+                        Start Fresh
+                      </Button>
+                      <Button 
+                        onClick={handleResumeConfirm}
+                        className="flex-1 bg-primary-violet hover:bg-primary-violet/90 text-white font-black uppercase tracking-tighter"
+                      >
+                        Resume
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Timeline Header */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">

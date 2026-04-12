@@ -41,6 +41,7 @@ export default function ChallengesPage() {
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 })
   const [error, setError] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)
+  const [attemptStatus, setAttemptStatus] = useState<'none' | 'started' | 'completed'>('none')
   
   useEffect(() => {
     const fetchData = async () => {
@@ -65,10 +66,40 @@ export default function ChallengesPage() {
         }
         
         if (leaderboardRes.ok) {
-          const data = await leaderboardRes.json()
-          setLeaderboard(data)
+          const leaderboardData = await leaderboardRes.json()
+          setLeaderboard(leaderboardData)
         } else {
           console.error('Failed to fetch leaderboard:', leaderboardRes.status)
+        }
+        
+        // Fetch user's attempt status
+        if (user && challengeRes.ok) {
+          const challengeData = await challengeRes.json()
+          try {
+            const attemptRes = await fetch(
+              `${apiUrl}/api/weekly-challenge/attempt?user_id=${user.id}&week_number=${challengeData.week_number}&year=${challengeData.year}`
+            )
+            
+            if (attemptRes.ok) {
+              const attemptData = await attemptRes.json()
+              if (attemptData.status === 'completed') {
+                setAttemptStatus('completed')
+              } else if (attemptData.status === 'started') {
+                setAttemptStatus('started')
+              } else {
+                setAttemptStatus('none')
+              }
+            } else {
+              // API not ready or error, check leaderboard for completed status
+              const userInLeaderboard = leaderboard.find(entry => entry.user_email === user.email)
+              setAttemptStatus(userInLeaderboard ? 'completed' : 'none')
+            }
+          } catch (attemptErr) {
+            console.log('Attempt API not available, checking leaderboard instead')
+            // API not available, check leaderboard for completed status
+            const userInLeaderboard = leaderboard.find(entry => entry.user_email === user.email)
+            setAttemptStatus(userInLeaderboard ? 'completed' : 'none')
+          }
         }
       } catch (err) {
         console.error('Error fetching data:', err)
@@ -146,6 +177,12 @@ export default function ChallengesPage() {
     
     setIsStarting(true)
     
+    // If challenge is already started, just continue without calling start API
+    if (attemptStatus === 'started') {
+      router.push(`/interview?mode=weekly&week_number=${challenge.week_number}&year=${challenge.year}&career_path=${encodeURIComponent(challenge.career_path)}`)
+      return
+    }
+    
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
       
@@ -164,7 +201,7 @@ export default function ChallengesPage() {
         if (data.attempt_id) {
           console.log('Challenge started with attempt_id:', data.attempt_id)
         }
-        router.push(`/interview?mode=weekly&career_path=${encodeURIComponent(challenge.career_path)}`)
+        router.push(`/interview?mode=weekly&week_number=${challenge.week_number}&year=${challenge.year}&career_path=${encodeURIComponent(challenge.career_path)}`)
       } else {
         console.error('Failed to start challenge:', response.status)
         alert('Failed to start challenge. Try again.')
@@ -405,13 +442,13 @@ export default function ChallengesPage() {
                       </>
                     ) : (
                       <>
-                        🚀 {isCompleted ? 'Retry Challenge' : 'Start Challenge'}
+                        🚀 {attemptStatus === 'completed' ? 'Retry Challenge' : attemptStatus === 'started' ? 'Continue Challenge' : 'Start Challenge'}
                         <ChevronRight className="w-5 h-5 ml-2 group-hover/btn:translate-x-1 transition-transform" />
                       </>
                     )}
                   </Button>
                   <div className="text-[10px] font-bold text-slate-500 text-center">
-                    {isCompleted ? 'Try again to improve your score' : 'Start this week\'s challenge now'}
+                    {attemptStatus === 'completed' ? 'Try again to improve your score' : attemptStatus === 'started' ? 'Continue your in-progress challenge' : "Start this week's challenge now"}
                   </div>
                   {/* Honest Reward Display */}
                   <div className="p-4 bg-[#0F172A]/50 rounded-2xl border border-white/5">

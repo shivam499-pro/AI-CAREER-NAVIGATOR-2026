@@ -113,7 +113,7 @@ app.include_router(interview.router, prefix="/api/interview", tags=["Interview"]
 app.include_router(streaks.router, prefix="/api/streaks", tags=["Streaks"])
 app.include_router(ranks.router, prefix="/api/ranks", tags=["Ranks"])
 app.include_router(challenges.router, prefix="/api/challenges", tags=["Challenges"])
-app.include_router(weekly_challenge.router, prefix="/api/weekly", tags=["Weekly Challenge"])
+app.include_router(weekly_challenge.router, prefix="/api/weekly-challenge", tags=["Weekly Challenge"])
 app.include_router(badges.router, prefix="/api/badges", tags=["Badges"])
 app.include_router(email_report.router, prefix="/api/email", tags=["Email Report"])
 app.include_router(documents.router, prefix="/api/documents", tags=["Documents"])
