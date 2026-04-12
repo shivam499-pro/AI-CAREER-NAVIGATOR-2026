@@ -1,10 +1,13 @@
 from dotenv import load_dotenv
+import logging
 import os
 import sys
 from datetime import datetime
 
 # Load environment variables FIRST — before any local imports
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 def validate_environment():

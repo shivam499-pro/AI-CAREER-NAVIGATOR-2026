@@ -21,37 +21,33 @@ import {
   Tooltip, ResponsiveContainer, Area, AreaChart
 } from 'recharts'
 
-interface ProgressData {
-  sessions: Array<{
-    career_path: string
-    total_score: number
-    created_at: string
-  }>
-  rank: {
-    xp: number
-    level: number
-    rank_title: string
-  }
-  streaks: {
-    current_streak: number
-    longest_streak: number
-    total_sessions: number
-  }
-}
+// STEP 3: Use unified career-safe layer
+import { 
+  safeNumber, 
+  safeString, 
+  safeArray,
+  safeProgress,
+  safeEvolution,
+  fetchCareerIntelligence,
+  CareerLoadingState,
+  isLoading,
+  isReady,
+  hasError,
+  EMPTY_PROGRESS_DATA,
+  EMPTY_EVOLUTION_DATA,
+  type ProgressData,
+  type EvolutionData
+} from '@/lib/career-safe'
 
-// Career Evolution API response type
-interface CareerEvolution {
-  user_id: string
-  career_paths: Array<{
-    career_path: string
-    avg_score: number
-    trend: 'improving' | 'stable' | 'declining'
-    volatility: number
-    total_sessions: number
-    confidence: number
-  }>
-  overall_growth_state: 'growing' | 'stagnating' | 'declining'
-}
+// STEP 5: Use unified career-orchestrator (single source of truth)
+import { 
+  getCareerBrain,
+  getRecommendations,
+  isJobReady,
+  getBrainSummary,
+  type CareerBrain,
+  type Recommendation
+} from '@/lib/career-orchestrator'
 
 // ============================================
 // PHASE 5: TYPE DEFINITIONS + SAFE HELPERS
@@ -405,14 +401,17 @@ function SkeletonXPProgress() {
 
 export default function ProgressPage() {
   const router = useRouter()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const [loadingState, setLoadingState] = useState<CareerLoadingState>('idle')
   const [retrying, setRetrying] = useState(false)
-  const [progressData, setProgressData] = useState<ProgressData | null>(null)
-  const [careerEvolution, setCareerEvolution] = useState<CareerEvolution | null>(null)
+  // STEP 5: Single source of truth - careerBrain
+  const [careerBrain, setCareerBrain] = useState<CareerBrain | null>(null)
   const [userEmail, setUserEmail] = useState('')
   const [sendingReport, setSendingReport] = useState(false)
   const [reportSent, setReportSent] = useState(false)
+
+  // Helper to determine if we have an error state
+  const hasErrorState = loadingState === 'error'
+  const isLoadingState = loadingState === 'loading'
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -429,45 +428,52 @@ export default function ProgressPage() {
     checkAuth()
   }, [router])
 
+  // STEP 5: Use unified getCareerBrain (single source of truth)
   const fetchProgressData = async (userId: string, isRetry: boolean) => {
     if (isRetry) {
       setRetrying(true)
     }
+    setLoadingState('loading')
+    
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      // Single brain fetch - replaces all scattered logic
+      const brain = await getCareerBrain(userId)
       
-      // Fetch both APIs in parallel
-      const [progressResponse, evolutionResponse] = await Promise.all([
-        fetch(`${apiUrl}/api/interview/progress/${userId}`),
-        fetch(`${apiUrl}/api/career/evolution/${userId}`).catch(() => null)
-      ])
+      // Debug logging
+      console.log('[Progress] CareerBrain received:', JSON.stringify({
+        totalSessions: brain.totalSessions,
+        hasRawProgress: !!brain.raw.progress,
+        hasRawEvolution: !!brain.raw.evolution,
+        rawProgressSessions: brain.raw.progress?.sessions?.length || 0,
+        rawEvolutionPaths: brain.raw.evolution?.career_paths?.length || 0
+      }, null, 2))
       
-      // Handle progress data
-      if (progressResponse.ok) {
-        const data = await progressResponse.json()
-        setProgressData(data)
-        setError(false)
+      setCareerBrain(brain)
+      
+      // Determine if there's an error vs empty state
+      // Empty state (new user): have careerBrain but no sessions yet
+      // Error state: API failed completely
+      const hasNoProgressData = brain.totalSessions === 0
+      const hasNoEvolutionData = !brain.raw.evolution?.career_paths?.length
+      const isTrulyEmpty = hasNoProgressData && hasNoEvolutionData
+      
+      // If we have some data OR we got a valid brain response (even empty), it's ready
+      if (brain && !isTrulyEmpty) {
+        console.log('[Progress] Data found - setting ready state')
+        setLoadingState('ready')
+      } else if (brain && isTrulyEmpty) {
+        // New user with no sessions - this is a VALID empty state, not an error
+        console.log('[Progress] Empty state (new user) - setting ready state')
+        setLoadingState('ready')
       } else {
-        setError(true)
-      }
-      
-      // Handle evolution data (non-critical, don't fail if this errors)
-      if (evolutionResponse && evolutionResponse.ok) {
-        try {
-          const evolutionData = await evolutionResponse.json()
-          setCareerEvolution(evolutionData)
-        } catch {
-          // Fallback - evolution data not available yet
-          setCareerEvolution(null)
-        }
-      } else {
-        setCareerEvolution(null)
+        // No brain response at all - this is a real error
+        console.log('[Progress] No data found - setting error state')
+        setLoadingState('error')
       }
     } catch (err) {
-      console.error('Error fetching progress:', err)
-      setError(true)
+      console.error('Error fetching career brain:', err)
+      setLoadingState('error')
     } finally {
-      setLoading(false)
       setRetrying(false)
     }
   }
@@ -475,6 +481,16 @@ export default function ProgressPage() {
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  // Extract progress and evolution data from careerBrain (single source of truth)
+  const progressData = careerBrain?.raw?.progress || null
+  const careerEvolution = careerBrain?.raw?.evolution || null
+
+  // Debug: Log extracted data
+  if (typeof window !== 'undefined' && careerBrain) {
+    console.log('[Progress] Extracted progressData:', progressData?.sessions?.length || 0, 'sessions')
+    console.log('[Progress] Extracted careerEvolution:', careerEvolution?.career_paths?.length || 0, 'paths')
   }
 
   const chartData = useMemo(() => {
@@ -648,8 +664,8 @@ export default function ProgressPage() {
     visible: { opacity: 1, y: 0 }
   }
 
-  // Loading state with skeleton UI
-  if (loading) {
+  // Loading state with skeleton UI - FIX: use loadingState
+  if (loadingState === 'loading' || loadingState === 'idle') {
     return (
       <div className="min-h-screen bg-[#0F172A] text-white">
         <Navbar />
@@ -687,8 +703,8 @@ export default function ProgressPage() {
     )
   }
 
-  // Error state
-  if (error) {
+  // Error state - FIX: use loadingState
+  if (loadingState === 'error') {
     return (
       <div className="min-h-screen bg-[#0F172A] text-white">
         <Navbar />
@@ -725,10 +741,6 @@ export default function ProgressPage() {
                     <p className="text-red-400 font-bold text-lg mb-4">We couldn't fetch your progress data</p>
                     <Button 
                       onClick={() => {
-                        const userId = progressData ? undefined : supabase.auth.getUser().then(({ data }) => data.user?.id)
-                        // Re-trigger fetch
-                        setError(false)
-                        setLoading(true)
                         supabase.auth.getUser().then(({ data: { user } }) => {
                           if (user) fetchProgressData(user.id, true)
                         })
@@ -1014,12 +1026,12 @@ export default function ProgressPage() {
                 <div className="bg-[#0F172A] rounded-xl border border-white/5 p-4">
                   <div className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Growth State</div>
                   <div className={`text-lg font-black ${
-                    careerEvolution?.overall_growth_state === 'growing' ? 'text-green-400' :
-                    careerEvolution?.overall_growth_state === 'declining' ? 'text-red-400' : 'text-yellow-400'
+                    careerBrain?.trend === 'Improving' ? 'text-green-400' :
+                    careerBrain?.trend === 'Declining' ? 'text-red-400' : 'text-yellow-400'
                   }`}>
-                    {careerEvolution?.overall_growth_state === 'growing' && '↗️ Growing'}
-                    {careerEvolution?.overall_growth_state === 'declining' && '↘️ Declining'}
-                    {(!careerEvolution?.overall_growth_state || careerEvolution?.overall_growth_state === 'stagnating') && '➡️ Stagnating'}
+                    {careerBrain?.trend === 'Improving' && '↗️ Growing'}
+                    {careerBrain?.trend === 'Declining' && '↘️ Declining'}
+                    {(!careerBrain?.trend || careerBrain?.trend === 'Stable') && '➡️ Stagnating'}
                   </div>
                 </div>
               </div>
@@ -1291,12 +1303,12 @@ export default function ProgressPage() {
             </motion.div>
           )}
 
-          {/* Career Evolution Engine Panel - NEW Phase 6 */}
-          {(careerEvolution?.career_paths && careerEvolution.career_paths.length > 0) ? (
+          {/* STEP 5: Career Evolution Engine Panel - Using careerBrain.raw.evolution */}
+          {(careerBrain?.raw.evolution?.career_paths && careerBrain.raw.evolution.career_paths.length > 0) ? (
             <motion.div 
               variants={itemVariants}
               className={`bg-[#1E293B] rounded-3xl border p-8 relative overflow-hidden mb-12 transition-all ${
-                careerMode === 'job_ready' && careerEvolution && careerEvolution.career_paths.length > 0
+                careerMode === 'job_ready' && careerBrain?.raw.evolution && careerBrain.raw.evolution.career_paths.length > 0
                   ? 'border-green-500/50 ring-2 ring-green-500/20'
                   : 'border-white/5'
               }`}
@@ -1315,25 +1327,25 @@ export default function ProgressPage() {
                 </div>
               </div>
               
-              {/* Growth State Badge */}
+              {/* Growth State Badge - Using careerBrain.trend */}
               <div className="mb-8 relative z-10">
                 <div className="flex items-center gap-3 mb-4">
                   <span className="text-xs font-black uppercase tracking-widest text-slate-400">Growth State</span>
                 </div>
                 <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-lg font-black ${
-                  careerEvolution.overall_growth_state === 'growing' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                  careerEvolution.overall_growth_state === 'declining' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                  careerBrain.trend === 'Improving' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                  careerBrain.trend === 'Declining' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
                   'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
                 }`}>
-                  {careerEvolution.overall_growth_state === 'growing' && <><TrendingUpIcon className="w-5 h-5" /> Growing</>}
-                  {careerEvolution.overall_growth_state === 'declining' && <><TrendingDownIcon className="w-5 h-5" /> Declining</>}
-                  {careerEvolution.overall_growth_state === 'stagnating' && <><MinusIcon className="w-5 h-5" /> Stagnating</>}
+                  {careerBrain.trend === 'Improving' && <><TrendingUpIcon className="w-5 h-5" /> Growing</>}
+                  {careerBrain.trend === 'Declining' && <><TrendingDownIcon className="w-5 h-5" /> Declining</>}
+                  {careerBrain.trend === 'Stable' && <><MinusIcon className="w-5 h-5" /> Stagnating</>}
                 </div>
               </div>
               
-              {/* Career Path Breakdown */}
+              {/* Career Path Breakdown - Using careerBrain.raw.evolution.career_paths */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 relative z-10">
-                {careerEvolution.career_paths.map((path, idx) => (
+                {careerBrain.raw.evolution.career_paths.map((path, idx) => (
                   <div key={idx} className="bg-[#0F172A] rounded-2xl border border-white/5 p-4">
                     <div className="flex justify-between items-start mb-3">
                       <span className="text-sm font-black text-white">{path.career_path}</span>
@@ -1371,7 +1383,7 @@ export default function ProgressPage() {
                 ))}
               </div>
               
-              {/* Intelligence Summary */}
+              {/* Intelligence Summary - Using careerBrain.trend */}
               <div className="mt-8 bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-2xl border border-green-500/20 p-6 relative overflow-hidden">
                 <div className="absolute -top-10 -right-10 w-32 h-32 bg-green-500 opacity-10 rounded-full blur-[60px]" />
                 <div className="flex items-start gap-4 relative z-10">
@@ -1381,9 +1393,9 @@ export default function ProgressPage() {
                   <div>
                     <h3 className="text-sm font-black uppercase tracking-widest text-white mb-2">Evolution Insight</h3>
                     <p className="text-slate-300 font-medium leading-relaxed">
-                      {careerEvolution.overall_growth_state === 'growing' && "You are in a strong growth phase. Keep building on this momentum!"}
-                      {careerEvolution.overall_growth_state === 'declining' && "Your performance is declining. Focus on stabilizing skills before advancing."}
-                      {careerEvolution.overall_growth_state === 'stagnating' && "Your performance is stable. Push yourself to break through to the next level."}
+                      {careerBrain.trend === 'Improving' && "You are in a strong growth phase. Keep building on this momentum!"}
+                      {careerBrain.trend === 'Declining' && "Your performance is declining. Focus on stabilizing skills before advancing."}
+                      {careerBrain.trend === 'Stable' && "Your performance is stable. Push yourself to break through to the next level."}
                     </p>
                   </div>
                 </div>

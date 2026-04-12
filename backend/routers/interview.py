@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Structured log prefix
 INTERVIEW_PIPELINE_LOG = "[INTERVIEW_PIPELINE]"
+INTERVIEW_PIPELINE = "[InterviewPipeline]"
 
 limiter = Limiter(key_func=get_remote_address)
 

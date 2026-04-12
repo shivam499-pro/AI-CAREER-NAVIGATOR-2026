@@ -14,6 +14,21 @@ import {
   Zap, Trophy, Target, Sparkles, Clock, AlertTriangle, Play, Square, MoreHorizontal
 } from 'lucide-react'
 
+import {
+  safeNumber,
+  safeString,
+  safeProfileProgress,
+  getValidQuestions,
+  FALLBACK_QUESTIONS,
+  type SafeProfileProgress
+} from '@/lib/career-safe'
+
+// STEP 5: Use unified career-orchestrator (single source of truth)
+import {
+  getCareerBrain,
+  type CareerBrain
+} from '@/lib/career-orchestrator'
+
 interface Question {
   id: number
   question: string
@@ -315,6 +330,9 @@ export default function InterviewPage() {
     steps: Array<{id: string, value: number, status: string}>
   } | null>(null)
   
+  // Career Intelligence Data Hook - STEP 5: Use unified careerBrain
+  const [careerBrain, setCareerBrain] = useState<CareerBrain | null>(null)
+  
   // Readiness Mode (derived from progress status)
   const [readinessMode, setReadinessMode] = useState<'FOUNDATION' | 'GROWTH' | 'JOB_READY'>('FOUNDATION')
   
@@ -337,6 +355,14 @@ export default function InterviewPage() {
     strength: number
     clarity: number
     technicalDepth: number
+    suggestion: string
+  } | null>(null)
+  
+  // Post-Answer AI Feedback state (Step 2C)
+  const [aiFeedback, setAiFeedback] = useState<{
+    score: number
+    clarity: number
+    technical_depth?: number
     suggestion: string
   } | null>(null)
   
@@ -394,6 +420,65 @@ export default function InterviewPage() {
     }
   }
 
+  // AI Coach Panel visibility toggle state
+  const [showAICoachPanel, setShowAICoachPanel] = useState(false)
+
+  // AI Coach Panel rendering function - STEP 5: Use careerBrain as single source of truth
+  const renderAICoachPanel = () => {
+    // Handle null data safely - fallback to loading
+    if (!careerBrain) {
+      return (
+        <div className="bg-slate-800/50 border border-white/5 rounded-2xl p-4 text-center">
+          <p className="text-slate-500 text-sm">Loading coach data...</p>
+        </div>
+      )
+    }
+
+    // Use careerBrain fields directly - single source of truth
+    const weakAreaText = careerBrain.weakestPath || 'N/A'
+    const aiTipText = careerBrain.aiTip || 'Focus on fundamentals'
+
+    return (
+      <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 border border-primary-violet/20 rounded-2xl p-4 space-y-4">
+        {/* Title */}
+        <div className="flex items-center gap-2 border-b border-white/5 pb-3">
+          <Brain className="w-5 h-5 text-primary-violet" />
+          <h3 className="font-black text-white tracking-wide">AI Interview Coach</h3>
+        </div>
+
+        {/* Weak Area */}
+        <div className="space-y-2">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Weak Area</div>
+          <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+            <span className="text-red-400 font-bold text-sm">{weakAreaText}</span>
+          </div>
+        </div>
+
+        {/* AI Tip */}
+        <div className="space-y-2">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">AI Tip</div>
+          <div className="bg-primary-violet/10 border border-primary-violet/20 rounded-lg px-3 py-2">
+            <span className="text-primary-violet font-medium text-sm">{aiTipText}</span>
+          </div>
+        </div>
+
+        {/* Readiness Score */}
+        <div className="space-y-2">
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Readiness</div>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-gradient-to-r from-green-400 to-primary-violet transition-all duration-500"
+                style={{ width: `${readinessScore}%` }}
+              />
+            </div>
+            <span className="text-white font-black text-sm">{readinessScore}%</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -429,52 +514,36 @@ export default function InterviewPage() {
       }
 
       // ─────────────────────────────────────────────────────────
-      // AI Interview Coach: Fetch Career Intelligence
+      // STEP 5: Use unified getCareerBrain (single source of truth)
       // ─────────────────────────────────────────────────────────
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        // Single brain fetch - replaces all scattered logic
+        const brain = await getCareerBrain(user.id)
+        setCareerBrain(brain)
         
-        // Fetch career evolution
-        const evolutionResponse = await fetch(`${apiUrl}/api/career/evolution/${user.id}`)
-        if (evolutionResponse.ok) {
-          const evolutionData = await evolutionResponse.json()
-          setCareerIntelligence(evolutionData)
-          
-          // Find weakest career path
-          if (evolutionData.career_paths && evolutionData.career_paths.length > 0) {
-            const sorted = [...evolutionData.career_paths].sort((a, b) => a.avg_score - b.avg_score)
-            setWeakestArea({
-              path: sorted[0].career_path,
-              score: sorted[0].avg_score
-            })
-            // Calculate overall readiness score
-            const avgScore = evolutionData.career_paths.reduce((sum: number, cp: any) => sum + cp.avg_score, 0) / evolutionData.career_paths.length
-            setReadinessScore(Math.round(avgScore))
-            setAiTip(getAITip(Math.round(avgScore)))
-          }
-        }
+        // Update legacy states for backward compatibility
+        setCareerIntelligence(brain.raw.evolution)
+        
+        const profileSafe = safeProfileProgress(brain.raw.progress)
+        setProfileProgress(profileSafe)
+        
+        // Update readiness based on brain
+        setReadinessMode(brain.readiness)
+        setReadinessScore(brain.intelligenceScore)
+        setAiTip(brain.aiTip)
+        setWeakestArea({
+          path: brain.weakestPath || careerPath,
+          score: brain.averageScore
+        })
+        
       } catch (err) {
-        console.error('Error fetching career evolution:', err)
+        // Safe handling: if API fails → set null, DO NOT break interview page
+        console.error('Error fetching career brain:', err)
         // Fallback: use default values
         setReadinessScore(30)
         setAiTip(getAITip(30))
         setWeakestArea({ path: careerPath, score: 30 })
-      }
-
-      // Fetch profile progress
-      try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-        const progressResponse = await fetch(`${apiUrl}/api/profile/progress`)
-        if (progressResponse.ok) {
-          const progressData = await progressResponse.json()
-          setProfileProgress(progressData)
-          setReadinessMode(determineReadinessMode(progressData))
-        }
-      } catch (err) {
-        console.error('Error fetching profile progress:', err)
-        // Fallback: default to FOUNDATION mode
         setReadinessMode('FOUNDATION')
-        setProfileProgress({ total: 25, status: 'INITIALIZED', steps: [] })
       }
     }
     checkAuth()
@@ -1424,9 +1493,21 @@ export default function InterviewPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 text-slate-400 font-bold">
-                    <Clock className="w-4 h-4" />
-                    {formatTime(elapsedTime)}
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-slate-400" />
+                    <span className="text-slate-400 font-bold">{formatTime(elapsedTime)}</span>
+                    {/* AI Coach Panel Toggle */}
+                    <button
+                      onClick={() => setShowAICoachPanel(!showAICoachPanel)}
+                      className={`ml-2 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
+                        showAICoachPanel 
+                          ? 'bg-primary-violet text-white' 
+                          : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                      }`}
+                    >
+                      <Brain className="w-3 h-3 inline mr-1" />
+                      Coach
+                    </button>
                   </div>
                 </div>
                 {/* Progress bar */}
@@ -1544,6 +1625,17 @@ export default function InterviewPage() {
                       ))}
                       <div ref={messagesEndRef} />
                     </div>
+                  )}
+
+                  {/* AI Coach Panel (Optional UI) */}
+                  {showAICoachPanel && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-4"
+                    >
+                      {renderAICoachPanel()}
+                    </motion.div>
                   )}
 
                   {/* Textarea */}
