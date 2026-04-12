@@ -8,6 +8,7 @@ from slowapi.util import get_remote_address
 from pydantic import BaseModel
 from typing import Optional, List, Any, Dict
 from supabase import create_client
+import asyncio
 import os
 import time
 import logging
@@ -491,18 +492,32 @@ async def evaluate_answer(request: Request, body: EvaluateAnswerRequest):
     """
     Evaluate a user's interview answer.
     """
-    try:
-        from services import gemini_service
-        result = gemini_service.evaluate_interview_answer(
-            body.question,
-            body.answer,
-            body.career_path
-        )
-        
-        return result
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    from services import gemini_service
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            result = gemini_service.evaluate_interview_answer(
+                body.question,
+                body.answer,
+                body.career_path
+            )
+            break  # success, exit retry loop
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "429" in error_msg or "rate limit" in error_msg or "quota" in error_msg:
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** attempt  # 1s, 2s, 4s
+                    logger.warning(f"[EvaluateAnswer] Gemini rate limited, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"[EvaluateAnswer] Gemini rate limit exceeded after {max_retries} attempts")
+                    raise HTTPException(status_code=429, detail="AI service is busy. Please wait a moment and try again.")
+            else:
+                raise  # non-rate-limit error, raise immediately
+    
+    return result
 
 
 def get_current_user(authorization: str = Header(None)) -> str:
@@ -647,7 +662,8 @@ async def get_interview_history(
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[History] Unexpected error for user {current_user_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve interview history")
 
 
 @router.post("/question-hint")
