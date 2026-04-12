@@ -203,6 +203,15 @@ export default function ChallengesPage() {
     }
   }
   
+  const formatDateTime = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr)
+      return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    } catch {
+      return 'N/A'
+    }
+  }
+  
   const getMedalEmoji = (rank: number) => {
     if (rank === 1) return '🥇'
     if (rank === 2) return '🥈'
@@ -227,6 +236,13 @@ export default function ChallengesPage() {
   }
   
   const userRank = getUserRank()
+  const isCompleted = userRank !== null
+  
+  const getPerformanceInsight = (score: number) => {
+    if (score >= 40) return 'Strong performance'
+    if (score >= 25) return 'Good attempt, room to improve'
+    return 'Needs improvement'
+  }
   
   if (loading) {
     return (
@@ -358,13 +374,13 @@ export default function ChallengesPage() {
                       </>
                     ) : (
                       <>
-                        🚀 Accept Protocol 
+                        🚀 {isCompleted ? 'Retry Challenge' : 'Start Challenge'}
                         <ChevronRight className="w-5 h-5 ml-2 group-hover/btn:translate-x-1 transition-transform" />
                       </>
                     )}
                   </Button>
                   <div className="text-[10px] font-bold text-slate-500 text-center">
-                    Start this week's challenge now
+                    {isCompleted ? 'Try again to improve your score' : 'Start this week\'s challenge now'}
                   </div>
                   {/* Honest Reward Display */}
                   <div className="p-4 bg-[#0F172A]/50 rounded-2xl border border-white/5">
@@ -491,15 +507,15 @@ export default function ChallengesPage() {
                 <motion.div variants={itemVariants} className="mt-6">
                   {userRank ? (
                     <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-2xl border border-purple-500/30 p-6">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-4">
                           <div className="p-3 bg-purple-500/20 rounded-xl border border-purple-500/30">
                             <Crown className="w-6 h-6 text-purple-400" />
                           </div>
                           <div>
-                            <div className="text-xs font-black uppercase tracking-widest text-purple-400 mb-1">Your Current Rank</div>
+                            <div className="text-xs font-black uppercase tracking-widest text-purple-400 mb-1">Your Rank</div>
                             <div className="text-2xl font-black text-white">
-                              #{userRank.rank} <span className="text-slate-500 text-base font-normal">of {leaderboard.length} participants</span>
+                              #{userRank.rank} <span className="text-slate-500 text-base font-normal">of {leaderboard.length}</span>
                             </div>
                           </div>
                         </div>
@@ -508,13 +524,22 @@ export default function ChallengesPage() {
                           <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Your Score</div>
                         </div>
                       </div>
+                      <div className="flex items-center justify-between pt-4 border-t border-purple-500/20">
+                        <div className="text-xs text-slate-400">
+                          Completed {formatDateTime(userRank.completed_at)}
+                        </div>
+                        <div className="text-sm font-bold text-purple-400">
+                          {getPerformanceInsight(userRank.score)}
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <div className="bg-[#1E293B] rounded-2xl border border-white/5 p-6 text-center">
                       <div className="p-3 bg-slate-800/50 rounded-xl border border-white/5 w-fit mx-auto mb-4">
                         <Trophy className="w-6 h-6 text-slate-500" />
                       </div>
-                      <p className="text-slate-500 font-bold text-sm text-center">You are not in the top 10 yet</p>
+                      <p className="text-slate-500 font-bold text-sm text-center">You are not in the top rankings yet.</p>
+                      <p className="text-slate-600 text-xs text-center mt-2">Complete the challenge to appear here.</p>
                     </div>
                   )}
                 </motion.div>
