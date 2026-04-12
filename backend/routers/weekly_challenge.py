@@ -22,6 +22,12 @@ class SubmitWeeklyChallengeRequest(BaseModel):
     answers: list
 
 
+class StartChallengeRequest(BaseModel):
+    user_id: str
+    week_number: int
+    year: int
+
+
 def get_current_week_info():
     """Get current week number and year, along with start/end dates."""
     now = datetime.utcnow()
@@ -193,4 +199,52 @@ async def get_weekly_leaderboard():
     
     except Exception as e:
         print(f"Error fetching weekly leaderboard: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/start")
+async def start_weekly_challenge(request: StartChallengeRequest):
+    """
+    Start a weekly challenge attempt.
+    Creates a new attempt record if one doesn't exist for this user/week/year.
+    Request: { user_id, week_number, year }
+    Returns: { success, attempt_id, status }
+    """
+    try:
+        # Check if attempt already exists
+        existing = supabase.table("challenge_attempts").select("*").eq("user_id", request.user_id).eq("week_number", request.week_number).eq("year", request.year).execute()
+        
+        if existing.data and len(existing.data) > 0:
+            # Return existing attempt
+            return {
+                "success": True,
+                "attempt_id": existing.data[0]["id"],
+                "status": existing.data[0]["status"]
+            }
+        
+        # Create new attempt
+        new_attempt = {
+            "user_id": request.user_id,
+            "week_number": request.week_number,
+            "year": request.year,
+            "status": "started",
+            "started_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        
+        insert_response = supabase.table("challenge_attempts").insert(new_attempt).execute()
+        
+        if not insert_response.data:
+            raise HTTPException(status_code=500, detail="Failed to create challenge attempt")
+        
+        return {
+            "success": True,
+            "attempt_id": insert_response.data[0]["id"],
+            "status": "started"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error starting weekly challenge: {e}")
         raise HTTPException(status_code=500, detail=str(e))

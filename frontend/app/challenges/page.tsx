@@ -139,10 +139,41 @@ export default function ChallengesPage() {
     return () => clearInterval(interval)
   }, [])
   
-  const handleAcceptChallenge = () => {
-    if (challenge) {
-      setIsStarting(true)
-      router.push(`/interview?mode=weekly&career_path=${encodeURIComponent(challenge.career_path)}`)
+  const handleAcceptChallenge = async () => {
+    if (!challenge || !user) {
+      return
+    }
+    
+    setIsStarting(true)
+    
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      
+      const response = await fetch(`${apiUrl}/api/weekly-challenge/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          week_number: challenge.week_number,
+          year: challenge.year
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.attempt_id) {
+          console.log('Challenge started with attempt_id:', data.attempt_id)
+        }
+        router.push(`/interview?mode=weekly&career_path=${encodeURIComponent(challenge.career_path)}`)
+      } else {
+        console.error('Failed to start challenge:', response.status)
+        alert('Failed to start challenge. Try again.')
+        setIsStarting(false)
+      }
+    } catch (err) {
+      console.error('Error starting challenge:', err)
+      alert('Failed to start challenge. Try again.')
+      setIsStarting(false)
     }
   }
   

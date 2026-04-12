@@ -334,6 +334,28 @@ CREATE INDEX IF NOT EXISTS weekly_results_score_idx ON weekly_results(score DESC
 
 
 -- =============================================================================
+-- CHALLENGE ATTEMPTS TABLE
+-- Tracks when users start weekly challenges
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS challenge_attempts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    week_number INTEGER NOT NULL,
+    year INTEGER NOT NULL,
+    status TEXT DEFAULT 'started',
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Unique constraint
+    CONSTRAINT challenge_attempts_unique UNIQUE (user_id, week_number, year)
+);
+
+-- Index for challenge_attempts
+CREATE INDEX IF NOT EXISTS challenge_attempts_user_week_year_idx ON challenge_attempts(user_id, week_number, year);
+
+
+-- =============================================================================
 -- SEQUENCES (if needed for auto-increment)
 -- =============================================================================
 
@@ -354,6 +376,7 @@ COMMENT ON TABLE challenges IS 'Shared interview challenges';
 COMMENT ON TABLE challenge_results IS 'Challenge submission results for leaderboard';
 COMMENT ON TABLE weekly_challenges IS 'Weekly challenge definitions';
 COMMENT ON TABLE weekly_results IS 'Weekly challenge submissions';
+COMMENT ON TABLE challenge_attempts IS 'Tracks when users start weekly challenges';
 
 
 -- =============================================================================
@@ -601,6 +624,25 @@ FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'service_role');
 -- Users can delete their own weekly results
 CREATE POLICY "weekly_results_delete_own" ON weekly_results
 FOR DELETE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+
+-- =============================================================================
+-- CHALLENGE ATTEMPTS TABLE RLS
+-- =============================================================================
+
+ALTER TABLE challenge_attempts ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own attempts
+CREATE POLICY "challenge_attempts_select_own" ON challenge_attempts
+FOR SELECT USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can insert their own attempts
+CREATE POLICY "challenge_attempts_insert_own" ON challenge_attempts
+FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can update their own attempts
+CREATE POLICY "challenge_attempts_update_own" ON challenge_attempts
+FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'service_role');
 
 
 -- =============================================================================
