@@ -13,15 +13,13 @@ interface Milestone {
 }
 
 interface CareerRoadmapProps {
-  roadmap: {
-    target_career: string
-    duration_months: number
-    total_weeks: number
-    milestones: Milestone[]
-  }
+  onboardingCompleted?: boolean;
+  hasAnalysis: boolean;
+  hasResume: boolean;
+  hasAppliedJobs: boolean;
 }
 
-export default function CareerRoadmap({ roadmap }: CareerRoadmapProps) {
+export default function CareerRoadmap({ onboardingCompleted, hasAnalysis, hasResume, hasAppliedJobs }: CareerRoadmapProps)
   if (!roadmap || !roadmap.milestones) return null
 
   const container = {

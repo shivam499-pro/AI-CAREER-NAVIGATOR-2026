@@ -1,4 +1,4 @@
-  'use client'
+'use client'
 import CareerRoadmap from '@/components/CareerRoadmap'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
@@ -29,6 +29,8 @@ export default function JobsPage() {
   const [jobs, setJobs] = useState<any[]>([])
   const [jobsLoading, setJobsLoading] = useState(false)
   const [jobsError, setJobsError] = useState<string | null>(null)
+  const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set())
+  const [savingJobId, setSavingJobId] = useState<string | null>(null)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -83,7 +85,21 @@ export default function JobsPage() {
     setJobsError(null)
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiUrl}/api/jobs?query=${encodeURIComponent(query)}`)
+      
+      // Get Supabase session for authenticated requests
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(`${apiUrl}/api/jobs?query=${encodeURIComponent(query)}`, {
+        headers
+      })
       if (!response.ok) {
         throw new Error(`Server error: ${response.status}`)
       }
@@ -94,6 +110,90 @@ export default function JobsPage() {
       setJobsError("Job search is currently unavailable. Please try again later.")
     } finally {
       setJobsLoading(false)
+    }
+  }
+
+  const saveJob = async (job: any) => {
+    if (!user || savingJobId) return
+    setSavingJobId(job.id || job.job_id)
+    
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      const headers: Record<string, string> = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(`${apiUrl}/api/jobs/save`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          job_id: job.id || job.job_id || `job_${Date.now()}`,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          apply_url: job.url || job.apply_url,
+          match_score: job.match_score,
+          matched_skills: job.matched_skills,
+          missing_skills: job.missing_skills
+        })
+      })
+      
+      if (response.ok) {
+        setSavedJobIds(prev => new Set([...prev, job.id || job.job_id]))
+      }
+    } catch (err) {
+      console.error("Failed to save job:", err)
+    } finally {
+      setSavingJobId(null)
+    }
+  }
+
+  const applyToJob = async (job: any) => {
+    if (!user) return
+    
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      const headers: Record<string, string> = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(`${apiUrl}/api/jobs/apply`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          job_id: job.id || job.job_id || `job_${Date.now()}`,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          apply_url: job.url || job.apply_url || `https://www.google.com/search?q=${encodeURIComponent(job.title + ' ' + job.company + ' job apply')}`,
+          match_score: job.match_score,
+          matched_skills: job.matched_skills,
+          missing_skills: job.missing_skills
+        })
+      })
+      
+      if (response.ok) {
+        // Open the apply URL
+        const applyUrl = job.url || job.apply_url || `https://www.google.com/search?q=${encodeURIComponent(job.title + ' ' + job.company + ' job apply')}`
+        window.open(applyUrl, '_blank')
+      }
+    } catch (err) {
+      console.error("Failed to apply to job:", err)
+      // Still open the URL even if API fails
+      const applyUrl = job.url || job.apply_url || `https://www.google.com/search?q=${encodeURIComponent(job.title + ' ' + job.company + ' job apply')}`
+      window.open(applyUrl, '_blank')
     }
   }
 
@@ -310,14 +410,19 @@ export default function JobsPage() {
                       whileHover={{ y: -8 }}
                       className="bg-[#1E293B] rounded-[2.5rem] border border-white/5 p-8 relative overflow-hidden group hover:border-purple-500/30 transition-all shadow-xl"
                     >
+                      {/* Match Score Badge */}
                       <div className="absolute top-0 right-0 p-4">
-                        <div className="px-3 py-1 bg-green-500/10 border border-green-500/20 rounded-full text-[9px] font-black text-green-400 uppercase tracking-widest animate-pulse shadow-[0_0_15px_rgba(34,197,94,0.2)]">
-                           New
+                        <div className={`px-3 py-2 rounded-full text-[11px] font-black uppercase tracking-widest shadow-lg ${
+                          job.match_score >= 80 ? 'bg-green-500/20 border border-green-500/40 text-green-400' :
+                          job.match_score >= 60 ? 'bg-yellow-500/20 border border-yellow-500/40 text-yellow-400' :
+                          'bg-red-500/20 border border-red-500/40 text-red-400'
+                        }`}>
+                          {job.match_score}% Match
                         </div>
                       </div>
                       
-                      <div className="mb-8">
-                        <h4 className="text-lg font-black text-white leading-tight uppercase tracking-tight mb-4 group-hover:text-purple-300 transition-colors">
+                      <div className="mb-6">
+                        <h4 className="text-lg font-black text-white leading-tight uppercase tracking-tight mb-4 group-hover:text-purple-300 transition-colors pr-20">
                           {job.title}
                         </h4>
                         <div className="space-y-2">
@@ -330,17 +435,77 @@ export default function JobsPage() {
                         </div>
                       </div>
 
-                      <Button
-                        className="w-full bg-[#6C3FC8] hover:bg-[#6C3FC8]/90 text-white font-black uppercase tracking-tighter py-7 rounded-2xl shadow-[0_10px_30px_-10px_rgba(108,63,200,0.4)] active:scale-95 transition-all group/btn"
-                        onClick={() => {
-                          const applyUrl = job.link || job.job_link || job.apply_link || job.url || job.redirect_url || 
-                            `https://www.google.com/search?q=${encodeURIComponent(job.title + ' ' + job.company + ' job apply')}`
-                          window.open(applyUrl, '_blank')
-                        }}
-                      >
-                        Initiate Application
-                        <ExternalLink className="ml-2 w-4 h-4 group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1 transition-transform" />
-                      </Button>
+                      {/* Match Details */}
+                      {(job.matched_skills?.length > 0 || job.missing_skills?.length > 0) && (
+                        <div className="mb-6 p-4 bg-[#0F172A]/50 rounded-2xl border border-white/5">
+                          {/* Matched Skills */}
+                          {job.matched_skills?.length > 0 && (
+                            <div className="mb-3">
+                              <p className="text-[9px] font-black text-green-400 uppercase tracking-widest mb-2">✓ You Match</p>
+                              <div className="flex flex-wrap gap-1">
+                                {job.matched_skills.slice(0, 3).map((skill: string, idx: number) => (
+                                  <span key={idx} className="px-2 py-1 bg-green-500/10 border border-green-500/20 rounded-full text-[9px] font-bold text-green-300">
+                                    {skill}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Missing Skills */}
+                          {job.missing_skills?.length > 0 && (
+                            <div>
+                              <p className="text-[9px] font-black text-red-400 uppercase tracking-widest mb-2">✗ Missing</p>
+                              <div className="flex flex-wrap gap-1">
+                                {job.missing_skills.slice(0, 3).map((skill: string, idx: number) => (
+                                  <span key={idx} className="px-2 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-[9px] font-bold text-red-300">
+                                    {skill}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={savingJobId === (job.id || job.job_id)}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            saveJob(job)
+                          }}
+                          className={`flex-1 rounded-2xl py-6 font-black uppercase tracking-widest text-[10px] transition-all ${
+                            savedJobIds.has(job.id || job.job_id) || savedJobIds.has(job.id)
+                              ? 'bg-green-500/20 border-green-500/40 text-green-400'
+                              : 'bg-[#0F172A] border-white/10 hover:border-green-500/30 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {savingJobId === (job.id || job.job_id) ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : savedJobIds.has(job.id || job.job_id) || savedJobIds.has(job.id) ? (
+                            <>✓ Saved</>
+                          ) : (
+                            <><Sparkles className="w-3 h-3 mr-2" /> Save</>
+                          )}
+                        </Button>
+                        
+                        <Button
+                          className="flex-1 bg-[#6C3FC8] hover:bg-[#6C3FC8]/90 text-white font-black uppercase tracking-tighter py-6 rounded-2xl shadow-[0_10px_30px_-10px_rgba(108,63,200,0.4)] active:scale-95 transition-all group/btn"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            applyToJob(job)
+                          }}
+                        >
+                          Apply Now
+                          <ExternalLink className="ml-2 w-4 h-4 group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1 transition-transform" />
+                        </Button>
+                      </div>
                     </motion.div>
                   ))}
                 </AnimatePresence>
@@ -457,12 +622,7 @@ export default function JobsPage() {
                       Live Phase Tracking
                    </div>
                 </div>
-                <CareerRoadmap 
-                  onboardingCompleted={true}
-                  hasAnalysis={!!analysis}
-                  hasResume={!!profile?.resume_exists}
-                  hasAppliedJobs={false}
-                />
+                <CareerRoadmap roadmap={analysis.roadmap} />
               </div>
             </motion.div>
           )}

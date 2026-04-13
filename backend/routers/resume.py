@@ -1,6 +1,7 @@
 """
 Resume Router
 Handles resume PDF upload and text extraction
+Integrates with user_documents table for unified document system.
 """
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Request
 from fastapi.responses import JSONResponse
@@ -11,6 +12,9 @@ import os
 import uuid
 import fitz  # PyMuPDF
 from dotenv import load_dotenv
+
+# Import resume service for skill extraction
+from services.resume_service import extract_skills, extract_experience
 
 # Load environment variables
 load_dotenv()
@@ -158,6 +162,46 @@ async def upload_resume(
         }
         
         supabase.table("profiles").update(profile_update).eq("user_id", user_id).execute()
+        
+        # --- Store in user_documents table for unified system ---
+        try:
+            # Extract skills using resume_service
+            skills = extract_skills(text) if text else []
+            
+            # Extract experience using resume_service
+            experience = extract_experience(text) if text else []
+            
+            # Create text preview (first 500 chars)
+            text_preview = text[:500] if text else ""
+            
+            # Create structured JSON for user_documents
+            extracted_data = {
+                "document_type": "resume",
+                "skills": skills if isinstance(skills, list) else [],
+                "education": [],
+                "experience": [{"role": exp, "company": "", "duration": "", "description": ""} for exp in experience] if isinstance(experience, list) else [],
+                "certifications": [],
+                "projects": [],
+                "achievements": [],
+                "summary": text[:1000] if text else "",
+                "text_preview": text_preview
+            }
+            
+            # Store in user_documents table
+            doc_record = {
+                "user_id": user_id,
+                "document_name": file.filename,
+                "document_type": "resume",
+                "extracted_data": extracted_data,
+                "storage_url": resume_url
+            }
+            
+            supabase.table("user_documents").insert(doc_record).execute()
+            print(f"Stored resume: {file.filename} in user_documents")
+            
+        except Exception as db_err:
+            print(f"user_documents insert warning: {db_err}")
+            # Don't fail - keep existing functionality
         
         return {
             "success": True,

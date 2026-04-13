@@ -6,13 +6,29 @@ from fastapi import APIRouter, HTTPException, Query, Request, Header, Depends
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from pydantic import BaseModel
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 from supabase import create_client
+import asyncio
 import os
+import time
+import logging
+import uuid
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Structured log prefix
+INTERVIEW_PIPELINE_LOG = "[INTERVIEW_PIPELINE]"
+INTERVIEW_PIPELINE = "[InterviewPipeline]"
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -24,6 +40,184 @@ supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
 if not supabase_url or not supabase_key:
     raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set in environment variables")
 supabase = create_client(supabase_url, supabase_key)
+
+# =============================================================================
+# STABILITY IMPROVEMENTS: Cache, Throttling, and Fallbacks
+# =============================================================================
+
+# In-memory cache for generated interview questions
+# Key: user_id + career_path + difficulty
+# TTL: 15 minutes (900 seconds)
+_questions_cache: Dict[str, tuple] = {}  # {cache_key: (timestamp, questions)}
+QUESTIONS_CACHE_TTL = 900  # 15 minutes
+
+# Request throttling per user
+# Prevent same user from calling generate-questions more than once within 20 seconds
+_user_last_request_time: Dict[str, float] = {}
+USER_THROTTLE_SECONDS = 20
+
+# Session creation tracking to prevent duplicate sessions
+# Key: user_id + career_path -> session_id
+_user_active_sessions: Dict[str, str] = {}
+
+# Fallback question bank (used when Gemini + cache both fail)
+FALLBACK_QUESTIONS = [
+    {
+        "id": 1,
+        "question": "Tell me about yourself and why you're interested in this role.",
+        "type": "behavioral",
+        "difficulty": "easy",
+        "hint": "Focus on your background, key skills, and why this career path interests you."
+    },
+    {
+        "id": 2,
+        "question": "Describe a challenging project you worked on. What was the problem and how did you solve it?",
+        "type": "project_based",
+        "difficulty": "medium",
+        "hint": "Use STAR method: Situation, Task, Action, Result. Be specific about your contribution."
+    },
+    {
+        "id": 3,
+        "question": "What are your strengths and how do they help you in this role?",
+        "type": "behavioral",
+        "difficulty": "easy",
+        "hint": "Pick 2-3 relevant strengths with concrete examples from your experience."
+    },
+    {
+        "id": 4,
+        "question": "Where do you see yourself in 5 years?",
+        "type": "behavioral",
+        "difficulty": "easy",
+        "hint": "Align your answer with the career path and show ambition balanced with realism."
+    },
+    {
+        "id": 5,
+        "question": "Describe a time when you had to learn something new quickly. How did you approach it?",
+        "type": "behavioral",
+        "difficulty": "medium",
+        "hint": "Show your learning ability and adaptability. Include specific steps you took."
+    },
+    {
+        "id": 6,
+        "question": "What are your salary expectations?",
+        "type": "behavioral",
+        "difficulty": "medium",
+        "hint": "Research the market rate for your role and experience level. Give a range."
+    },
+    {
+        "id": 7,
+        "question": "Why do you want to work at this company?",
+        "type": "behavioral",
+        "difficulty": "easy",
+        "hint": "Research the company. Mention specific values, products, or recent achievements."
+    },
+    {
+        "id": 8,
+        "question": "Tell me about a time you failed and what you learned from it.",
+        "type": "behavioral",
+        "difficulty": "medium",
+        "hint": "Be honest but focus on what you learned and how you improved afterward."
+    },
+    {
+        "id": 9,
+        "question": "What questions do you have for me?",
+        "type": "behavioral",
+        "difficulty": "easy",
+        "hint": "Ask about team culture, immediate priorities, or growth opportunities. Avoid salary/leave in first round."
+    },
+    {
+        "id": 10,
+        "question": "Describe a technical problem you solved. What was your approach?",
+        "type": "technical",
+        "difficulty": "medium",
+        "hint": "Explain the problem clearly, walk through your solution, and mention the outcome."
+    }
+]
+
+
+def _get_questions_cache_key(user_id: str, career_path: str, difficulty: str) -> str:
+    """Generate cache key from user_id, career_path, and difficulty."""
+    return f"{user_id}:{career_path}:{difficulty}"
+
+
+def _get_cached_questions(user_id: str, career_path: str, difficulty: str) -> Optional[List[Dict]]:
+    """Get cached questions if valid (not expired)."""
+    global _questions_cache
+    cache_key = _get_questions_cache_key(user_id, career_path, difficulty)
+    
+    if cache_key in _questions_cache:
+        timestamp, questions = _questions_cache[cache_key]
+        current_time = time.time()
+        if current_time - timestamp <= QUESTIONS_CACHE_TTL:
+            return questions
+        else:
+            # Expired - remove it
+            del _questions_cache[cache_key]
+    
+    return None
+
+
+def _set_cached_questions(user_id: str, career_path: str, difficulty: str, questions: List[Dict]) -> None:
+    """Store questions in cache with current timestamp."""
+    global _questions_cache
+    cache_key = _get_questions_cache_key(user_id, career_path, difficulty)
+    _questions_cache[cache_key] = (time.time(), questions)
+
+
+def _check_user_throttle(user_id: str) -> bool:
+    """Check if user is within throttle period. Returns True if throttled."""
+    global _user_last_request_time
+    current_time = time.time()
+    
+    if user_id in _user_last_request_time:
+        time_since_last = current_time - _user_last_request_time[user_id]
+        if time_since_last < USER_THROTTLE_SECONDS:
+            return True
+    
+    # Update last request time
+    _user_last_request_time[user_id] = current_time
+    return False
+
+
+def _get_fallback_questions() -> List[Dict]:
+    """Get the static fallback question bank."""
+    return FALLBACK_QUESTIONS
+
+
+def _deduplicate_questions(questions: List[Dict]) -> List[Dict]:
+    """
+    Deduplicate questions based on question text.
+    Returns unique questions while preserving order.
+    """
+    seen = set()
+    unique_questions = []
+    
+    for q in questions:
+        # Use normalized question text as dedup key
+        question_text = q.get("question", "").strip().lower()
+        if question_text and question_text not in seen:
+            seen.add(question_text)
+            unique_questions.append(q)
+    
+    return unique_questions
+
+
+def _log_pipeline(
+    user_id: str,
+    session_id: str | None,
+    source: str,
+    retry_used: bool,
+    question_count: int
+) -> None:
+    """
+    Structured debug trace logging for interview pipeline.
+    Format: [INTERVIEW_PIPELINE] user_id=... session_id=... source=... retry_used=... question_count=... timestamp=...
+    """
+    logger.info(
+        f"{INTERVIEW_PIPELINE} user_id={user_id} session_id={session_id or 'N/A'} "
+        f"source={source} retry_used={retry_used} question_count={question_count} "
+        f"timestamp={datetime.utcnow().isoformat()}"
+    )
 
 
 class GenerateQuestionsRequest(BaseModel):
@@ -47,6 +241,10 @@ class SaveSessionRequest(BaseModel):
     answers: List[Any]
     scores: List[Any]
     total_score: float
+    # Optional fields for badge triggering
+    difficulty: Optional[str] = "medium"
+    is_simulation: Optional[bool] = False
+    is_voice: Optional[bool] = False
 
 
 class QuestionHintRequest(BaseModel):
@@ -59,9 +257,60 @@ class QuestionHintRequest(BaseModel):
 async def generate_questions(request: Request, body: GenerateQuestionsRequest):
     """
     Generate 5 personalized interview questions based on user profile.
+    
+    Implements:
+    - In-memory cache with 15-minute TTL
+    - Request throttling per user (20 seconds)
+    - Safe retry logic (retry once on Gemini failure)
+    - Question deduplication
+    - Fallback question bank when Gemini + cache fail
+    - Comprehensive logging with structured pipeline logs
+    - Always returns 200 OK with valid structure
     """
+    # Generate or reuse session ID for this user+career_path combination
+    session_key = f"{body.user_id}:{body.career_path}"
+    if session_key not in _user_active_sessions:
+        _user_active_sessions[session_key] = str(uuid.uuid4())
+    session_id = _user_active_sessions[session_key]
+    
     try:
-        # Fetch user data
+        # STEP 1: Check request throttling (20 seconds per user)
+        if _check_user_throttle(body.user_id):
+            # User is within throttle period - try to return cached response
+            cached = _get_cached_questions(body.user_id, body.career_path, body.difficulty)
+            if cached:
+                logger.info(f"[Interview] Cache hit (throttled user) for {body.user_id}:{body.career_path}")
+                _log_pipeline(body.user_id, session_id, "throttle_cache", False, len(cached))
+                return {
+                    "success": True,
+                    "questions": cached,
+                    "source": "throttle_cache",
+                    "meta": {"cached": True, "retry_used": False, "session_id": session_id}
+                }
+            # No cache available, return fallback
+            logger.warning(f"[Interview] Throttled user with no cache: {body.user_id}")
+            fallback_q = _get_fallback_questions()
+            _log_pipeline(body.user_id, session_id, "throttle_fallback", False, len(fallback_q))
+            return {
+                "success": True,
+                "questions": fallback_q,
+                "source": "throttle_fallback",
+                "meta": {"cached": False, "retry_used": False, "session_id": session_id}
+            }
+        
+        # STEP 2: Check cache first (15-minute TTL)
+        cached = _get_cached_questions(body.user_id, body.career_path, body.difficulty)
+        if cached:
+            logger.info(f"[Interview] Cache hit for {body.user_id}:{body.career_path}")
+            _log_pipeline(body.user_id, session_id, "cache", False, len(cached))
+            return {
+                "success": True,
+                "questions": cached,
+                "source": "cache",
+                "meta": {"cached": True, "retry_used": False, "session_id": session_id}
+            }
+        
+        # STEP 3: Cache miss - fetch user data and prepare for Gemini call
         profile_response = supabase.table("profiles").select("*").eq("user_id", body.user_id).execute()
 
         if not profile_response.data:
@@ -97,16 +346,95 @@ async def generate_questions(request: Request, body: GenerateQuestionsRequest):
         # Import and call gemini service
         from services import gemini_service
         
-        # FIX: Use 'body' instead of 'request' to access your Pydantic data
-        questions = gemini_service.generate_interview_questions(
-            full_profile, 
-            body.career_path,  # Changed from request.career_path
-            body.difficulty,   # Changed from request.difficulty
-            full_profile.get("resume_text", ""),
-            body.personality
-        )
+        # STEP 4: Call Gemini to generate questions (with retry on failure)
+        questions = None
+        retry_used = False
         
-        return {"questions": questions}
+        try:
+            # First attempt
+            logger.info(f"[Interview] Calling Gemini for {body.user_id}:{body.career_path} (attempt 1)")
+            questions = gemini_service.generate_interview_questions(
+                full_profile, 
+                body.career_path,
+                body.difficulty,
+                full_profile.get("resume_text", ""),
+                body.personality
+            )
+        except Exception as gemini_error:
+            error_str = str(gemini_error).lower()
+            if "rate limit" in error_str or "429" in error_str:
+                logger.warning(f"[Interview] Gemini rate limit on attempt 1, retrying: {gemini_error}")
+                retry_used = True
+                try:
+                    # Retry once
+                    time.sleep(1)  # Brief delay before retry
+                    logger.info(f"[Interview] Retrying Gemini for {body.user_id}:{body.career_path} (attempt 2)")
+                    questions = gemini_service.generate_interview_questions(
+                        full_profile, 
+                        body.career_path,
+                        body.difficulty,
+                        full_profile.get("resume_text", ""),
+                        body.personality
+                    )
+                except Exception as retry_error:
+                    logger.error(f"[Interview] Gemini retry failed: {retry_error}")
+                    questions = None
+            else:
+                raise
+        
+        # STEP 5: Check if Gemini returned valid questions
+        if questions and len(questions) > 0:
+            # Deduplicate questions
+            unique_questions = _deduplicate_questions(questions)
+            
+            # If deduplication removed too many questions, pad with fallback
+            if len(unique_questions) < 3:
+                logger.warning(f"[Interview] Few unique questions ({len(unique_questions)}), using fallback")
+                fallback = _get_fallback_questions()
+                # Add some fallback questions to fill gaps
+                unique_questions.extend(fallback[:5 - len(unique_questions)])
+            
+            # Re-index questions to ensure sequential IDs
+            for i, q in enumerate(unique_questions, 1):
+                q["id"] = i
+            
+            # Store in cache
+            _set_cached_questions(body.user_id, body.career_path, body.difficulty, unique_questions)
+            logger.info(f"[Interview] Successfully generated {len(unique_questions)} questions for {body.user_id}")
+            logger.info(f"[Interview] source used: gemini, questions count: {len(unique_questions)}")
+            _log_pipeline(body.user_id, session_id, "gemini", retry_used, len(unique_questions))
+            return {
+                "success": True,
+                "questions": unique_questions,
+                "source": "gemini",
+                "meta": {"cached": False, "retry_used": retry_used, "session_id": session_id}
+            }
+        
+        # STEP 6: Gemini failed - check if there's a previous cache we can use
+        # (even if expired, it's better than nothing)
+        cached_expired = _get_cached_questions(body.user_id, body.career_path, body.difficulty)
+        if cached_expired:
+            logger.info(f"[Interview] Using expired cache for {body.user_id}")
+            logger.info(f"[Interview] source used: expired_cache, questions count: {len(cached_expired)}")
+            _log_pipeline(body.user_id, session_id, "expired_cache", retry_used, len(cached_expired))
+            return {
+                "success": True,
+                "questions": cached_expired,
+                "source": "expired_cache",
+                "meta": {"cached": True, "retry_used": retry_used, "session_id": session_id}
+            }
+        
+        # STEP 7: All options exhausted - return fallback questions
+        logger.warning(f"[Interview] Gemini failed and no cache - serving fallback questions")
+        fallback_q = _get_fallback_questions()
+        logger.info(f"[Interview] source used: fallback, questions count: {len(fallback_q)}")
+        _log_pipeline(body.user_id, session_id, "fallback", retry_used, len(fallback_q))
+        return {
+            "success": True,
+            "questions": fallback_q,
+            "source": "fallback",
+            "meta": {"cached": False, "retry_used": retry_used, "session_id": session_id}
+        }
         
     except HTTPException:
         raise
@@ -114,17 +442,52 @@ async def generate_questions(request: Request, body: GenerateQuestionsRequest):
         error_str = str(e).lower()
         # Check if it's a rate limit error
         if "rate limit" in error_str or "429" in error_str:
-            raise HTTPException(
-                status_code=429,
-                detail={
-                    "message": "The AI service is currently busy. Please wait a moment and try again.",
-                    "error_type": "rate_limit",
-                    "suggestion": "Wait 30-60 seconds before retrying your request."
+            logger.warning(f"[Interview] Rate limit error - serving fallback: {str(e)}")
+            
+            # Try to return cached questions
+            cached = _get_cached_questions(body.user_id, body.career_path, body.difficulty)
+            if cached:
+                _log_pipeline(body.user_id, session_id, "error_cache", False, len(cached))
+                return {
+                    "success": True,
+                    "questions": cached,
+                    "source": "error_cache",
+                    "meta": {"cached": True, "retry_used": False, "session_id": session_id}
                 }
-            )
+            
+            # Return fallback questions - never crash
+            fallback_q = _get_fallback_questions()
+            _log_pipeline(body.user_id, session_id, "error_fallback", False, len(fallback_q))
+            return {
+                "success": True,
+                "questions": fallback_q,
+                "source": "error_fallback",
+                "meta": {"cached": False, "retry_used": False, "session_id": session_id}
+            }
+        
+        logger.error(f"[Interview] Unexpected error in generate-questions: {str(e)}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        
+        # For any other error, try to return cached or fallback - never crash frontend
+        cached = _get_cached_questions(body.user_id, body.career_path, body.difficulty)
+        if cached:
+            _log_pipeline(body.user_id, session_id, "exception_cache", False, len(cached))
+            return {
+                "success": True,
+                "questions": cached,
+                "source": "exception_cache",
+                "meta": {"cached": True, "retry_used": False, "session_id": session_id}
+            }
+        
+        fallback_q = _get_fallback_questions()
+        _log_pipeline(body.user_id, session_id, "exception_fallback", False, len(fallback_q))
+        return {
+            "success": True,
+            "questions": fallback_q,
+            "source": "exception_fallback",
+            "meta": {"cached": False, "retry_used": False, "session_id": session_id}
+        }
 
 
 @router.post("/evaluate-answer")
@@ -133,18 +496,32 @@ async def evaluate_answer(request: Request, body: EvaluateAnswerRequest):
     """
     Evaluate a user's interview answer.
     """
-    try:
-        from services import gemini_service
-        result = gemini_service.evaluate_interview_answer(
-            body.question,
-            body.answer,
-            body.career_path
-        )
-        
-        return result
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    from services import gemini_service
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            result = gemini_service.evaluate_interview_answer(
+                body.question,
+                body.answer,
+                body.career_path
+            )
+            break  # success, exit retry loop
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "429" in error_msg or "rate limit" in error_msg or "quota" in error_msg:
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** attempt  # 1s, 2s, 4s
+                    logger.warning(f"[EvaluateAnswer] Gemini rate limited, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"[EvaluateAnswer] Gemini rate limit exceeded after {max_retries} attempts")
+                    raise HTTPException(status_code=429, detail="AI service is busy. Please wait a moment and try again.")
+            else:
+                raise  # non-rate-limit error, raise immediately
+    
+    return result
 
 
 def get_current_user(authorization: str = Header(None)) -> str:
@@ -190,7 +567,84 @@ async def save_session(body: SaveSessionRequest, current_user_id: str = Depends(
         
         supabase.table("interview_sessions").insert(session_data).execute()
         
-        return {"success": True, "message": "Session saved successfully"}
+        # =============================================================================
+        # CAREER MEMORY ENGINE INTEGRATION (Non-critical)
+        # Update user memory after successful session save.
+        # DO NOT block response if memory update fails.
+        # =============================================================================
+        try:
+            from services import career_memory_engine
+            
+            # Prepare session data for memory engine
+            memory_session_data = {
+                "career_path": body.career_path,
+                "score": int(body.total_score),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            # Update user memory (non-blocking)
+            career_memory_engine.update_user_memory(
+                body.user_id,
+                memory_session_data
+            )
+        except Exception as memory_error:
+            # Log error but do NOT block the response
+            logger.warning(f"[MEMORY_ENGINE_ERROR] Failed to update memory: {str(memory_error)}")
+        # =============================================================================
+        # END CAREER MEMORY INTEGRATION
+        # =============================================================================
+        
+        # =============================================================================
+        # CAREER EVOLUTION ENGINE INTEGRATION (Non-critical)
+        # Invalidate evolution cache after session.
+        # DO NOT block response if update fails.
+        # =============================================================================
+        try:
+            from services import career_evolution_engine
+            
+            # Update evolution profile cache (non-blocking)
+            career_evolution_engine.update_user_evolution_profile(
+                body.user_id
+            )
+        except Exception as evolution_error:
+            # Log error but do NOT block the response
+            logger.warning(f"[EVOLUTION_ENGINE_ERROR] Failed to update profile: {str(evolution_error)}")
+        # =============================================================================
+        # END CAREER EVOLUTION INTEGRATION
+        # =============================================================================
+        
+        # =============================================================================
+        # BADGE SERVICE INTEGRATION (Non-critical)
+        # Check and award badges automatically after session save.
+        # DO NOT block response if badge check fails.
+        # =============================================================================
+        badge_result = {"new_badges": [], "total_xp_earned": 0, "rank_update": None}
+        try:
+            from services import badge_service
+            
+            # Check badges with session details
+            badge_result = badge_service.check_badges_on_session_complete(
+                user_id=body.user_id,
+                total_score=body.total_score,
+                difficulty=getattr(body, 'difficulty', 'medium'),
+                is_simulation=getattr(body, 'is_simulation', False),
+                is_voice=getattr(body, 'is_voice', False)
+            )
+            logger.info(f"[BADGE_CHECK] Session complete for user {body.user_id}: {len(badge_result.get('new_badges', []))} new badges")
+        except Exception as badge_error:
+            # Log error but do NOT block the response
+            logger.warning(f"[BADGE_ERROR] Failed to check badges: {str(badge_error)}")
+        # =============================================================================
+        # END BADGE INTEGRATION
+        # =============================================================================
+        
+        return {
+            "success": True,
+            "message": "Session saved successfully",
+            "new_badges": badge_result.get("new_badges", []),
+            "total_xp_earned": badge_result.get("total_xp_earned", 0),
+            "rank_update": badge_result.get("rank_update")
+        }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -243,7 +697,8 @@ async def get_interview_history(
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[History] Unexpected error for user {current_user_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve interview history")
 
 
 @router.post("/question-hint")

@@ -356,6 +356,31 @@ CREATE INDEX IF NOT EXISTS challenge_attempts_user_week_year_idx ON challenge_at
 
 
 -- =============================================================================
+-- USER_CAREER_MEMORY TABLE
+-- Tracks user evolution over time for career paths
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS user_career_memory (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    career_path TEXT NOT NULL,
+    skill_area TEXT,
+    performance_score INTEGER,
+    confidence_score FLOAT DEFAULT 0.0,
+    trend TEXT DEFAULT 'stable',
+    session_count INTEGER DEFAULT 1,
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Index for user_career_memory
+CREATE INDEX IF NOT EXISTS user_career_memory_user_id_idx ON user_career_memory(user_id);
+CREATE INDEX IF NOT EXISTS user_career_memory_career_path_idx ON user_career_memory(career_path);
+
+COMMENT ON TABLE user_career_memory IS 'Tracks user career evolution over time for different career paths';
+
+
+-- =============================================================================
 -- SEQUENCES (if needed for auto-increment)
 -- =============================================================================
 
@@ -646,6 +671,49 @@ FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'service_role');
 
 
 -- =============================================================================
+-- USER_CAREER_MEMORY TABLE RLS
+-- =============================================================================
+
+ALTER TABLE user_career_memory ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own career memory
+CREATE POLICY "user_career_memory_select_own" ON user_career_memory
+FOR SELECT USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can insert their own career memory
+CREATE POLICY "user_career_memory_insert_own" ON user_career_memory
+FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can update their own career memory
+CREATE POLICY "user_career_memory_update_own" ON user_career_memory
+FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+-- Users can delete their own career memory
+CREATE POLICY "user_career_memory_delete_own" ON user_career_memory
+FOR DELETE USING (auth.uid() = user_id OR auth.role() = 'service_role');
+
+
+-- =============================================================================
+-- USER_DOCUMENTS TABLE
+-- Stores structured extracted data per document upload
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS user_documents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    document_name TEXT NOT NULL,
+    document_type TEXT NOT NULL DEFAULT 'other',  -- 'certificate' | 'resume' | 'cover_letter' | 'other'
+    extracted_data JSONB NOT NULL DEFAULT '{}',
+    storage_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Index for user_documents
+CREATE INDEX IF NOT EXISTS user_documents_user_id_idx ON user_documents(user_id);
+CREATE INDEX IF NOT EXISTS user_documents_user_id_type_idx ON user_documents(user_id, document_type);
+
+
+-- =============================================================================
 -- VERIFICATION QUERY
 -- Run this to verify RLS is enabled on all tables
 -- =============================================================================
@@ -659,3 +727,101 @@ FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'service_role');
 -- ORDER BY tablename;
 -- 
 -- =============================================================================
+
+
+-- =============================================================================
+-- SAVED_JOBS TABLE
+-- Stores jobs bookmarked by users
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS saved_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    job_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    company TEXT,
+    location TEXT,
+    apply_url TEXT,
+    match_score FLOAT,
+    matched_skills JSONB,
+    missing_skills JSONB,
+    saved_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    CONSTRAINT saved_jobs_unique UNIQUE (user_id, job_id)
+);
+
+-- Index for saved_jobs
+CREATE INDEX IF NOT EXISTS saved_jobs_user_id_idx ON saved_jobs(user_id);
+CREATE INDEX IF NOT EXISTS saved_jobs_saved_at_idx ON saved_jobs(saved_at DESC);
+
+
+-- =============================================================================
+-- JOB_APPLICATIONS TABLE
+-- Tracks job application statuses
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS job_applications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    job_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    company TEXT,
+    location TEXT,
+    apply_url TEXT,
+    match_score FLOAT,
+    matched_skills JSONB,
+    missing_skills JSONB,
+    status TEXT NOT NULL DEFAULT 'applied' CHECK (status IN ('applied', 'interview', 'rejected', 'offer')),
+    notes TEXT,
+    applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    CONSTRAINT job_applications_unique UNIQUE (user_id, job_id)
+);
+
+-- Index for job_applications
+CREATE INDEX IF NOT EXISTS job_applications_user_id_idx ON job_applications(user_id);
+CREATE INDEX IF NOT EXISTS job_applications_status_idx ON job_applications(status);
+CREATE INDEX IF NOT EXISTS job_applications_applied_at_idx ON job_applications(applied_at DESC);
+
+
+-- =============================================================================
+-- SAVED_JOBS TABLE RLS
+-- =============================================================================
+
+ALTER TABLE saved_jobs ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own saved jobs
+CREATE POLICY "saved_jobs_select_own" ON saved_jobs
+FOR SELECT USING (auth.uid() = user_id);
+
+-- Users can insert their own saved jobs
+CREATE POLICY "saved_jobs_insert_own" ON saved_jobs
+FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Users can delete their own saved jobs
+CREATE POLICY "saved_jobs_delete_own" ON saved_jobs
+FOR DELETE USING (auth.uid() = user_id);
+
+
+-- =============================================================================
+-- JOB_APPLICATIONS TABLE RLS
+-- =============================================================================
+
+ALTER TABLE job_applications ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own applications
+CREATE POLICY "job_applications_select_own" ON job_applications
+FOR SELECT USING (auth.uid() = user_id);
+
+-- Users can insert their own applications
+CREATE POLICY "job_applications_insert_own" ON job_applications
+FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Users can update their own applications
+CREATE POLICY "job_applications_update_own" ON job_applications
+FOR UPDATE USING (auth.uid() = user_id);
+
+-- Users can delete their own applications
+CREATE POLICY "job_applications_delete_own" ON job_applications
+FOR DELETE USING (auth.uid() = user_id);

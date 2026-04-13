@@ -20,6 +20,7 @@ class SubmitWeeklyChallengeRequest(BaseModel):
     user_id: str
     score: float
     answers: list
+    is_voice: bool = False  # For voice badge
 
 
 class StartChallengeRequest(BaseModel):
@@ -145,11 +146,12 @@ async def submit_weekly_challenge(request: SubmitWeeklyChallengeRequest):
         
         # Get leaderboard
         leaderboard_response = supabase.table("weekly_results").select(
-            "user_email, score, completed_at"
+            "user_id, user_email, score, completed_at"
         ).eq("week_number", week_number).eq("year", year).order("score", desc=True).execute()
         
         leaderboard = []
         user_rank = None
+        is_winner = False
         for i, row in enumerate(leaderboard_response.data):
             entry = {
                 "rank": i + 1,
@@ -161,11 +163,49 @@ async def submit_weekly_challenge(request: SubmitWeeklyChallengeRequest):
             
             if row.get("user_id") == request.user_id or row.get("user_email") == user_email:
                 user_rank = i + 1
+                if user_rank == 1:
+                    is_winner = True
+        
+        # =============================================================================
+        # BADGE SERVICE INTEGRATION (Non-critical)
+        # Check and award badges after weekly challenge submission.
+        # DO NOT block response if badge check fails.
+        # =============================================================================
+        badge_result = {"new_badges": [], "total_xp_earned": 0, "rank_update": None}
+        try:
+            from services import badge_service
+            
+            # Check session completion badges
+            badge_result = badge_service.check_and_award_badges(
+                user_id=request.user_id,
+                event="session_complete"
+            )
+            
+            # Check for weekly winner badge (if they ranked #1)
+            if is_winner:
+                winner_result = badge_service.check_and_award_badges(
+                    user_id=request.user_id,
+                    event="challenge_won",
+                    event_data={"rank": 1}
+                )
+                # Merge badge results
+                badge_result["new_badges"].extend(winner_result.get("new_badges", []))
+                badge_result["total_xp_earned"] += winner_result.get("total_xp_earned", 0)
+            
+            logger.info(f"[BADGE_CHECK] Weekly challenge for user {request.user_id}: {len(badge_result.get('new_badges', []))} new badges")
+        except Exception as badge_error:
+            logger.warning(f"[BADGE_ERROR] Failed to check badges: {str(badge_error)}")
+        # =============================================================================
+        # END BADGE INTEGRATION
+        # =============================================================================
         
         return {
             "success": True,
             "rank": user_rank,
-            "leaderboard": leaderboard[:10]  # Top 10
+            "leaderboard": leaderboard[:10],  # Top 10
+            "new_badges": badge_result.get("new_badges", []),
+            "total_xp_earned": badge_result.get("total_xp_earned", 0),
+            "rank_update": badge_result.get("rank_update")
         }
     
     except Exception as e:

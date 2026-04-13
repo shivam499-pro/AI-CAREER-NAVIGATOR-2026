@@ -92,34 +92,23 @@ def validate_file_content(content: bytes, filename: str, content_type: str) -> N
             )
 
 EXTRACTION_PROMPT = """You are analyzing career documents for a student/professional.
-Extract ALL relevant information from these documents including:
-1. Certificate names and issuing organizations
-2. Dates earned/issued
-3. Skills and technologies mentioned
-4. Grades, scores, or percentages
-5. Course names and durations
-6. Any achievements or awards
 
-Return ONLY a valid JSON object:
+Analyze the document and extract ALL relevant information. Determine the document type (certificate, resume, cover_letter, or other).
+
+Return ONLY a valid JSON object with this exact structure:
 {
-  "certificates": [
-    {
-      "name": "certificate name",
-      "issuer": "organization name",
-      "date": "date earned",
-      "skills": ["skill1", "skill2"]
-    }
-  ],
-  "skills_extracted": ["skill1", "skill2"],
-  "grades": [
-    {
-      "subject": "subject name",
-      "score": "score/grade"
-    }
-  ],
+  "document_type": "certificate/resume/cover_letter/other",
+  "skills": ["skill1", "skill2"],
+  "education": [{"institution": "name", "degree": "degree name", "field": "field of study", "year": "year"}],
+  "experience": [{"company": "company name", "role": "job title", "duration": "duration", "description": "job description"}],
+  "certifications": [{"name": "certificate name", "issuer": "organization", "date": "date earned"}],
+  "projects": [{"name": "project name", "description": "project description", "technologies": ["tech1"]}],
   "achievements": ["achievement1", "achievement2"],
-  "summary": "brief summary of all documents"
-}"""
+  "summary": "brief summary of the document content"
+}
+
+If any field has no data, use an empty array or empty string.
+Do not return anything else."""
 
 
 def _clean_json(text: str) -> str:
@@ -138,6 +127,54 @@ def _clean_json(text: str) -> str:
                 text = text[:i + 1]
                 break
     return text.strip()
+
+
+def _get_default_extracted_data() -> dict:
+    """Return default extracted data structure when extraction fails."""
+    return {
+        "document_type": "other",
+        "skills": [],
+        "education": [],
+        "experience": [],
+        "certifications": [],
+        "projects": [],
+        "achievements": [],
+        "summary": ""
+    }
+
+
+def _detect_document_type(filename: str, extracted_data: dict) -> str:
+    """Detect document type based on filename or Gemini output."""
+    filename_lower = filename.lower()
+    
+    # First check filename
+    if "certificate" in filename_lower or "cert" in filename_lower:
+        return "certificate"
+    elif "resume" in filename_lower or "cv" in filename_lower:
+        return "resume"
+    elif "cover" in filename_lower:
+        return "cover_letter"
+    
+    # Fallback to Gemini's detected type
+    gemini_type = extracted_data.get("document_type", "").lower()
+    if gemini_type in ["certificate", "resume", "cover_letter", "other"]:
+        return gemini_type
+    
+    return "other"
+
+
+def _transform_to_unified_format(extracted: dict) -> dict:
+    """Transform extracted data to unified format with all required fields."""
+    return {
+        "document_type": extracted.get("document_type", "other"),
+        "skills": extracted.get("skills", []) or extracted.get("skills_extracted", []),
+        "education": extracted.get("education", []),
+        "experience": extracted.get("experience", []),
+        "certifications": extracted.get("certifications", []) or extracted.get("certificates", []),
+        "projects": extracted.get("projects", []),
+        "achievements": extracted.get("achievements", []),
+        "summary": extracted.get("summary", "")
+    }
 
 
 @router.post("/upload")
@@ -272,23 +309,55 @@ async def upload_documents(
             )
 
         # --- Parse extracted JSON ---
+        extracted = _get_default_extracted_data()
         try:
             clean_text = _clean_json(raw_text)
-            extracted = json.loads(clean_text)
-        except json.JSONDecodeError:
-            raise HTTPException(
-                status_code=500,
-                detail="AI returned an invalid response. Please try again."
-            )
+            parsed = json.loads(clean_text)
+            # Transform to unified format
+            extracted = _transform_to_unified_format(parsed)
+        except (json.JSONDecodeError, Exception) as parse_err:
+            print(f"JSON parsing warning: {parse_err}")
+            # Continue with default structure - don't break upload
+            extracted = _get_default_extracted_data()
 
-        # --- Ensure expected keys ---
-        extracted.setdefault("certificates", [])
-        extracted.setdefault("skills_extracted", [])
-        extracted.setdefault("grades", [])
-        extracted.setdefault("achievements", [])
-        extracted.setdefault("summary", "")
+        # --- Detect document type ---
+        # Use the first filename as primary for type detection
+        primary_filename = file_names[0] if file_names else "document"
+        document_type = _detect_document_type(primary_filename, extracted)
+        extracted["document_type"] = document_type
 
-        # --- Save to Supabase profiles table ---
+        # --- Store each document in user_documents table ---
+        # Store one record per file with the extracted data
+        try:
+            for idx, fname in enumerate(file_names):
+                # For multiple files, use the same extraction but detect type per file
+                file_doc_type = _detect_document_type(fname, extracted)
+                
+                # Get storage URL for this file
+                file_url = None
+                for url_entry in storage_urls:
+                    if url_entry.get("filename") == fname:
+                        file_url = url_entry.get("url")
+                        break
+                
+                doc_record = {
+                    "user_id": user_id,
+                    "document_name": fname,
+                    "document_type": file_doc_type,
+                    "extracted_data": extracted,  # Store the unified JSON structure
+                    "storage_url": file_url
+                }
+                
+                supabase.table("user_documents").insert(doc_record).execute()
+                print(f"Stored document: {fname} as {file_doc_type}")
+        except Exception as db_err:
+            print(f"user_documents insert warning: {db_err}")
+            # Don't fail - still return the extraction results
+
+        # --- Legacy: Update profiles table with merged data ---
+        # Keep this for backward compatibility
+
+        # --- Legacy: Save to Supabase profiles table (backward compatibility) ---
         try:
             # Fetch existing profile data
             profile_resp = supabase.table("profiles").select(
@@ -302,14 +371,14 @@ async def upload_documents(
                 existing_certs = profile_resp.data[0].get("certificates") or []
 
             # Merge new skills (deduplicate)
-            new_skills = extracted.get("skills_extracted", [])
+            new_skills = extracted.get("skills", []) or extracted.get("skills_extracted", [])
             merged_skills = list(set(
                 (existing_skills if isinstance(existing_skills, list) else [])
                 + (new_skills if isinstance(new_skills, list) else [])
             ))
 
             # Merge new certificates
-            new_certs = extracted.get("certificates", [])
+            new_certs = extracted.get("certifications", []) or extracted.get("certificates", [])
             merged_certs = (
                 (existing_certs if isinstance(existing_certs, list) else [])
                 + (new_certs if isinstance(new_certs, list) else [])
