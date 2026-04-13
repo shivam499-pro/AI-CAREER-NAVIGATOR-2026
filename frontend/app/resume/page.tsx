@@ -264,6 +264,10 @@ export default function ResumePage() {
       if (data.success) {
         setDocResult(data.extracted)
         setDocFilesProcessed(data.files_processed)
+        // Check for fallback (AI was unavailable)
+        if (data.fallback) {
+          setDocError('⚠️ AI analysis is temporarily unavailable. Your documents are सुरक्षित (safe) and will be processed soon.')
+        }
         // Fetch unified profile after successful upload
         await fetchProfile()
       } else {

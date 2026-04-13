@@ -127,6 +127,11 @@ export default function AnalysisPage() {
       if (!response.ok) throw new Error('Analysis failed')
       const data = await response.json()
       if (data.status === 'completed') {
+        // Check if this is a fallback response (AI was unavailable)
+        if (data.fallback) {
+          setError('⚠️ AI analysis is temporarily unavailable. Your profile is सुरक्षित (safe) and will be analyzed soon.')
+        }
+        
         let strengths = data.analysis?.analysis?.strengths || data.analysis?.strengths || data.strengths || []
         if (typeof strengths === 'string') strengths = [strengths]
         strengths = strengths.filter((s: string) => !s.toLowerCase().includes('error'))

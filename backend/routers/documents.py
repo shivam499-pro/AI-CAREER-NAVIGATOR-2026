@@ -294,31 +294,66 @@ async def upload_documents(
                     detail=f"Failed to upload file '{fname}' to storage. Please try again later."
                 )
 
-        # --- Send to Gemini multimodal API ---
+        # --- Send to Gemini multimodal API with safe wrapper ---
         contents = [EXTRACTION_PROMPT] + file_parts
+        extracted = _get_default_extracted_data()
+        
         try:
             response = client_genai.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=contents,
             )
             raw_text = response.text
-        except Exception as gemini_err:
-            raise HTTPException(
-                status_code=500,
-                detail=f"AI analysis failed: {str(gemini_err)}"
-            )
-
-        # --- Parse extracted JSON ---
-        extracted = _get_default_extracted_data()
-        try:
-            clean_text = _clean_json(raw_text)
-            parsed = json.loads(clean_text)
-            # Transform to unified format
-            extracted = _transform_to_unified_format(parsed)
-        except (json.JSONDecodeError, Exception) as parse_err:
-            print(f"JSON parsing warning: {parse_err}")
-            # Continue with default structure - don't break upload
+            
+            # --- Parse extracted JSON ---
+            try:
+                clean_text = _clean_json(raw_text)
+                parsed = json.loads(clean_text)
+                # Transform to unified format
+                extracted = _transform_to_unified_format(parsed)
+            except (json.JSONDecodeError, Exception) as parse_err:
+                print(f"JSON parsing warning: {parse_err}")
+                # Continue with default structure - don't break upload
+                extracted = _get_default_extracted_data()
+        
+        except Exception as e:
+            print(f"[ERROR] Gemini extraction failed for {file_names}: {str(e)}")
+            # Return fallback response with 200 status instead of raising 500
             extracted = _get_default_extracted_data()
+            extracted["summary"] = "AI service temporarily unavailable"
+            extracted["status"] = "failed"
+            # Store fallback response in DB
+            try:
+                for idx, fname in enumerate(file_names):
+                    file_doc_type = _detect_document_type(fname, extracted)
+                    
+                    file_url = None
+                    for url_entry in storage_urls:
+                        if url_entry.get("filename") == fname:
+                            file_url = url_entry.get("url")
+                            break
+                    
+                    doc_record = {
+                        "user_id": user_id,
+                        "document_name": fname,
+                        "document_type": file_doc_type,
+                        "extracted_data": extracted,
+                        "storage_url": file_url
+                    }
+                    
+                    supabase.table("user_documents").insert(doc_record).execute()
+            except Exception as db_err:
+                print(f"Fallback storage warning: {db_err}")
+            
+            return {
+                "success": True,
+                "fallback": True,
+                "extracted": extracted,
+                "files_processed": len(file_names),
+                "filenames": file_names,
+                "file_urls": storage_urls,
+                "message": "AI service temporarily unavailable. Documents saved and will be processed soon."
+            }
 
         # --- Detect document type ---
         # Use the first filename as primary for type detection

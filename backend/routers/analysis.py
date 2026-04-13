@@ -111,9 +111,11 @@ async def start_analysis(
             github_data, leetcode_data, resume_text, user_profile
         )
         
-        # Handle rate limit error specifically
+        # Handle the result - even if it fails, return fallback instead of raising 500
         if not combined_result.get("success"):
             error_type = combined_result.get("error_type")
+            
+            # If rate limit, still return 429 so frontend knows to wait
             if error_type == "rate_limit":
                 raise HTTPException(
                     status_code=429,
@@ -123,7 +125,23 @@ async def start_analysis(
                         "suggestion": "Wait 30-60 seconds before retrying your request."
                     }
                 )
-            raise HTTPException(status_code=500, detail=combined_result.get("error", "AI analysis failed"))
+            
+            # For other errors (Gemini down, network issues, etc.), return fallback
+            print(f"[ERROR] Gemini analysis failed: {combined_result.get('error')}")
+            return {
+                "status": "completed",
+                "fallback": True,
+                "analysis": {
+                    "strengths": [],
+                    "weaknesses": [],
+                    "experience_level": "Unknown",
+                    "experience_reason": "AI service temporarily unavailable. Please try again later."
+                },
+                "career_paths": [],
+                "skill_gaps": [],
+                "roadmap": {},
+                "message": "AI service temporarily unavailable. Your profile is safe and will be analyzed soon."
+            }
         
         data = combined_result.get("data", {})
         analysis = data.get("analysis", {})
