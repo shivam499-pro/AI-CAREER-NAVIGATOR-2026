@@ -80,7 +80,7 @@ validate_environment()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from routers import analysis, jobs, auth, resume, profile_enhanced, interview, streaks, ranks, challenges, weekly_challenge, badges, email_report, documents, career
+from routers import analysis, jobs, auth, resume, profile_enhanced, interview, streaks, ranks, challenges, weekly_challenge, badges, email_report, documents, career, career_brain
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -123,6 +123,7 @@ app.include_router(badges.router, prefix="/api/badges", tags=["Badges"])
 app.include_router(email_report.router, prefix="/api/email", tags=["Email Report"])
 app.include_router(documents.router, prefix="/api/documents", tags=["Documents"])
 app.include_router(career.router, prefix="/api/career", tags=["Career Evolution"])
+app.include_router(career_brain.router, prefix="/api", tags=["Career Brain"])
 
 @app.get("/")
 async def root():

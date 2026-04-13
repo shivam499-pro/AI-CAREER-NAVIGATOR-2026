@@ -707,3 +707,101 @@ FOR DELETE USING (auth.uid() = user_id OR auth.role() = 'service_role');
 -- ORDER BY tablename;
 -- 
 -- =============================================================================
+
+
+-- =============================================================================
+-- SAVED_JOBS TABLE
+-- Stores jobs bookmarked by users
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS saved_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    job_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    company TEXT,
+    location TEXT,
+    apply_url TEXT,
+    match_score FLOAT,
+    matched_skills JSONB,
+    missing_skills JSONB,
+    saved_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    CONSTRAINT saved_jobs_unique UNIQUE (user_id, job_id)
+);
+
+-- Index for saved_jobs
+CREATE INDEX IF NOT EXISTS saved_jobs_user_id_idx ON saved_jobs(user_id);
+CREATE INDEX IF NOT EXISTS saved_jobs_saved_at_idx ON saved_jobs(saved_at DESC);
+
+
+-- =============================================================================
+-- JOB_APPLICATIONS TABLE
+-- Tracks job application statuses
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS job_applications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    job_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    company TEXT,
+    location TEXT,
+    apply_url TEXT,
+    match_score FLOAT,
+    matched_skills JSONB,
+    missing_skills JSONB,
+    status TEXT NOT NULL DEFAULT 'applied' CHECK (status IN ('applied', 'interview', 'rejected', 'offer')),
+    notes TEXT,
+    applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    CONSTRAINT job_applications_unique UNIQUE (user_id, job_id)
+);
+
+-- Index for job_applications
+CREATE INDEX IF NOT EXISTS job_applications_user_id_idx ON job_applications(user_id);
+CREATE INDEX IF NOT EXISTS job_applications_status_idx ON job_applications(status);
+CREATE INDEX IF NOT EXISTS job_applications_applied_at_idx ON job_applications(applied_at DESC);
+
+
+-- =============================================================================
+-- SAVED_JOBS TABLE RLS
+-- =============================================================================
+
+ALTER TABLE saved_jobs ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own saved jobs
+CREATE POLICY "saved_jobs_select_own" ON saved_jobs
+FOR SELECT USING (auth.uid() = user_id);
+
+-- Users can insert their own saved jobs
+CREATE POLICY "saved_jobs_insert_own" ON saved_jobs
+FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Users can delete their own saved jobs
+CREATE POLICY "saved_jobs_delete_own" ON saved_jobs
+FOR DELETE USING (auth.uid() = user_id);
+
+
+-- =============================================================================
+-- JOB_APPLICATIONS TABLE RLS
+-- =============================================================================
+
+ALTER TABLE job_applications ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own applications
+CREATE POLICY "job_applications_select_own" ON job_applications
+FOR SELECT USING (auth.uid() = user_id);
+
+-- Users can insert their own applications
+CREATE POLICY "job_applications_insert_own" ON job_applications
+FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Users can update their own applications
+CREATE POLICY "job_applications_update_own" ON job_applications
+FOR UPDATE USING (auth.uid() = user_id);
+
+-- Users can delete their own applications
+CREATE POLICY "job_applications_delete_own" ON job_applications
+FOR DELETE USING (auth.uid() = user_id);

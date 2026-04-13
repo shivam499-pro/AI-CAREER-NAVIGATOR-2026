@@ -7,13 +7,15 @@ import { supabase } from '@/lib/supabase'
 import Navbar from '@/components/Navbar'
 import ProgressTracker from '@/components/ProgressTracker'
 import MatchFitScore from '@/components/MatchFitScore'
-import { Brain, LogOut, ChevronRight, Sparkles, Target, TrendingUp, ShieldCheck, Briefcase, Activity, Mail, Loader2 } from 'lucide-react'
+import { Brain, LogOut, ChevronRight, Sparkles, Target, TrendingUp, ShieldCheck, Briefcase, Activity, Mail, Loader2, Clock, CheckCircle, XCircle, MessageSquare } from 'lucide-react'
+import CareerCoach from '@/components/CareerCoach'
 
 export default function DashboardPage() {
   const [user, setUser] = useState<{ email: string; id?: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [emailStatus, setEmailStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [emailMessage, setEmailMessage] = useState('')
+  const [appStats, setAppStats] = useState<any>({ applied: 0, interview: 0, rejected: 0, offer: 0 })
 
   const formatUsername = (email: string) => {
     // Extract first word before any dot or number and capitalize
@@ -34,6 +36,9 @@ export default function DashboardPage() {
           return
         }
         setUser({ email: user.email, id: user.id })
+        
+        // Load application stats
+        await loadAppStats()
       } catch (err) {
         window.location.href = '/auth/login'
       } finally {
@@ -42,6 +47,26 @@ export default function DashboardPage() {
     }
     getUser()
   }, [])
+
+  const loadAppStats = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: Record<string, string> = {}
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/jobs/applications`, { headers })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setAppStats(data.status_counts || { applied: 0, interview: 0, rejected: 0, offer: 0 })
+      }
+    } catch (err) {
+      console.error('Failed to load app stats:', err)
+    }
+  }
 
   const sendProgressReport = async () => {
     if (!user?.id) return
@@ -124,8 +149,38 @@ export default function DashboardPage() {
             <ProgressTracker />
           </motion.div>
           <motion.div variants={itemVariants}>
-            <MatchFitScore />
+            <CareerCoach compact />
           </motion.div>
+        </motion.div>
+
+        {/* Application Stats */}
+        <motion.div variants={itemVariants} className="mb-8">
+          <div className="flex items-center gap-4 mb-6">
+            <h2 className="text-xl font-bold text-white uppercase tracking-widest text-sm">Job Pipeline</h2>
+            <div className="flex-1 border-t border-slate-800" />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { status: 'applied', label: 'Applied', color: 'bg-yellow-500/20 border-yellow-500/40 text-yellow-400', icon: Clock },
+              { status: 'interview', label: 'Interview', color: 'bg-blue-500/20 border-blue-500/40 text-blue-400', icon: MessageSquare },
+              { status: 'rejected', label: 'Rejected', color: 'bg-red-500/20 border-red-500/40 text-red-400', icon: XCircle },
+              { status: 'offer', label: 'Offer', color: 'bg-green-500/20 border-green-500/40 text-green-400', icon: CheckCircle }
+            ].map((stat, i) => {
+              const Icon = stat.icon
+              const count = appStats[stat.status] || 0
+              return (
+                <Link key={i} href={`/applications${stat.status !== 'applied' ? '?status=' + stat.status : ''}`}>
+                  <div className="bg-[#1E293B] rounded-2xl p-6 border border-white/5 hover:border-purple-500/30 transition-all group">
+                    <div className={`w-12 h-12 rounded-xl ${stat.color} border flex items-center justify-center mb-4`}>
+                      <Icon className="w-6 h-6" />
+                    </div>
+                    <div className="text-3xl font-black text-white mb-1">{count}</div>
+                    <div className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{stat.label}</div>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
         </motion.div>
 
         {/* Quick Actions */}
