@@ -694,6 +694,26 @@ FOR DELETE USING (auth.uid() = user_id OR auth.role() = 'service_role');
 
 
 -- =============================================================================
+-- USER_DOCUMENTS TABLE
+-- Stores structured extracted data per document upload
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS user_documents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    document_name TEXT NOT NULL,
+    document_type TEXT NOT NULL DEFAULT 'other',  -- 'certificate' | 'resume' | 'cover_letter' | 'other'
+    extracted_data JSONB NOT NULL DEFAULT '{}',
+    storage_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Index for user_documents
+CREATE INDEX IF NOT EXISTS user_documents_user_id_idx ON user_documents(user_id);
+CREATE INDEX IF NOT EXISTS user_documents_user_id_type_idx ON user_documents(user_id, document_type);
+
+
+-- =============================================================================
 -- VERIFICATION QUERY
 -- Run this to verify RLS is enabled on all tables
 -- =============================================================================

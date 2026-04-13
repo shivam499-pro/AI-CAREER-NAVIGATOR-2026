@@ -24,6 +24,17 @@ interface ExtractedData {
   summary: string
 }
 
+interface SkillProfile {
+  name: string
+  count: number
+  sources: string[]
+  confidence: number
+}
+
+interface UserProfile {
+  skills: SkillProfile[]
+}
+
 export default function ResumePage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
@@ -43,6 +54,10 @@ export default function ResumePage() {
   const [docFilesProcessed, setDocFilesProcessed] = useState(0)
   const [docDragActive, setDocDragActive] = useState(false)
   const docInputRef = useRef<HTMLInputElement>(null)
+  
+  // ─── Unified Profile state ───
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [loadingProfile, setLoadingProfile] = useState(false)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -204,11 +219,28 @@ export default function ResumePage() {
     setDocFiles(prev => prev.filter((_, i) => i !== index))
   }
 
+  const fetchProfile = async () => {
+    if (!user) return
+    setLoadingProfile(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const res = await fetch(`${apiUrl}/api/profile/${user.id}`)
+      const data = await res.json()
+      if (data.success) {
+        setProfile(data.profile)
+      }
+    } catch (err) {
+      console.error('Failed to fetch profile', err)
+    }
+    setLoadingProfile(false)
+  }
+
   const handleDocUpload = async () => {
     if (!docFiles.length || !user) return
     setDocUploading(true)
     setDocError('')
     setDocResult(null)
+    setProfile(null)
 
     try {
       const formData = new FormData()
@@ -232,6 +264,8 @@ export default function ResumePage() {
       if (data.success) {
         setDocResult(data.extracted)
         setDocFilesProcessed(data.files_processed)
+        // Fetch unified profile after successful upload
+        await fetchProfile()
       } else {
         throw new Error('Document analysis failed.')
       }
@@ -736,26 +770,52 @@ export default function ResumePage() {
                       )}
                     </div>
 
-                    {/* Skills */}
+                    {/* Skills - Unified Profile */}
                     <div className="p-4 bg-[#0F172A]/60 rounded-2xl border border-white/5">
                       <div className="flex items-center gap-2 mb-2">
                         <Sparkles className="w-4 h-4 text-purple-400" />
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Skills Found</span>
+                        <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">🧠 AI Skill Intelligence</span>
                       </div>
-                      <p className="text-2xl font-black text-white">{docResult.skills_extracted?.length || 0}</p>
-                      {docResult.skills_extracted?.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {docResult.skills_extracted.slice(0, 4).map((skill, i) => (
-                            <span key={i} className="text-[9px] font-bold px-2 py-0.5 bg-purple-500/15 text-purple-300 rounded-full border border-purple-500/20">
-                              {skill}
-                            </span>
-                          ))}
-                          {docResult.skills_extracted.length > 4 && (
-                            <span className="text-[9px] font-bold px-2 py-0.5 text-slate-500">
-                              +{docResult.skills_extracted.length - 4}
-                            </span>
-                          )}
-                        </div>
+                      <p className="text-[9px] text-slate-500 mb-3">
+                        AI analyzed your documents and identified your strongest skills with confidence scores.
+                      </p>
+                      {loadingProfile ? (
+                        <p className="text-2xl font-black text-white">Analyzing...</p>
+                      ) : profile && profile.skills.length > 0 ? (
+                        <>
+                          <p className="text-2xl font-black text-white">{profile.skills.length}</p>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {profile.skills.slice(0, 5).map((skill, i) => (
+                              <span key={i} className="text-[9px] font-bold px-2 py-0.5 bg-purple-500/15 text-purple-300 rounded-full border border-purple-500/20 flex items-center gap-1">
+                                {skill.name} ({Math.round(skill.confidence * 100)}%)
+                                <span className="text-purple-400/50 ml-1 text-[8px]">from {skill.sources.join(", ")}</span>
+                              </span>
+                            ))}
+                            {profile.skills.length > 5 && (
+                              <span className="text-[9px] font-bold px-2 py-0.5 text-slate-500">
+                                +{profile.skills.length - 5}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      ) : docResult.skills_extracted?.length > 0 ? (
+                        <>
+                          <p className="text-2xl font-black text-white">{docResult.skills_extracted?.length || 0}</p>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {docResult.skills_extracted.slice(0, 4).map((skill, i) => (
+                              <span key={i} className="text-[9px] font-bold px-2 py-0.5 bg-purple-500/15 text-purple-300 rounded-full border border-purple-500/20">
+                                {skill}
+                              </span>
+                            ))}
+                            {docResult.skills_extracted.length > 4 && (
+                              <span className="text-[9px] font-bold px-2 py-0.5 text-slate-500">
+                                +{docResult.skills_extracted.length - 4}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-2xl font-black text-white">0</p>
                       )}
                     </div>
 
