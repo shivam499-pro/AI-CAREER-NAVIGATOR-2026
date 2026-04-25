@@ -288,15 +288,15 @@ export default function AnalysisPage() {
               <div className="text-center md:text-left flex-1">
                 <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
                   <Sparkles className="w-5 h-5 text-primary-violet" />
-                  <span className="text-xs font-black uppercase tracking-widest text-primary-violet">Analysis Baseline</span>
+                  <span className="text-xs font-black uppercase tracking-widest text-primary-violet">AI Analysis</span>
                 </div>
                 <h2 className="text-4xl font-black text-white mb-2">
                   {analysis.experience_level}
                 </h2>
-                <p className="text-slate-400 font-medium">Verified technical maturity across 12+ real-world indicators</p>
+                <p className="text-slate-400 font-medium">AI-estimated based on your real GitHub and LeetCode activity</p>
               </div>
               <div className={`px-8 py-4 rounded-xl border-2 font-black text-xl uppercase tracking-tighter ${getExperienceStyles(analysis.experience_level)}`}>
-                {analysis.experience_level} Verified
+                {analysis.experience_level} Estimated
               </div>
             </div>
           </motion.div>
