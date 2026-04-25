@@ -1,14 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import Navbar from '@/components/Navbar'
-import { 
-  Brain, ChevronRight, Loader2, Sparkles, 
+import {
+  Brain, ChevronRight, Loader2, Sparkles,
   TrendingUp, Target, Code, CheckCircle, XCircle,
   Calendar, ArrowRight, Award, Zap, AlertTriangle
 } from 'lucide-react'
@@ -57,6 +57,7 @@ interface AnalysisData {
   strengths: string[]
   career_paths: CareerPath[]
   skill_gaps: SkillGap[]
+  skill_gap?: SkillGap[]
   roadmap: Roadmap
 }
 
@@ -67,6 +68,125 @@ export default function AnalysisPage() {
   const [user, setUser] = useState<{ id: string } | null>(null)
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null)
   const [error, setError] = useState('')
+
+  const runAnalysis = useCallback(async (userId: string) => {
+    setAnalyzing(true)
+    setError('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        setError("User not authenticated. Please login again.")
+        setLoading(false)
+        return
+      }
+      const token = session.access_token
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/v1/analysis/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ user_id: userId }),
+      })
+      if (!response.ok) throw new Error('Analysis failed to start')
+
+      // Poll for completion - up to 10 times every 3 seconds
+      for (let i = 0; i < 10; i++) {
+        await new Promise(resolve => setTimeout(resolve, 3000))
+
+        const checkRes = await fetch(`${apiUrl}/api/v1/analysis/`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          }
+        })
+
+        if (checkRes.ok) {
+          const pollData = await checkRes.json()
+          if (pollData?.success && pollData?.data?.exists && pollData?.data?.analysis) {
+            const record = pollData.data.analysis
+            const analysisObj = record?.analysis || {}
+
+            const strengths = analysisObj.analysis?.strengths || analysisObj.strengths || record.strengths || []
+            const careerPaths = record.career_paths || analysisObj.career_paths || []
+            const skillGaps = analysisObj.skill_gaps || analysisObj.skill_gap || record.skill_gaps || []
+            const roadmap = analysisObj.roadmap || record.roadmap || { target_career: '', duration_months: 6, milestones: [] }
+            const experienceLevel = analysisObj.analysis?.experience_level || analysisObj.experience_level || record.experience_level || 'Beginner'
+
+            setAnalysis({
+              experience_level: experienceLevel,
+              strengths: Array.isArray(strengths) ? strengths.filter((s: string) => !String(s).toLowerCase().includes('error')) : [],
+              career_paths: Array.isArray(careerPaths) ? careerPaths : [],
+              skill_gaps: Array.isArray(skillGaps) ? skillGaps : [],
+              roadmap: roadmap,
+            })
+            setAnalyzing(false)
+            setLoading(false)
+            return
+          }
+        }
+      }
+
+      setError("Analysis is taking longer than expected. Please refresh the page.")
+    } catch (err) {
+      console.error("Analysis Error:", err)
+      setError('Failed to run analysis. Please try again.')
+    } finally {
+      setAnalyzing(false)
+      setLoading(false)
+    }
+  }, [])
+
+  const checkExistingAnalysis = useCallback(async (userId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        setError("User not authenticated. Please login again.")
+        setLoading(false)
+        return
+      }
+      const token = session.access_token
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/v1/analysis/`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        }
+      })
+
+      const data = await response.json()
+
+      if (data?.sucess && data?.data?.exists && data?.data?.analysis) {
+        const record = data.data.analysis
+        const analysisObj = record?.analysis || {}
+
+        console.log("SUPABASE DATA:", record)
+        const strengths = analysisObj.analysis?.strengths || analysisObj.strengths || record.strengths || []
+        const careerPaths = record.career_paths || analysisObj.career_paths || []
+        const skillGaps = analysisObj.skill_gaps || analysisObj.skill_gap || record.skill_gaps || []
+        const roadmap = analysisObj.roadmap || record.roadmap || { target_career: '', duration_months: 6, milestones: [] }
+        const experienceLevel = analysisObj.analysis?.experience_level || analysisObj.experience_level || record.experience_level || 'Beginner'
+        setAnalysis({
+          experience_level: experienceLevel,
+          strengths: Array.isArray(strengths) ? strengths.filter((s: string) => !String(s).toLowerCase().includes('error')) : [],
+          career_paths: Array.isArray(careerPaths) ? careerPaths : [],
+          skill_gaps: Array.isArray(skillGaps) ? skillGaps : [],
+          roadmap: roadmap,
+        })
+
+      } else {
+        await runAnalysis(userId)
+      }
+    } catch (err) {
+      console.error("Check Analysis Error:", err)
+      await runAnalysis(userId)
+    } finally {
+      setLoading(false)
+    }
+  }, [runAnalysis])
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -79,80 +199,7 @@ export default function AnalysisPage() {
       await checkExistingAnalysis(user.id)
     }
     checkAuth()
-  }, [router])
-
-  const checkExistingAnalysis = async (userId: string) => {
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiUrl}/api/analysis/results/${userId}`)
-      const data = await response.json()
-      
-      if (data.status === 'found') {
-        let strengths = data.analysis?.analysis?.strengths || data.analysis?.strengths || data.strengths || []
-        if (typeof strengths === 'string') strengths = [strengths]
-        strengths = strengths.filter((s: string) => !s.toLowerCase().includes('error'))
-        
-        const careerPaths = data.career_paths || []
-        const skillGaps = data.skill_gaps || []
-        const roadmap = data.roadmap || { target_career: '', duration_months: 6, milestones: [] }
-        const experienceLevel = data.analysis?.analysis?.experience_level || data.experience_level || 'Intermediate'
-        
-        setAnalysis({
-          experience_level: experienceLevel,
-          strengths: strengths,
-          career_paths: careerPaths,
-          skill_gaps: skillGaps,
-          roadmap: roadmap,
-        })
-      } else {
-        await runAnalysis(userId)
-      }
-    } catch (err) {
-      await runAnalysis(userId)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const runAnalysis = async (userId: string) => {
-    setAnalyzing(true)
-    setError('')
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiUrl}/api/analysis/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId }),
-      })
-      if (!response.ok) throw new Error('Analysis failed')
-      const data = await response.json()
-      if (data.status === 'completed') {
-        // Check if this is a fallback response (AI was unavailable)
-        if (data.fallback) {
-          setError('⚠️ AI analysis is temporarily unavailable. Your profile is सुरक्षित (safe) and will be analyzed soon.')
-        }
-        
-        let strengths = data.analysis?.analysis?.strengths || data.analysis?.strengths || data.strengths || []
-        if (typeof strengths === 'string') strengths = [strengths]
-        strengths = strengths.filter((s: string) => !s.toLowerCase().includes('error'))
-        const careerPaths = data.career_paths || []
-        const skillGaps = data.skill_gaps || []
-        const roadmap = data.roadmap || { target_career: '', duration_months: 6, milestones: [] }
-        const experienceLevel = data.analysis?.experience_level || data.experience_level || 'Intermediate'
-        setAnalysis({
-          experience_level: experienceLevel,
-          strengths: strengths,
-          career_paths: careerPaths,
-          skill_gaps: skillGaps,
-          roadmap: roadmap,
-        })
-      }
-    } catch (err) {
-      setError('Failed to run analysis. Please try again.')
-    } finally {
-      setAnalyzing(false)
-    }
-  }
+  }, [router, checkExistingAnalysis])
 
   if (loading) {
     return (
@@ -211,14 +258,21 @@ export default function AnalysisPage() {
   }
 
   if (!analysis) {
-    return null
+    return (
+      <div className="min-h-screen bg-[#0F172A] flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-primary-violet mx-auto mb-4" />
+          <p className="text-slate-400 font-medium tracking-wide">Loading analysis...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-[#0F172A] text-white">
       <Navbar />
       <main className="container mx-auto px-4 py-12 max-w-6xl">
-        <motion.div 
+        <motion.div
           variants={containerVariants}
           initial="hidden"
           animate="visible"
@@ -254,8 +308,8 @@ export default function AnalysisPage() {
               Core Technical Strengths
             </h3>
             <div className="flex flex-wrap gap-3">
-              {analysis.strengths?.map((strength, i) => (
-                <div 
+              {(analysis.strengths || []).map((strength, i) => (
+                <div
                   key={i}
                   className="px-6 py-3 bg-[#1E293B] border-l-4 border-l-green-500 text-white rounded-xl font-bold border border-white/5 shadow-lg group hover:scale-105 transition-all"
                 >
@@ -272,7 +326,7 @@ export default function AnalysisPage() {
               Strategic Career Paths
             </h3>
             <div className="grid md:grid-cols-3 gap-6">
-              {analysis.career_paths?.slice(0, 3).map((path, i) => {
+              {(analysis.career_paths || []).slice(0, 3).map((path, i) => {
                 const name = path.name || path.career_name || path.title || 'Unknown'
                 const match = path.match_percentage ?? path.match ?? path.percentage ?? 0
                 const desc = path.reason || path.description || path.justification || ''
@@ -288,9 +342,9 @@ export default function AnalysisPage() {
                     </div>
                     {/* Gradient Bar */}
                     <div className="h-2 w-full bg-slate-800 rounded-full mb-6 overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-1000 ${i === 0 ? 'bg-gradient-to-r from-primary-violet to-purple-400' : 'bg-slate-600'}`} 
-                        style={{ width: `${match}%` }} 
+                      <div
+                        className={`h-full rounded-full transition-all duration-1000 ${i === 0 ? 'bg-gradient-to-r from-primary-violet to-purple-400' : 'bg-slate-600'}`}
+                        style={{ width: `${match}%` }}
                       />
                     </div>
                     <p className="text-xs text-slate-400 leading-relaxed font-medium">{desc}</p>
@@ -307,7 +361,7 @@ export default function AnalysisPage() {
               Critical Skill Gaps
             </h3>
             <div className="bg-[#1E293B] rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
-              {analysis.skill_gaps?.slice(0, 8).map((item, i) => {
+              {(analysis.skill_gaps || []).map((item, i) => {
                 const name = item.skill || item.skill_name || item.name || 'Skill'
                 const has = item.have ?? item.has ?? item.owned ?? false
                 const p = item.priority ?? item.priority_level ?? item.level ?? 0

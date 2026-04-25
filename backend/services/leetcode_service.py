@@ -23,11 +23,6 @@ async def get_user_profile(username: str) -> dict:
                 location
                 skillTags
             }
-            submitStatsGlobal {
-                totalSubmissionNum {
-                    count
-                }
-            }
         }
     }
     """
@@ -59,7 +54,6 @@ async def get_user_profile(username: str) -> dict:
                 "company": profile.get("company"),
                 "location": profile.get("location"),
                 "skill_tags": profile.get("skillTags", []),
-                "total_submissions": user.get("submitStatsGlobal", {}).get("totalSubmissionNum", {}).get("count", 0),
             }
         except httpx.HTTPStatusError as e:
             return {"error": f"LeetCode user not found: {str(e)}"}
@@ -71,22 +65,23 @@ async def get_problems_solved(username: str) -> dict:
     Fetch user's problems solved statistics.
     Returns: total, easy, medium, hard breakdown
     """
-    query = """
-    query getProblemsSolved($username: String!) {
-        matchedUser(username: $username) {
-            problemsSolvedBeStats {
-                difficulty
-                count
-                submissions
+    try:
+        query = """
+        query getUserSolvedStats($username: String!) {
+            matchedUser(username: $username) {
+                submitStats {
+                    acSubmissionNum {
+                        difficulty
+                        count
+                    }
+                }
             }
         }
-    }
-    """
-    
-    variables = {"username": username}
-    
-    async with httpx.AsyncClient() as client:
-        try:
+        """
+        
+        variables = {"username": username}
+        
+        async with httpx.AsyncClient() as client:
             response = await client.post(
                 LEETCODE_GRAPHQL_URL,
                 json={"query": query, "variables": variables},
@@ -98,7 +93,24 @@ async def get_problems_solved(username: str) -> dict:
             if "data" not in data or not data["data"].get("matchedUser"):
                 return {"error": "User not found"}
             
-            stats = data["data"]["matchedUser"].get("problemsSolvedBeStats", [])
+            stats = data["data"]["matchedUser"].get("submitStats", {}).get("acSubmissionNum")
+            
+            # Safety check: handle list or None
+            if stats is None:
+                return {
+                    "total": 0,
+                    "easy": 0,
+                    "medium": 0,
+                    "hard": 0,
+                }
+            
+            if not isinstance(stats, list):
+                return {
+                    "total": 0,
+                    "easy": 0,
+                    "medium": 0,
+                    "hard": 0,
+                }
             
             result = {
                 "total": 0,
@@ -108,10 +120,14 @@ async def get_problems_solved(username: str) -> dict:
             }
             
             for stat in stats:
+                if not isinstance(stat, dict):
+                    continue
                 difficulty = stat.get("difficulty", "").lower()
                 count = stat.get("count", 0)
                 result["total"] += count
-                if difficulty == "easy":
+                if difficulty == "all":
+                    pass  # Already included in total, don't overwrite difficulty-specific counts
+                elif difficulty == "easy":
                     result["easy"] = count
                 elif difficulty == "medium":
                     result["medium"] = count
@@ -119,35 +135,35 @@ async def get_problems_solved(username: str) -> dict:
                     result["hard"] = count
             
             return result
-        except Exception as e:
-            return {"error": str(e)}
+    except Exception as e:
+        return {"error": str(e)}
 
 async def get_contest_rating(username: str) -> dict:
     """
     Fetch user's contest rating and ranking.
     """
-    query = """
-    query userContestRankingInfo($username: String!) {
-        userContestRanking(username: $username) {
-            rating
-            topPercentage
-            attendedContestsCount
-        }
-        userContestRankingHistory(username: $username) {
-            contest {
-                title
+    try:
+        query = """
+        query userContestRankingInfo($username: String!) {
+            userContestRanking(username: $username) {
+                rating
+                topPercentage
+                attendedContestsCount
             }
-            rating
-            ranking
-            totalParticipants
+            userContestRankingHistory(username: $username) {
+                contest {
+                    title
+                }
+                rating
+                ranking
+                totalParticipants
+            }
         }
-    }
-    """
-    
-    variables = {"username": username}
-    
-    async with httpx.AsyncClient() as client:
-        try:
+        """
+        
+        variables = {"username": username}
+        
+        async with httpx.AsyncClient() as client:
             response = await client.post(
                 LEETCODE_GRAPHQL_URL,
                 json={"query": query, "variables": variables},
@@ -157,7 +173,12 @@ async def get_contest_rating(username: str) -> dict:
             data = response.json()
             
             if "data" not in data:
-                return {"error": "No contest data"}
+                return {
+                    "rating": 0,
+                    "top_percentage": 100,
+                    "contests_attended": 0,
+                    "history": [],
+                }
             
             contest_data = data["data"]
             ranking = contest_data.get("userContestRanking", {})
@@ -168,8 +189,21 @@ async def get_contest_rating(username: str) -> dict:
                 "contests_attended": ranking.get("attendedContestsCount", 0),
                 "history": contest_data.get("userContestRankingHistory", [])[:5],
             }
-        except Exception as e:
-            return {"error": str(e)}
+    except httpx.HTTPStatusError as e:
+        # Return default values on 400 error - contest data is optional
+        return {
+            "rating": 0,
+            "top_percentage": 100,
+            "contests_attended": 0,
+            "history": [],
+        }
+    except Exception as e:
+        return {
+            "rating": 0,
+            "top_percentage": 100,
+            "contests_attended": 0,
+            "history": [],
+        }
 
 async def get_recent_submissions(username: str, limit: int = 10) -> list:
     """
@@ -223,10 +257,6 @@ async def get_full_leetcode_data(username: str) -> dict:
     Get complete LeetCode data for a user.
     """
     profile = await get_user_profile(username)
-    
-    if isinstance(profile, dict) and "error" in profile:
-        return profile
-    
     problems_solved = await get_problems_solved(username)
     contest_rating = await get_contest_rating(username)
     recent_subs = await get_recent_submissions(username)

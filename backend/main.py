@@ -80,7 +80,14 @@ validate_environment()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from routers import analysis, jobs, auth, resume, profile_enhanced, interview, streaks, ranks, challenges, weekly_challenge, badges, email_report, documents, career, career_brain, profile
+from routers import analysis, jobs, auth, resume, interview, streaks, ranks, challenges, weekly_challenge, badges, email_report, career, career_brain
+from routers import profile as profile_unified_router
+from routers import documents as documents_unified_router
+
+# Import security middleware
+from core.middleware import StructuredLoggingMiddleware, AuthMiddleware, APIResponse
+from core.metrics import MetricsMiddleware, get_metrics
+from core.websocket import ws_router
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -108,23 +115,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"])
-app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
-app.include_router(resume.router, prefix="/api/resume", tags=["Resume"])
-app.include_router(profile_enhanced.router, prefix="/api/profile", tags=["Profile Enhanced"])
-app.include_router(interview.router, prefix="/api/interview", tags=["Interview"])
-app.include_router(streaks.router, prefix="/api/streaks", tags=["Streaks"])
-app.include_router(ranks.router, prefix="/api/ranks", tags=["Ranks"])
-app.include_router(challenges.router, prefix="/api/challenges", tags=["Challenges"])
-app.include_router(weekly_challenge.router, prefix="/api/weekly-challenge", tags=["Weekly Challenge"])
-app.include_router(badges.router, prefix="/api/badges", tags=["Badges"])
-app.include_router(email_report.router, prefix="/api/email", tags=["Email Report"])
-app.include_router(documents.router, prefix="/api/documents", tags=["Documents"])
-app.include_router(career.router, prefix="/api/career", tags=["Career Evolution"])
-app.include_router(career_brain.router, prefix="/api", tags=["Career Brain"])
-app.include_router(profile.router, prefix="/api", tags=["Unified Profile"])
+# Add security middleware (order matters: logging after CORS)
+app.add_middleware(AuthMiddleware)
+app.add_middleware(StructuredLoggingMiddleware)
+app.add_middleware(MetricsMiddleware)
+
+# Include routers with v1 prefix
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["Analysis"])
+app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["Jobs"])
+app.include_router(resume.router, prefix="/api/v1/resume", tags=["Resume"])
+app.include_router(profile_unified_router.router, prefix="/api/v1/profile", tags=["Profile Unified"])
+app.include_router(documents_unified_router.router, prefix="/api/v1/documents", tags=["Documents Unified"])
+app.include_router(interview.router, prefix="/api/v1/interview", tags=["Interview"])
+app.include_router(streaks.router, prefix="/api/v1/streaks", tags=["Streaks"])
+app.include_router(ranks.router, prefix="/api/v1/ranks", tags=["Ranks"])
+app.include_router(challenges.router, prefix="/api/v1/challenges", tags=["Challenges"])
+app.include_router(weekly_challenge.router, prefix="/api/v1/weekly-challenge", tags=["Weekly Challenge"])
+app.include_router(badges.router, prefix="/api/v1/badges", tags=["Badges"])
+app.include_router(email_report.router, prefix="/api/v1/email", tags=["Email Report"])
+app.include_router(career.router, prefix="/api/v1/career", tags=["Career Evolution"])
+app.include_router(career_brain.router, prefix="/api/v1", tags=["Career Brain"])
+
+# Include WebSocket router
+app.include_router(ws_router)
 
 @app.get("/")
 async def root():
@@ -176,6 +190,15 @@ async def health_check():
         "status": "healthy",
         "services": services
     }
+
+
+@app.get("/metrics")
+async def metrics_endpoint():
+    """
+    Get application metrics.
+    Returns request counts, error rates, and slow request info.
+    """
+    return get_metrics()
 
 
 # Global Error Handler Middleware

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
@@ -42,75 +42,75 @@ export default function ChallengesPage() {
   const [error, setError] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)
   const [attemptStatus, setAttemptStatus] = useState<'none' | 'started' | 'completed'>('none')
-  
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        setUser(user)
-        
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-        
-        const [challengeRes, leaderboardRes] = await Promise.all([
-          fetch(`${apiUrl}/api/weekly-challenge/current`),
-          fetch(`${apiUrl}/api/weekly-challenge/leaderboard`)
-        ])
-        
-        if (challengeRes.ok) {
-          const data = await challengeRes.json()
-          setChallenge(data)
-        } else {
-          console.error('Failed to fetch challenge:', challengeRes.status)
-        }
-        
-        if (leaderboardRes.ok) {
-          const leaderboardData = await leaderboardRes.json()
-          setLeaderboard(leaderboardData)
-        } else {
-          console.error('Failed to fetch leaderboard:', leaderboardRes.status)
-        }
-        
-        // Fetch user's attempt status
-        if (user && challengeRes.ok) {
-          const challengeData = await challengeRes.json()
-          try {
-            const attemptRes = await fetch(
-              `${apiUrl}/api/weekly-challenge/attempt?user_id=${user.id}&week_number=${challengeData.week_number}&year=${challengeData.year}`
-            )
-            
-            if (attemptRes.ok) {
-              const attemptData = await attemptRes.json()
-              if (attemptData.status === 'completed') {
-                setAttemptStatus('completed')
-              } else if (attemptData.status === 'started') {
-                setAttemptStatus('started')
-              } else {
-                setAttemptStatus('none')
-              }
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      setUser(user)
+      
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      
+      const [challengeRes, leaderboardRes] = await Promise.all([
+        fetch(`${apiUrl}/api/weekly-challenge/current`),
+        fetch(`${apiUrl}/api/weekly-challenge/leaderboard`)
+      ])
+      
+      if (challengeRes.ok) {
+        const data = await challengeRes.json()
+        setChallenge(data)
+      } else {
+        console.error('Failed to fetch challenge:', challengeRes.status)
+      }
+      
+      if (leaderboardRes.ok) {
+        const leaderboardData = await leaderboardRes.json()
+        setLeaderboard(leaderboardData)
+      } else {
+        console.error('Failed to fetch leaderboard:', leaderboardRes.status)
+      }
+      
+      // Fetch user's attempt status
+      if (user && challengeRes.ok) {
+        const challengeData = await challengeRes.json()
+        try {
+          const attemptRes = await fetch(
+            `${apiUrl}/api/weekly-challenge/attempt?user_id=${user.id}&week_number=${challengeData.week_number}&year=${challengeData.year}`
+          )
+          
+          if (attemptRes.ok) {
+            const attemptData = await attemptRes.json()
+            if (attemptData.status === 'completed') {
+              setAttemptStatus('completed')
+            } else if (attemptData.status === 'started') {
+              setAttemptStatus('started')
             } else {
-              // API not ready or error, check leaderboard for completed status
-              const userInLeaderboard = leaderboard.find(entry => entry.user_email === user.email)
-              setAttemptStatus(userInLeaderboard ? 'completed' : 'none')
+              setAttemptStatus('none')
             }
-          } catch (attemptErr) {
-            console.log('Attempt API not available, checking leaderboard instead')
-            // API not available, check leaderboard for completed status
+          } else {
+            // API not ready or error, check leaderboard for completed status
             const userInLeaderboard = leaderboard.find(entry => entry.user_email === user.email)
             setAttemptStatus(userInLeaderboard ? 'completed' : 'none')
           }
+        } catch (attemptErr) {
+          console.log('Attempt API not available, checking leaderboard instead')
+          // API not available, check leaderboard for completed status
+          const userInLeaderboard = leaderboard.find(entry => entry.user_email === user.email)
+          setAttemptStatus(userInLeaderboard ? 'completed' : 'none')
         }
-      } catch (err) {
-        console.error('Error fetching data:', err)
-        setError('Failed to load challenge data. Please try again.')
-      } finally {
-        setLoading(false)
       }
+    } catch (err) {
+      console.error('Error fetching data:', err)
+      setError('Failed to load challenge data. Please try again.')
+    } finally {
+      setLoading(false)
     }
-    
+  }, [leaderboard])
+
+  useEffect(() => {
     fetchData()
-  }, [])
+  }, [fetchData])
   
   const retryFetch = () => {
     const fetchData = async () => {

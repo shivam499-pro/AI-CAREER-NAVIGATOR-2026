@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -28,20 +28,7 @@ export default function ApplicationsPage() {
   const [filter, setFilter] = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/auth/login')
-        return
-      }
-      setUser(user)
-      await loadApplications(user)
-    }
-    checkAuth()
-  }, [router])
-
-  const loadApplications = async (userData: any) => {
+  const loadApplications = useCallback(async (userData: any) => {
     setApplicationsLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -69,7 +56,20 @@ export default function ApplicationsPage() {
       setApplicationsLoading(false)
       setLoading(false)
     }
-  }
+  }, [filter])
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push('/auth/login')
+        return
+      }
+      setUser(user)
+      await loadApplications(user)
+    }
+    checkAuth()
+  }, [router, loadApplications])
 
   const updateStatus = async (jobId: string, newStatus: string) => {
     if (!user) return
@@ -137,7 +137,7 @@ export default function ApplicationsPage() {
     )
   }
 
-  const totalApplications = Object.values(statusCounts).reduce((a: any, b: any) => a + b, 0)
+  const totalApplications = (Object.values(statusCounts) as (string | number)[]).reduce<number>((a, b) => a + Number(b), 0)
 
   return (
     <div className="min-h-screen bg-[#0F172A] text-white selection:bg-purple-500/30">

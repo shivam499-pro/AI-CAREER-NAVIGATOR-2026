@@ -21,7 +21,7 @@ async def get_user_profile(username: str) -> dict:
     if token:
         headers["Authorization"] = f"token {token}"
     
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=False) as client:
         try:
             response = await client.get(
                 f"{GITHUB_API_URL}/users/{username}",
@@ -45,9 +45,9 @@ async def get_user_profile(username: str) -> dict:
                 "html_url": user_data.get("html_url"),
             }
         except httpx.HTTPStatusError as e:
-            return {"error": f"GitHub user not found: {str(e)}"}
+            return {"error": f"GitHub user not found: {repr(e)}"}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": repr(e)}
 
 async def get_user_repos(username: str, limit: int = 30) -> list:
     """
@@ -59,7 +59,7 @@ async def get_user_repos(username: str, limit: int = 30) -> list:
     if token:
         headers["Authorization"] = f"token {token}"
     
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=False) as client:
         try:
             response = await client.get(
                 f"{GITHUB_API_URL}/users/{username}/repos",
@@ -90,7 +90,7 @@ async def get_user_repos(username: str, limit: int = 30) -> list:
             
             return repos
         except Exception as e:
-            return [{"error": str(e)}]
+            return [{"error": repr(e)}]
 
 async def get_top_repos(username: str, limit: int = 5) -> list:
     """

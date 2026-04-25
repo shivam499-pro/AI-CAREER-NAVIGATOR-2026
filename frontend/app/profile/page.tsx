@@ -82,11 +82,15 @@ export default function ProfilePage() {
 
   const loadProfile = async (userId: string) => {
     try {
-      const { data: profileData } = await supabase
+      const { data: profileData, error: fetchError } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', userId)
-        .single()
+        .maybeSingle()
+
+      if (fetchError) {
+        console.error('Fetch profile error:', fetchError.message)
+      }
 
       if (profileData) {
         setGithubConnected(!!profileData.github_username)
@@ -136,27 +140,30 @@ export default function ProfilePage() {
     
     setSaving(true)
     try {
+      const profilePayload = {
+        user_id: user.id,
+        college_name: profile.college_name,
+        degree: profile.degree,
+        branch: profile.branch,
+        current_year: profile.current_year,
+        graduation_year: profile.graduation_year,
+        cgpa: profile.cgpa,
+        extra_skills: profile.extra_skills,
+        experience: profile.experience,
+        certificates: profile.certificates,
+        target_companies: profile.target_companies,
+        preferred_location: profile.preferred_location,
+        career_goal: profile.career_goal,
+        open_to: profile.open_to,
+        codechef_rating: profile.codechef_rating,
+        codeforces_rating: profile.codeforces_rating,
+        hackathon_wins: profile.hackathon_wins,
+        updated_at: new Date().toISOString()
+      }
+
       const { error } = await supabase
         .from('profiles')
-        .update({
-          college_name: profile.college_name,
-          degree: profile.degree,
-          branch: profile.branch,
-          current_year: profile.current_year,
-          graduation_year: profile.graduation_year,
-          cgpa: profile.cgpa,
-          extra_skills: profile.extra_skills,
-          experience: profile.experience,
-          certificates: profile.certificates,
-          target_companies: profile.target_companies,
-          preferred_location: profile.preferred_location,
-          career_goal: profile.career_goal,
-          open_to: profile.open_to,
-          codechef_rating: profile.codechef_rating,
-          codeforces_rating: profile.codeforces_rating,
-          hackathon_wins: profile.hackathon_wins
-        })
-        .eq('user_id', user.id)
+        .upsert(profilePayload, { onConflict: 'user_id' })
 
       if (error) throw error
       

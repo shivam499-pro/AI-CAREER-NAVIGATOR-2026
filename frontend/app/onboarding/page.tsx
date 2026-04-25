@@ -214,8 +214,8 @@ export default function OnboardingPage() {
       // Get session token for authorization
       const { data: { session } } = await supabase.auth.getSession()
 
-      // Call POST /api/profile/enhanced
-      const response = await fetch(`${apiUrl}/api/profile/enhanced`, {
+      // Call POST /api/v1/profile/save
+      const response = await fetch(`${apiUrl}/api/v1/profile/save`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

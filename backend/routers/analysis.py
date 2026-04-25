@@ -1,259 +1,215 @@
 """
 Analysis Router
-Handles AI analysis endpoints
+Unified analysis API endpoints.
+
+POST /api/analysis/run - Run AI analysis (async with job tracking)
+GET /api/analysis/job/{job_id} - Get job status
+GET /api/analysis/jobs - Get user's job history
 """
-from fastapi import APIRouter, HTTPException, Header, Depends, Request
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-from typing import Optional
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from services import github_service, leetcode_service, gemini_service
-from supabase import create_client
-import os
-from dotenv import load_dotenv
-from lib.auth import get_current_user
+from services import analysis_service
+from services.async_job_service import (
+    create_analysis_job,
+    get_job_status,
+    get_user_job_history,
+    async_job_service
+)
 
-# Load environment variables
-load_dotenv()
-
-limiter = Limiter(key_func=get_remote_address)
+# Import security middleware components
+from core.middleware import (
+    get_current_user,
+    AuthenticatedUser,
+    APIResponse,
+    require_permission,
+    Permission
+)
 
 router = APIRouter()
 
-# Initialize Supabase client
-supabase_url = os.getenv("SUPABASE_URL")
-supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
-supabase = create_client(supabase_url, supabase_key)
+
+# Background task function
+async def process_analysis_background(job_id: str, payload: dict):
+    """Background task to process analysis job."""
+    await async_job_service.process_analysis_job(job_id, payload)
 
 
-# Auth dependency is now imported from lib.auth
+# Using centralized get_current_user from middleware
 
 
-class StartAnalysisRequest(BaseModel):
-    user_id: str
-
-
-@router.post("/start")
-@limiter.limit("5/minute")
-async def start_analysis(
-    request: Request,
-    body: StartAnalysisRequest,
-    authorization: Optional[str] = Header(None)
-):
+@router.get("/")
+async def get_my_analysis(user: AuthenticatedUser = Depends(get_current_user)):
     """
-    Start the AI analysis process for the user's profiles.
-    1. Get user profile data from Supabase
-    2. Fetch GitHub data
-    3. Fetch LeetCode data  
-    4. Run AI analysis
-    5. Save results to database
+    Get current user's analysis.
     """
     try:
-        user_id = body.user_id
+        analysis = analysis_service.get_analysis_by_user_id(user.user_id)
         
-        # Get user's profile from Supabase
-        profile_response = supabase.table("profiles").select("*").eq("user_id", user_id).execute()
+        if not analysis:
+            return APIResponse.success_response(
+                data={
+                    "exists": False,
+                    "analysis": None
+                }
+            )
         
-        if not profile_response.data:
-            raise HTTPException(status_code=404, detail="User profile not found")
+        return APIResponse.success_response(
+            data={
+                "exists": True,
+                "analysis": analysis
+            }
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content=APIResponse.error_response(
+                str(e),
+                code="ANALYSIS_FETCH_ERROR"
+            )
+        )
+
+
+@router.post("/run")
+async def run_my_analysis(
+    background_tasks: BackgroundTasks,
+    user: AuthenticatedUser = Depends(get_current_user)
+    ):
+    """
+    Run AI analysis for current user (async with background processing).
+    
+    Creates a job and returns immediately while analysis runs in background.
+    Use /api/analysis/job/{job_id} to check status.
+    """
+    try:
+        # Create async job
+        job = await create_analysis_job(user.user_id)
         
-        profile = profile_response.data[0]
-        github_username = profile.get("github_username")
-        leetcode_username = profile.get("leetcode_username")
-        resume_text = profile.get("resume_text", "")
-        
-        # Build user_profile dict with all enhanced onboarding fields
-        user_profile = {
-            "user_type": profile.get("user_type"),
-            "college_name": profile.get("college_name"),
-            "degree": profile.get("degree"),
-            "branch": profile.get("branch"),
-            "year_of_study": profile.get("year_of_study"),
-            "graduation_year": profile.get("graduation_year"),
-            "cgpa": profile.get("cgpa"),
-            "current_job_title": profile.get("current_job_title"),
-            "current_company": profile.get("current_company"),
-            "years_of_experience": profile.get("years_of_experience"),
-            "current_tech_stack": profile.get("current_tech_stack", []),
-            "reason_for_switching": profile.get("reason_for_switching"),
-            "career_goal": profile.get("career_goal"),
-            "target_companies": profile.get("target_companies", []),
-            "preferred_work_type": profile.get("preferred_work_type"),
-            "job_search_timeline": profile.get("job_search_timeline"),
-            "extra_skills": profile.get("extra_skills", []),
-            "certificates": profile.get("certificates", []),
-        }
-        
-        # Fetch GitHub data
-        github_data = {}
-        if github_username:
-            github_data = await github_service.get_full_github_data(github_username)
-        
-        # Fetch LeetCode data
-        leetcode_data = {}
-        if leetcode_username:
-            leetcode_data = await leetcode_service.get_full_leetcode_data(leetcode_username)
-        
-        # Normalize github_data — handle both list and dict formats
-        if isinstance(github_data, list):
-            github_data = github_data[0] if github_data else {}
-        if not isinstance(github_data, dict):
-            github_data = {}
-        
-        # Normalize leetcode_data — handle both list and dict formats
-        if isinstance(leetcode_data, list):
-            leetcode_data = leetcode_data[0] if leetcode_data else {}
-        if not isinstance(leetcode_data, dict):
-            leetcode_data = {}
-        
-        # Single combined AI call - replaces 4 separate calls
-        combined_result = gemini_service.run_combined_analysis(
-            github_data, leetcode_data, resume_text, user_profile
+        # Add background task to process the job
+        background_tasks.add_task(
+            process_analysis_background,
+            job_id=job["id"],
+            payload=job["payload"]
         )
         
-        # Handle the result - even if it fails, return fallback instead of raising 500
-        if not combined_result.get("success"):
-            error_type = combined_result.get("error_type")
-            
-            # If rate limit, still return 429 so frontend knows to wait
-            if error_type == "rate_limit":
-                raise HTTPException(
-                    status_code=429,
-                    detail={
-                        "message": "The AI service is currently busy. Please wait a moment and try again.",
-                        "error_type": "rate_limit",
-                        "suggestion": "Wait 30-60 seconds before retrying your request."
-                    }
+        return APIResponse.success_response(
+            data={
+                "job_id": job["id"],
+                "status": job["status"],
+                "message": "Analysis started in background"
+            },
+            message="Analysis job created"
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content=APIResponse.error_response(
+                str(e),
+                code="ANALYSIS_JOB_ERROR"
+            )
+        )
+
+
+@router.get("/job/{job_id}")
+async def get_job_status(
+    job_id: str,
+    user: AuthenticatedUser = Depends(get_current_user)
+):
+    """
+    Get status of an analysis job.
+    """
+    try:
+        job = await get_job_status(job_id)
+        
+        if not job:
+            return JSONResponse(
+                status_code=404,
+                content=APIResponse.error_response(
+                    "Job not found",
+                    code="JOB_NOT_FOUND"
                 )
-            
-            # For other errors (Gemini down, network issues, etc.), return fallback
-            print(f"[ERROR] Gemini analysis failed: {combined_result.get('error')}")
-            return {
-                "status": "completed",
-                "fallback": True,
-                "analysis": {
-                    "strengths": [],
-                    "weaknesses": [],
-                    "experience_level": "Unknown",
-                    "experience_reason": "AI service temporarily unavailable. Please try again later."
-                },
-                "career_paths": [],
-                "skill_gaps": [],
-                "roadmap": {},
-                "message": "AI service temporarily unavailable. Your profile is safe and will be analyzed soon."
-            }
+            )
         
-        data = combined_result.get("data", {})
-        analysis = data.get("analysis", {})
-        career_paths = data.get("career_paths", [])
-        skill_gaps = data.get("skill_gaps", [])
-        roadmap = data.get("roadmap", {})
+        # Verify user owns this job
+        if job.get("user_id") != user.user_id:
+            return JSONResponse(
+                status_code=403,
+                content=APIResponse.error_response(
+                    "Access denied",
+                    code="ACCESS_DENIED"
+                )
+            )
         
-        # Get top career path
-        target_career = "Full Stack Developer"
-        if career_paths and isinstance(career_paths, list) and len(career_paths) > 0:
-            if isinstance(career_paths[0], dict):
-                target_career = career_paths[0].get("name", target_career)
-        
-        # Save to database
-        analysis_record = {
-            "user_id": user_id,
-            "github_data": github_data,
-            "leetcode_data": leetcode_data,
-            "analysis": analysis,
-            "career_paths": career_paths,
-            "skill_gaps": skill_gaps,
-            "roadmap": roadmap,
-            "experience_level": (analysis or {}).get("experience_level", "Beginner"),
-            "strengths": (analysis or {}).get("strengths", []),
-        }
-        
-        # Insert or update analysis
-        # First check if exists
-        try:
-            existing = supabase.table("analyses").select("id").eq("user_id", user_id).execute()
-           
-            if existing.data:
-                # Update existing
-                supabase.table("analyses").update(analysis_record).eq("user_id", user_id).execute()
-            else:
-                # Insert new
-                supabase.table("analyses").insert(analysis_record).execute()
-        except Exception as db_error:
-            print(f"Database Error: {db_error}")
-            raise HTTPException(status_code=500, detail=f"Database save failed: {str(db_error)}")
-
-
-        return {
-            "status": "completed",
-            "analysis": analysis,
-            "career_paths": career_paths,
-            "skill_gaps": skill_gaps,
-            "roadmap": roadmap,
-        }
-        
-    except HTTPException:
-        raise
+        return APIResponse.success_response(
+            data=job
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content=APIResponse.error_response(
+                str(e),
+                code="JOB_STATUS_ERROR"
+            )
+        )
 
 
-@router.get("/results/{user_id}")
-async def get_analysis_results(
-    user_id: str,
-    authorization: Optional[str] = Header(None)
+@router.get("/jobs")
+async def get_analysis_jobs(
+    user: AuthenticatedUser = Depends(get_current_user)
 ):
     """
-    Get saved analysis results for a user.
+    Get user's analysis job history.
     """
     try:
-        response = supabase.table("analyses").select("*").eq("user_id", user_id).execute()
-        
-        if not response.data:
-            return {
-                "status": "no_analysis",
-                "message": "No analysis found. Please run analysis first."
-            }
-        
-        analysis = response.data[0]
-        
-        return {
-            "status": "found",
-            "analysis": analysis.get("analysis"),
-            "career_paths": analysis.get("career_paths"),
-            "skill_gaps": analysis.get("skill_gaps"),
-            "roadmap": analysis.get("roadmap"),
-            "experience_level": analysis.get("experience_level"),
-            "strengths": analysis.get("strengths"),
-        }
-        
+        jobs = await get_user_job_history(user.user_id)
+        return APIResponse.success_response(
+            data={"jobs": jobs}
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(
+            status_code=500,
+            content=APIResponse.error_response(
+                str(e),
+                code="JOBS_LIST_ERROR"
+            )
+        )
 
 
-@router.get("/status/{user_id}")
-async def check_analysis_status(
-    user_id: str,
-    authorization: Optional[str] = Header(None)
-):
+@router.get("/career-paths")
+async def get_career_paths(user: AuthenticatedUser = Depends(get_current_user)):
     """
-    Check if analysis exists for a user.
+    Get career path recommendations.
     """
     try:
-        response = supabase.table("analyses").select("id, experience_level, created_at").eq("user_id", user_id).execute()
-        
-        if response.data:
-            return {
-                "status": "completed",
-                "exists": True,
-                "experience_level": response.data[0].get("experience_level"),
-                "created_at": response.data[0].get("created_at"),
-            }
-        
-        return {
-            "status": "not_started",
-            "exists": False,
-        }
-        
+        recommendations = analysis_service.get_career_recommendations(user.user_id)
+        return APIResponse.success_response(
+            data={"career_paths": recommendations}
+        )
     except Exception as e:
-        return {"status": "error", "exists": False}
+        return JSONResponse(
+            status_code=500,
+            content=APIResponse.error_response(
+                str(e),
+                code="CAREER_PATHS_ERROR"
+            )
+        )
+
+
+@router.get("/skill-gap")
+async def get_skill_gaps(user: AuthenticatedUser = Depends(get_current_user)):
+    """
+    Get skill gaps.
+    """
+    try:
+        gaps = analysis_service.get_skill_gaps(user.user_id)
+        return APIResponse.success_response(
+            data={"skill_gaps": gaps}
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content=APIResponse.error_response(
+                str(e),
+                code="SKILL_GAP_ERROR"
+            )
+        )

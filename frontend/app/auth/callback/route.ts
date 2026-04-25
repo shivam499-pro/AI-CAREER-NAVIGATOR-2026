@@ -14,9 +14,9 @@ export async function GET(request: Request) {
       // Check if user has a profile
       const { data: profile } = await supabase
         .from('profiles')
-        .select('id')
-        .eq('id', data.user.id)
-        .single()
+        .select('user_id')
+        .eq('user_id', data.user.id)
+        .maybeSingle()
       
       // Redirect based on profile existence
       if (profile) {

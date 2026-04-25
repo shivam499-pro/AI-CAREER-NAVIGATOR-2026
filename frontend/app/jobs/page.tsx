@@ -1,6 +1,6 @@
 'use client'
 import CareerRoadmap from '@/components/CareerRoadmap'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -32,20 +32,40 @@ export default function JobsPage() {
   const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set())
   const [savingJobId, setSavingJobId] = useState<string | null>(null)
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/auth/login')
-        return
+  const fetchRealJobs = useCallback(async (query: string) => {
+    setJobsLoading(true)
+    setJobsError(null)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      
+      // Get Supabase session for authenticated requests
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
       }
-      setUser(user)
-      await loadUserData(user.id)
+      
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
+      }
+      
+      const response = await fetch(`${apiUrl}/api/jobs?query=${encodeURIComponent(query)}`, {
+        headers
+      })
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`)
+      }
+      const data = await response.json()
+      setJobs(data.jobs || [])
+    } catch (err) {
+      console.error("Failed to fetch jobs:", err)
+      setJobsError("Job search is currently unavailable. Please try again later.")
+    } finally {
+      setJobsLoading(false)
     }
-    checkAuth()
-  }, [router])
+  }, [])
 
-  const loadUserData = async (userId: string) => {
+  const loadUserData = useCallback(async (userId: string) => {
     try {
       const { data: profileData } = await supabase
         .from('profiles')
@@ -78,40 +98,20 @@ export default function JobsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [fetchRealJobs])
 
-  const fetchRealJobs = async (query: string) => {
-    setJobsLoading(true)
-    setJobsError(null)
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      
-      // Get Supabase session for authenticated requests
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push('/auth/login')
+        return
       }
-      
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`
-      }
-      
-      const response = await fetch(`${apiUrl}/api/jobs?query=${encodeURIComponent(query)}`, {
-        headers
-      })
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`)
-      }
-      const data = await response.json()
-      setJobs(data.jobs || [])
-    } catch (err) {
-      console.error("Failed to fetch jobs:", err)
-      setJobsError("Job search is currently unavailable. Please try again later.")
-    } finally {
-      setJobsLoading(false)
+      setUser(user)
+      await loadUserData(user.id)
     }
-  }
+    checkAuth()
+  }, [router, loadUserData])
 
   const saveJob = async (job: any) => {
     if (!user || savingJobId) return

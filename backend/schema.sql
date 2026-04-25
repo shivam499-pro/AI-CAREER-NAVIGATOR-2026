@@ -93,6 +93,8 @@ CREATE TABLE IF NOT EXISTS analyses (
     -- Simple fields
     experience_level TEXT,
     strengths TEXT[],
+    weaknesses JSONB,
+    skill_gap JSONB,
     
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -381,6 +383,30 @@ COMMENT ON TABLE user_career_memory IS 'Tracks user career evolution over time f
 
 
 -- =============================================================================
+-- ANALYIS_JOBS TABLE
+-- Stores async job status for long-running tasks
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS analysis_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_type TEXT NOT NULL,
+    user_id UUID NOT NULL,
+    status TEXT DEFAULT 'pending',
+    payload JSONB,
+    result JSONB,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Index for analysis_jobs
+CREATE INDEX IF NOT EXISTS analysis_jobs_user_id_idx ON analysis_jobs(user_id);
+CREATE INDEX IF NOT EXISTS analysis_jobs_status_idx ON analysis_jobs(status);
+
+COMMENT ON TABLE analysis_jobs IS 'Async job tracking for background tasks like AI analysis';
+
+
+-- =============================================================================
 -- SEQUENCES (if needed for auto-increment)
 -- =============================================================================
 
@@ -402,6 +428,7 @@ COMMENT ON TABLE challenge_results IS 'Challenge submission results for leaderbo
 COMMENT ON TABLE weekly_challenges IS 'Weekly challenge definitions';
 COMMENT ON TABLE weekly_results IS 'Weekly challenge submissions';
 COMMENT ON TABLE challenge_attempts IS 'Tracks when users start weekly challenges';
+COMMENT ON TABLE analysis_jobs IS 'Async job tracking for background tasks';
 
 
 -- =============================================================================
