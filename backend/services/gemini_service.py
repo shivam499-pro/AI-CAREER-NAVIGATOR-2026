@@ -400,8 +400,47 @@ Use this exact structure:
                 "deliverable": "What to build or achieve"
             }}
         ]
+    }},
+    "path_details": {{
+        "Career Path 1 Name": {{
+            "skill_gaps": [
+                {{
+                    "skill": "Skill Name",
+                    "have": false,
+                    "priority": 1,
+                    "resources": ["Resource 1", "Resource 2"]
+                }}
+            ],
+            "roadmap": {{
+                "target_career": "Career Path 1 Name",
+                "duration_months": 6,
+                "total_weeks": 24,
+                "milestones": [
+                    {{
+                        "week": 1,
+                        "title": "Milestone Title",
+                        "description": "What to accomplish",
+                        "skills": ["skill1", "skill2"],
+                        "deliverable": "What to build"
+                    }}
+                ]
+            }}
+        }},
+        "Career Path 2 Name": {{
+            "skill_gaps": [],
+            "roadmap": {{}}
+        }},
+        "Career Path 3 Name": {{
+            "skill_gaps": [],
+            "roadmap": {{}}
+        }}
     }}
 }}
+
+For each of the 3 career paths in career_paths, generate a SEPARATE and SPECIFIC 
+skill_gaps list and roadmap tailored to that exact career path. Store these in 
+path_details using the career path name as the key. Each path must have its own 
+unique skill_gaps and roadmap — do NOT reuse the same content across paths.
 """
     MAX_JSON_RETRIES = 2
     for json_attempt in range(MAX_JSON_RETRIES + 1):

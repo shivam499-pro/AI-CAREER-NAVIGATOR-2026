@@ -67,6 +67,8 @@ export default function AnalysisPage() {
   const [analyzing, setAnalyzing] = useState(false)
   const [user, setUser] = useState<{ id: string } | null>(null)
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null)
+  const [selectedPath, setSelectedPath] = useState<string>('')
+  const [pathDetails, setPathDetails] = useState<Record<string, { skill_gaps: SkillGap[], roadmap: Roadmap }>>({})
   const [error, setError] = useState('')
 
   const runAnalysis = useCallback(async (userId: string) => {
@@ -115,6 +117,9 @@ export default function AnalysisPage() {
             const roadmap = analysisObj.roadmap || record.roadmap || { target_career: '', duration_months: 6, milestones: [] }
             const experienceLevel = analysisObj.analysis?.experience_level || analysisObj.experience_level || record.experience_level || 'Beginner'
 
+            const pathDetailsData = record?.path_details || {}
+            setPathDetails(pathDetailsData)
+
             setAnalysis({
               experience_level: experienceLevel,
               strengths: Array.isArray(strengths) ? strengths.filter((s: string) => !String(s).toLowerCase().includes('error')) : [],
@@ -122,6 +127,12 @@ export default function AnalysisPage() {
               skill_gaps: Array.isArray(skillGaps) ? skillGaps : [],
               roadmap: roadmap,
             })
+
+            // Set default selected path to first career path name
+            if (Array.isArray(careerPaths) && careerPaths.length > 0) {
+              const firstPathName = careerPaths[0]?.name || careerPaths[0]?.career_name || careerPaths[0]?.title || ''
+              setSelectedPath(firstPathName)
+            }
             setAnalyzing(false)
             setLoading(false)
             return
@@ -169,6 +180,9 @@ export default function AnalysisPage() {
         const skillGaps = analysisObj.skill_gaps || analysisObj.skill_gap || record.skill_gaps || []
         const roadmap = analysisObj.roadmap || record.roadmap || { target_career: '', duration_months: 6, milestones: [] }
         const experienceLevel = analysisObj.analysis?.experience_level || analysisObj.experience_level || record.experience_level || 'Beginner'
+        const pathDetailsData = record?.path_details || {}
+        setPathDetails(pathDetailsData)
+
         setAnalysis({
           experience_level: experienceLevel,
           strengths: Array.isArray(strengths) ? strengths.filter((s: string) => !String(s).toLowerCase().includes('error')) : [],
@@ -176,6 +190,12 @@ export default function AnalysisPage() {
           skill_gaps: Array.isArray(skillGaps) ? skillGaps : [],
           roadmap: roadmap,
         })
+
+        // Set default selected path to first career path name
+        if (Array.isArray(careerPaths) && careerPaths.length > 0) {
+          const firstPathName = careerPaths[0]?.name || careerPaths[0]?.career_name || careerPaths[0]?.title || ''
+          setSelectedPath(firstPathName)
+        }
 
       } else {
         await runAnalysis(userId)
@@ -331,19 +351,23 @@ export default function AnalysisPage() {
                 const match = path.match_percentage ?? path.match ?? path.percentage ?? 0
                 const desc = path.reason || path.description || path.justification || ''
                 return (
-                  <div key={i} className={`bg-[#1E293B] rounded-2xl p-8 border border-white/5 relative group transition-all hover:bg-[#1E293B]/80 ${i === 0 ? 'shadow-[0_0_30px_rgba(108,63,200,0.15)] ring-2 ring-primary-violet/30' : ''}`}>
+                  <div
+                    key={i}
+                    onClick={() => setSelectedPath(name)}
+                    className={`bg-[#1E293B] rounded-2xl p-8 border border-white/5 relative group transition-all hover:bg-[#1E293B]/80 cursor-pointer ${selectedPath === name ? 'shadow-[0_0_30px_rgba(108,63,200,0.3)] ring-2 ring-primary-violet' : i === 0 && !selectedPath ? 'shadow-[0_0_30px_rgba(108,63,200,0.15)] ring-2 ring-primary-violet/30' : ''}`}
+                  >
                     {i === 0 && (
                       <div className="absolute -top-3 left-8 bg-primary-violet text-white text-[10px] font-black px-4 py-1 rounded-full animate-pulse">BEST MATCH</div>
                     )}
                     <h4 className="text-xl font-black text-white mb-4 leading-tight">{name}</h4>
                     <div className="mb-6 flex items-baseline gap-2">
-                      <span className={`text-4xl font-black ${i === 0 ? 'text-primary-violet' : 'text-white'}`}>{match}%</span>
+                      <span className={`text-4xl font-black ${selectedPath === name || (i === 0 && !selectedPath) ? 'text-primary-violet' : 'text-white'}`}>{match}%</span>
                       <span className="text-xs text-slate-500 font-bold uppercase">Alignment</span>
                     </div>
                     {/* Gradient Bar */}
                     <div className="h-2 w-full bg-slate-800 rounded-full mb-6 overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-1000 ${i === 0 ? 'bg-gradient-to-r from-primary-violet to-purple-400' : 'bg-slate-600'}`}
+                        className={`h-full rounded-full transition-all duration-1000 ${selectedPath === name || (i === 0 && !selectedPath) ? 'bg-gradient-to-r from-primary-violet to-purple-400' : 'bg-slate-600'}`}
                         style={{ width: `${match}%` }}
                       />
                     </div>
@@ -360,8 +384,13 @@ export default function AnalysisPage() {
               <Code className="w-5 h-5 text-blue-400" />
               Critical Skill Gaps
             </h3>
+            {selectedPath && (
+              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mb-2">
+                Showing roadmap for: <span className="text-primary-violet">{selectedPath}</span>
+              </p>
+            )}
             <div className="bg-[#1E293B] rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
-              {(analysis.skill_gaps || []).map((item, i) => {
+              {(pathDetails[selectedPath]?.skill_gaps || analysis.skill_gaps || []).map((item, i) => {
                 const name = item.skill || item.skill_name || item.name || 'Skill'
                 const has = item.have ?? item.has ?? item.owned ?? false
                 const p = item.priority ?? item.priority_level ?? item.level ?? 0
@@ -385,11 +414,11 @@ export default function AnalysisPage() {
           <motion.div variants={itemVariants} className="space-y-6 pb-12">
             <h3 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-3">
               <Calendar className="w-5 h-5 text-primary-violet" />
-              Strategic {analysis.roadmap?.duration_months || 6}-Month Growth Path
+              Strategic {(pathDetails[selectedPath]?.roadmap || analysis.roadmap)?.duration_months || 6}-Month Growth Path
             </h3>
             <div className="bg-[#1E293B] rounded-2xl p-10 border border-white/5 relative">
               <div className="absolute left-[3.35rem] top-24 bottom-24 w-0.5 bg-gradient-to-b from-primary-violet/50 via-primary-violet/20 to-transparent" />
-              {analysis.roadmap?.milestones?.map((m, i) => (
+              {(pathDetails[selectedPath]?.roadmap || analysis.roadmap)?.milestones?.map((m, i) => (
                 <div key={i} className="flex gap-8 mb-12 last:mb-0 relative group">
                   <div className="relative z-10 w-12 h-12 rounded-full bg-[#0F172A] border-4 border-primary-violet text-primary-violet flex items-center justify-center font-black text-xl shadow-[0_0_15px_rgba(108,63,200,0.4)] group-hover:scale-110 transition-transform">
                     {m.week}
