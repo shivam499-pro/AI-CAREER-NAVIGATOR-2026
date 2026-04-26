@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from services import analysis_service
 from services.async_job_service import (
-    create_analysis_job,
+    create_analysis_job_idempotent,
     get_job_status,
     get_user_job_history,
     async_job_service
@@ -82,15 +82,16 @@ async def run_my_analysis(
     Use /api/analysis/job/{job_id} to check status.
     """
     try:
-        # Create async job
-        job = await create_analysis_job(user.user_id)
+        # Create async job (idempotent to prevent duplicates)
+        job, is_new = await create_analysis_job_idempotent(user.user_id, duplicate_window_seconds=300)
         
-        # Add background task to process the job
-        background_tasks.add_task(
-            process_analysis_background,
-            job_id=job["id"],
-            payload=job["payload"]
-        )
+        # Only process if this is a new job, not a duplicate
+        if is_new:
+            background_tasks.add_task(
+                process_analysis_background,
+                job_id=job["id"],
+                payload=job["payload"]
+            )
         
         return APIResponse.success_response(
             data={

@@ -403,28 +403,34 @@ Use this exact structure:
     }}
 }}
 """
-    try:
-        raw_text = _generate(prompt)
-        clean_text = _clean_json(raw_text)
-        result = json.loads(clean_text)
-        return {"success": True, "data": result}
-    except RateLimitError as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "error_type": "rate_limit",
-            "retry_after": None
-        }
-    except json.JSONDecodeError as e:
-        return {
-            "success": False,
-            "error": f"Failed to parse AI response: {str(e)}"
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"Gemini API error: {str(e)}"
-        }
+    MAX_JSON_RETRIES = 2
+    for json_attempt in range(MAX_JSON_RETRIES + 1):
+        try:
+            raw_text = _generate(prompt)
+            clean_text = _clean_json(raw_text)
+            result = json.loads(clean_text)
+            return {"success": True, "data": result}
+        except RateLimitError as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "error_type": "rate_limit",
+                "retry_after": None
+            }
+        except json.JSONDecodeError as e:
+            if json_attempt < MAX_JSON_RETRIES:
+                print(f"JSON parse failed on attempt {json_attempt + 1}, retrying Gemini call: {str(e)}")
+                time.sleep(1.0)
+                continue
+            return {
+                "success": False,
+                "error": f"Failed to parse AI response after {MAX_JSON_RETRIES + 1} attempts: {str(e)}"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Gemini API error: {str(e)}"
+            }
 
 
 def _get_cached_analysis(
