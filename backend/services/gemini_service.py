@@ -435,7 +435,40 @@ Use this exact structure:
             "roadmap": {{}}
         }}
     }}
-}}
+    "resume_score": {{
+        "overall": 0,
+        "breakdown": {{
+        "skills_match": 0,
+        "github_activity": 0,
+        "leetcode_strength": 0,
+        "certifications": 0,
+        "resume_quality": 0
+        }},
+        "summary": "One sentence honest summary of the candidate's overall profile strength"
+    }},
+    "salary_insights": {{
+        "currency": "INR",
+        "entry_level": "X-Y LPA",
+        "mid_level": "X-Y LPA", 
+        "senior_level": "X-Y LPA",
+        "note": "AI-estimated based on Indian market 2025 for [career path]"
+    }},
+    "top_companies": [
+        {{
+            "name": "Company Name",
+            "type": "Product/Service/Startup",
+            "why": "One line why this company fits the candidate's profile"
+        }}
+    ],
+    "certifications": [
+        {{
+            "name": "Certification Name",
+            "provider": "Provider Name",
+            "relevance": "High/Medium",
+            "url": "official certification URL",
+            "why": "One line why this cert matters for their specific career path"
+        }}   
+    ]
 
 For each of the 3 career paths in career_paths, generate a SEPARATE and SPECIFIC 
 skill_gaps list and roadmap tailored to that exact career path. Store these in 
@@ -754,11 +787,21 @@ Return ONLY valid JSON with exactly these fields:
 No markdown, no extra text, just JSON."""
     try:
         return json.loads(_clean_json(_generate(prompt)))
-    except Exception:
+    except RateLimitError as e:
         return {
-            "score": 5,
-            "good_points": ["Attempted the question"],
-            "missing_points": ["Could not evaluate properly"],
-            "model_answer": "Please try again",
-            "tip": "Be more specific in your answers"
+            "success": False,
+            "error": "rate_limit",
+            "message": "Too many request. Please wait a moment and try again"
+        }
+    except json.JSONDecodeError:
+        return{
+            "success": False,
+            "error": "parse_error",
+            "message": "Could not parse AI response. PLease try again."
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": "api_error",
+            "message": {str(e)}
         }

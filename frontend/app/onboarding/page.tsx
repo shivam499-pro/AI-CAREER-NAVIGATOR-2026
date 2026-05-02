@@ -11,6 +11,7 @@ type UserType = 'student' | 'professional' | 'fresher' | 'career_switch'
 interface ProfileData {
   user_id: string
   user_type: UserType
+
   // Student fields
   college_name: string
   degree: string
@@ -18,12 +19,14 @@ interface ProfileData {
   year_of_study: string
   graduation_year: string
   cgpa: string
+
   // Professional fields
   current_job_title: string
   current_company: string
   years_of_experience: string
   current_tech_stack: string[]
   reason_for_switching: string
+
   // Fresher fields
   // (uses college_name, degree, graduation_year, cgpa from student)
   // Career switch fields
@@ -35,6 +38,7 @@ interface ProfileData {
   extra_skills: string[]
   certificates: string[]
   job_search_timeline: string
+
   // Existing fields
   github_username: string
   leetcode_username: string
@@ -49,7 +53,7 @@ const COMMON_SKILLS = [
   'Machine Learning', 'Data Analysis'
 ]
 
-const DEGREE_OPTIONS = ['B.Tech', 'BCA', 'BCS', 'MCA', 'MBA', 'BSc', 'MSc', 'Other']
+const DEGREE_OPTIONS = ['B.E','B.Tech', 'BCA', 'BCS', 'MCA', 'MBA', 'BSc', 'MSc', 'Other']
 const YEAR_OF_STUDY_OPTIONS = ['1st Year', '2nd Year', '3rd Year', 'Final Year']
 const EXPERIENCE_OPTIONS = ['1-2', '3-5', '5-10', '10+']
 const CAREER_GOAL_OPTIONS = [
@@ -59,9 +63,10 @@ const CAREER_GOAL_OPTIONS = [
 ]
 const TIMELINE_OPTIONS = ['Actively looking (ASAP)', '1-3 months', '3-6 months', 'Just exploring']
 
-export default function OnboardingPage() {
+export default function OnboardingPage() 
+{
   const [currentStep, setCurrentStep] = useState(1)
-  const [loading, setLoading] = useState(false)
+  const [_loading, _setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [user, setUser] = useState<{ id: string } | null>(null)
@@ -156,7 +161,6 @@ export default function OnboardingPage() {
 
   const handleSubmit = async () => {
     if (!user) return
-    
     setSaving(true)
     setError('')
 
@@ -165,18 +169,20 @@ export default function OnboardingPage() {
       let resumeUrl = null
       
       if (profileData.resume_file) {
-        const fileName = `${user.id}/resume_${Date.now()}.pdf`
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('resumes')
-          .upload(fileName, profileData.resume_file)
-        
-        if (uploadError) {
-          console.error('Upload error:', uploadError)
-        } else {
-          const { data: { publicUrl } } = supabase.storage
-            .from('resumes')
-            .getPublicUrl(fileName)
-          resumeUrl = publicUrl
+        const formData = new FormData()
+        formData.append('user_id', user.id)
+        formData.append('file', profileData.resume_file)
+
+        const resumeRes = await fetch(`${apiUrl}/api/v1/resume/upload`, {
+          method: 'POST',
+          body: formData,
+        })
+
+        if(resumeRes.ok){
+          const resumeData = await resumeRes.json()
+          resumeUrl = resumeData.resume_url
+        }else{
+          console.error('Resume upload failed during onboarding')
         }
       }
 
@@ -232,7 +238,6 @@ export default function OnboardingPage() {
         setSaving(false)
         return
       }
-
       // Redirect to analysis
       window.location.href = '/analysis'
     } catch (err) {

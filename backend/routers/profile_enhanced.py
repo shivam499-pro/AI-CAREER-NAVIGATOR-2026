@@ -1,4 +1,7 @@
 """
+C:\project-2026\Career-navigator\backend\routers\profile_enhanced.py
+
+
 Enhanced Profile Router
 Handles enhanced profile data (academic, skills, experience, achievements, goals)
 

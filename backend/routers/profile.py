@@ -34,7 +34,7 @@ class ProfileSaveRequest(BaseModel):
     college_name: Optional[str] = None
     degree: Optional[str] = None
     branch: Optional[str] = None
-    current_year: Optional[str] = None
+    year_of_study: Optional[str] = None
     graduation_year: Optional[int] = None
     cgpa: Optional[float] = None
     # Professional
@@ -49,6 +49,8 @@ class ProfileSaveRequest(BaseModel):
     target_companies: Optional[List[str]] = []
     preferred_location: Optional[str] = None
     career_goal: Optional[str] = None
+    preferred_work_type: Optional[str] = None
+    job_search_timeline: Optional[str] = None
     open_to: Optional[str] = None
     # External
     github_username: Optional[str] = None

@@ -149,7 +149,7 @@ class TestResumeEndpoints:
             
             # No file provided - should fail validation
             response = client.post(
-                "/api/resume/upload",
+                "/api/v1/resume/upload",
                 data={"user_id": "test-user-123"}
             )
             
@@ -165,7 +165,7 @@ class TestResumeEndpoints:
             
             # Upload non-PDF file
             response = client.post(
-                "/api/resume/upload",
+                "/api/v1/resume/upload",
                 files={"file": ("test.txt", b"content", "text/plain")},
                 data={"user_id": "test-user-123"}
             )

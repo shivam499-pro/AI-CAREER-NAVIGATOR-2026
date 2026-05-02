@@ -68,9 +68,9 @@ def save_analysis(user_id: str, analysis_data: Dict[str, Any]) -> bool:
             data["experience_level"] = analysis_data["experience_level"]
         if "career_paths" in analysis_data:
             data["career_paths"] = analysis_data["career_paths"]
-        if "skill_gap" in analysis_data:
-            analysis_obj["skill_gap"] = analysis_data["skill_gap"]
-            data["skill_gap"] = analysis_data["skill_gap"]
+        if "skill_gaps" in analysis_data:
+            analysis_obj["skill_gaps"] = analysis_data["skill_gaps"]
+            data["skill_gaps"] = analysis_data["skill_gaps"]
         
         # Save full analysis object to 'analysis' column
         if analysis_obj:
@@ -223,7 +223,7 @@ def get_skill_gaps(user_id: str) -> List[Dict[str, Any]]:
         if not analysis:
             return []
         
-        return analysis.get("skill_gap", [])
+        return analysis.get("skill_gaps", [])
     except Exception as e:
         print(f"Error getting skill gaps: {e}")
         return []

@@ -125,7 +125,7 @@ export default function ResumePage() {
       formData.append('file', selectedFile)
       
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiUrl}/api/resume/upload`, {
+      const response = await fetch(`${apiUrl}/api/v1/resume/upload`, {
         method: 'POST',
         body: formData,
       })
@@ -224,7 +224,7 @@ export default function ResumePage() {
     setLoadingProfile(true)
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const res = await fetch(`${apiUrl}/api/profile/${user.id}`)
+      const res = await fetch(`${apiUrl}/api/v1/profile/${user.id}`)
       const data = await res.json()
       if (data.success) {
         setProfile(data.profile)
@@ -250,7 +250,7 @@ export default function ResumePage() {
       }
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiUrl}/api/documents/upload`, {
+      const response = await fetch(`${apiUrl}/api/v1/documents/upload`, {
         method: 'POST',
         body: formData,
       })

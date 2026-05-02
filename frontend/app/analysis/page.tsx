@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
@@ -51,6 +51,39 @@ interface Milestone {
   skills: string[]
   deliverable?: string
 }
+interface ResumeScore {
+  overall: number
+  breakdown: {
+    skills_match: number
+    github_activity: number
+    leetcode_strength: number
+    certifications: number
+    resume_quality: number
+  }
+  summary: string
+}
+
+interface SalaryInsights {
+  currency: string
+  entry_level: string
+  mid_level: string
+  senior_level: string
+  note: string
+}
+
+interface TopCompany {
+  name: string
+  type: string
+  why: string
+}
+
+interface Certification {
+  name: string
+  provider: string
+  relevance: string
+  url: string
+  why: string
+}
 
 interface AnalysisData {
   experience_level: string
@@ -59,9 +92,53 @@ interface AnalysisData {
   skill_gaps: SkillGap[]
   skill_gap?: SkillGap[]
   roadmap: Roadmap
+  resume_score?: ResumeScore        // ADD
+  salary_insights?: SalaryInsights  // ADD
+  top_companies?: TopCompany[]      // ADD
+  certifications?: Certification[]  // ADD
 }
 
+
 export default function AnalysisPage() {
+
+  const isMountedRef = useRef(true)
+  
+  useEffect(() => {
+    return () => { isMountedRef.current = false }
+  }, [])
+  
+  function parseAnalysisRecord(record: any) {
+    const analysisObj = record?.analysis || {}
+    const strengths = analysisObj.analysis?.strengths || analysisObj.strengths || record.strengths || []
+    const careerPaths = record.career_paths || analysisObj.career_paths || []
+    const skillGaps = analysisObj.skill_gaps || analysisObj.skill_gap || record.skill_gaps || []
+    const roadmap = analysisObj.roadmap || record.roadmap || { target_career: '', duration_months: 6, milestones: [] }
+    const experienceLevel = analysisObj.analysis?.experience_level || analysisObj.experience_level || record.experience_level || 'Beginner'
+    const pathDetails = record?.path_details || {}
+    const firstPathName = Array.isArray(careerPaths) && careerPaths.length > 0
+      ? (careerPaths[0]?.name || careerPaths[0]?.career_name || careerPaths[0]?.title || '')
+      : ''
+    return {
+      analysis: {
+        experience_level: experienceLevel,
+        strengths: Array.isArray(strengths) ? strengths.filter((s: string) => !String(s).toLowerCase().includes('error')) : [],
+        career_paths: Array.isArray(careerPaths) ? careerPaths : [],
+        skill_gaps: Array.isArray(skillGaps) ? skillGaps : [],
+        roadmap,
+        resume_score: (record.resume_score?.overall != null ? record.resume_score : null) 
+                      || analysisObj.resume_score || null,
+        salary_insights: (record.salary_insights?.entry_level ? record.salary_insights : null) 
+                         || analysisObj.salary_insights || null,
+        top_companies: (Array.isArray(record.top_companies) && record.top_companies.length > 0 
+                       ? record.top_companies : null) || analysisObj.top_companies || [],
+        certifications: (Array.isArray(record.certifications) && record.certifications.length > 0 
+                        ? record.certifications : null) || analysisObj.certifications || [],
+
+      },
+      pathDetails,
+      firstPathName,
+    }
+  }
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [analyzing, setAnalyzing] = useState(false)
@@ -93,50 +170,50 @@ export default function AnalysisPage() {
       })
       if (!response.ok) throw new Error('Analysis failed to start')
 
+      const runData = await response.json()
+      const jobId = runData?.data?.job_id
+      
+      if (!jobId) throw new Error('No job ID returned from analysis start')
+
       // Poll for completion - up to 10 times every 3 seconds
       for (let i = 0; i < 10; i++) {
         await new Promise(resolve => setTimeout(resolve, 3000))
+        if (!isMountedRef.current) return
 
-        const checkRes = await fetch(`${apiUrl}/api/v1/analysis/`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          }
+        // CORRECT — backticks
+        const jobRes = await fetch(`${apiUrl}/api/v1/analysis/job/${jobId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
         })
 
-        if (checkRes.ok) {
-          const pollData = await checkRes.json()
-          if (pollData?.success && pollData?.data?.exists && pollData?.data?.analysis) {
-            const record = pollData.data.analysis
-            const analysisObj = record?.analysis || {}
+        if(!jobRes.ok) continue
+        
+        const jobData = await jobRes.json()
+        const job = jobData?.data
 
-            const strengths = analysisObj.analysis?.strengths || analysisObj.strengths || record.strengths || []
-            const careerPaths = record.career_paths || analysisObj.career_paths || []
-            const skillGaps = analysisObj.skill_gaps || analysisObj.skill_gap || record.skill_gaps || []
-            const roadmap = analysisObj.roadmap || record.roadmap || { target_career: '', duration_months: 6, milestones: [] }
-            const experienceLevel = analysisObj.analysis?.experience_level || analysisObj.experience_level || record.experience_level || 'Beginner'
-
-            const pathDetailsData = record?.path_details || {}
-            setPathDetails(pathDetailsData)
-
-            setAnalysis({
-              experience_level: experienceLevel,
-              strengths: Array.isArray(strengths) ? strengths.filter((s: string) => !String(s).toLowerCase().includes('error')) : [],
-              career_paths: Array.isArray(careerPaths) ? careerPaths : [],
-              skill_gaps: Array.isArray(skillGaps) ? skillGaps : [],
-              roadmap: roadmap,
-            })
-
-            // Set default selected path to first career path name
-            if (Array.isArray(careerPaths) && careerPaths.length > 0) {
-              const firstPathName = careerPaths[0]?.name || careerPaths[0]?.career_name || careerPaths[0]?.title || ''
+        if(job?.status === 'failed'){
+          setError('Analysis failed. Please try Again..')
+          setAnalyzing(false)
+          setLoading(false)
+          return
+        }
+        if(job?.status === 'completed'){
+          // correct
+          const finalRes = await fetch(`${apiUrl}/api/v1/analysis/`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+          if(finalRes.ok) {
+            const finalData = await finalRes.json()
+            if(finalData?.success && finalData?.data?.analysis){
+              const{ analysis, pathDetails, firstPathName } = parseAnalysisRecord(finalData.data.analysis)
+              if(!isMountedRef.current) return  
+              setAnalysis(analysis)
+              setPathDetails(pathDetails)
               setSelectedPath(firstPathName)
             }
-            setAnalyzing(false)
-            setLoading(false)
-            return
           }
+          setAnalyzing(false)
+          setLoading(false)
+          return
         }
       }
 
@@ -170,34 +247,12 @@ export default function AnalysisPage() {
 
       const data = await response.json()
 
-      if (data?.sucess && data?.data?.exists && data?.data?.analysis) {
-        const record = data.data.analysis
-        const analysisObj = record?.analysis || {}
-
-        console.log("SUPABASE DATA:", record)
-        const strengths = analysisObj.analysis?.strengths || analysisObj.strengths || record.strengths || []
-        const careerPaths = record.career_paths || analysisObj.career_paths || []
-        const skillGaps = analysisObj.skill_gaps || analysisObj.skill_gap || record.skill_gaps || []
-        const roadmap = analysisObj.roadmap || record.roadmap || { target_career: '', duration_months: 6, milestones: [] }
-        const experienceLevel = analysisObj.analysis?.experience_level || analysisObj.experience_level || record.experience_level || 'Beginner'
-        const pathDetailsData = record?.path_details || {}
-        setPathDetails(pathDetailsData)
-
-        setAnalysis({
-          experience_level: experienceLevel,
-          strengths: Array.isArray(strengths) ? strengths.filter((s: string) => !String(s).toLowerCase().includes('error')) : [],
-          career_paths: Array.isArray(careerPaths) ? careerPaths : [],
-          skill_gaps: Array.isArray(skillGaps) ? skillGaps : [],
-          roadmap: roadmap,
-        })
-
-        // Set default selected path to first career path name
-        if (Array.isArray(careerPaths) && careerPaths.length > 0) {
-          const firstPathName = careerPaths[0]?.name || careerPaths[0]?.career_name || careerPaths[0]?.title || ''
-          setSelectedPath(firstPathName)
-        }
-
-      } else {
+      if (data?.success && data?.data?.exists && data?.data?.analysis) {
+        const { analysis, pathDetails, firstPathName } = parseAnalysisRecord(data.data.analysis)
+        setAnalysis(analysis)
+        setPathDetails(pathDetails)
+        setSelectedPath(firstPathName)
+      }else {
         await runAnalysis(userId)
       }
     } catch (err) {
@@ -209,6 +264,7 @@ export default function AnalysisPage() {
   }, [runAnalysis])
 
   useEffect(() => {
+    
     const checkAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
@@ -289,6 +345,11 @@ export default function AnalysisPage() {
   }
 
   return (
+    
+    
+    // backgroung colour
+
+
     <div className="min-h-screen bg-[#0F172A] text-white">
       <Navbar />
       <main className="container mx-auto px-4 py-12 max-w-6xl">
@@ -320,6 +381,136 @@ export default function AnalysisPage() {
               </div>
             </div>
           </motion.div>
+          <motion.div variants={itemVariants} className="flex justify-end">
+            <button
+              onClick={() => user && runAnalysis(user.id)}
+              disabled={analyzing}
+              className="flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 border border-white/10 hover:border-primary-violet/40 rounded-xl text-sm font-black text-slate-300 hover:text-white transition-all disabled:opacity-50"
+            >
+              <Zap className="w-4 h-4" />
+              Re-analyze Profile
+            </button>
+          </motion.div>
+              {/* Resume Score Card */}
+              {analysis.resume_score && (
+                <motion.div variants={itemVariants} className="space-y-6">
+                  <h3 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-3">
+                    <Award className="w-5 h-5 text-yellow-400" />
+                    Resume Score
+                  </h3>
+                  <div className="bg-[#1E293B] rounded-2xl p-8 border border-white/5">
+                    <div className="flex flex-col md:flex-row items-center gap-8 mb-8">
+                      {/* Radial Score */}
+                      <div className="relative w-32 h-32 flex-shrink-0">
+                        <svg className="w-32 h-32 -rotate-90" viewBox="0 0 120 120">
+                          <circle cx="60" cy="60" r="54" fill="none" stroke="#1E293B" strokeWidth="12"/>
+                          <circle cx="60" cy="60" r="54" fill="none" stroke="#6C3FC8" strokeWidth="12"
+                            strokeDasharray={`${(analysis.resume_score.overall / 100) * 339} 339`}
+                            strokeLinecap="round"/>
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <span className="text-3xl font-black text-white">{analysis.resume_score.overall}</span>
+                          <span className="text-xs text-slate-400 font-bold">/100</span>
+                        </div>
+                      </div>
+                      <div className="flex-1 w-full">
+                        <p className="text-slate-300 font-medium mb-6 italic">"{analysis.resume_score.summary}"</p>
+                        <div className="space-y-3">
+                          {Object.entries(analysis.resume_score.breakdown || {}).map(([key, val]) => (
+                            <div key={key} className="flex items-center gap-4">
+                              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest w-36 flex-shrink-0">
+                                {key.replace(/_/g, ' ')}
+                              </span>
+                              <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-gradient-to-r from-primary-violet to-purple-400 rounded-full transition-all duration-1000"
+                                  style={{ width: `${val as number}%` }}
+                                />
+                              </div>
+                              <span className="text-xs font-black text-white w-8 text-right">{val as number}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+                
+              {/* Salary Insights */}
+              {analysis.salary_insights && (
+                <motion.div variants={itemVariants} className="space-y-6">
+                  <h3 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-3">
+                    <TrendingUp className="w-5 h-5 text-green-400" />
+                    Salary Insights
+                  </h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    {[
+                      { label: 'Entry Level', value: analysis.salary_insights.entry_level, color: 'text-blue-400' },
+                      { label: 'Mid Level', value: analysis.salary_insights.mid_level, color: 'text-primary-violet' },
+                      { label: 'Senior Level', value: analysis.salary_insights.senior_level, color: 'text-yellow-400' },
+                    ].map((item, i) => (
+                      <div key={i} className="bg-[#1E293B] rounded-2xl p-6 border border-white/5 text-center">
+                        <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">{item.label}</p>
+                        <p className={`text-2xl font-black ${item.color}`}>{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium">{analysis.salary_insights.note}</p>
+                </motion.div>
+              )}
+                
+              {/* Top Companies */}
+              {analysis.top_companies && analysis.top_companies.length > 0 && (
+                <motion.div variants={itemVariants} className="space-y-6">
+                  <h3 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-3">
+                    <Sparkles className="w-5 h-5 text-blue-400" />
+                    Top Companies For You
+                  </h3>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {analysis.top_companies.map((company, i) => (
+                      <div key={i} className="bg-[#1E293B] rounded-2xl p-6 border border-white/5 flex items-start gap-4 hover:border-primary-violet/30 transition-all">
+                        <div className="w-10 h-10 rounded-xl bg-primary-violet/10 border border-primary-violet/20 flex items-center justify-center font-black text-primary-violet flex-shrink-0">
+                          {company.name[0]}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-black text-white">{company.name}</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 bg-slate-700 text-slate-400 rounded-full">{company.type}</span>
+                          </div>
+                          <p className="text-xs text-slate-400 font-medium">{company.why}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+              {/* Certifications */}
+              {analysis.certifications && analysis.certifications.length > 0 && (
+                <motion.div variants={itemVariants} className="space-y-6">
+                  <h3 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-3">
+                    <CheckCircle className="w-5 h-5 text-green-400" />
+                    Recommended Certifications
+                  </h3>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {analysis.certifications.map((cert, i) => (
+                      <a key={i} href={cert.url} target="_blank" rel="noopener noreferrer"
+                        className="bg-[#1E293B] rounded-2xl p-6 border border-white/5 hover:border-primary-violet/30 transition-all group block">
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <p className="font-black text-white group-hover:text-primary-violet transition-colors">{cert.name}</p>
+                            <p className="text-xs text-slate-400 font-medium">{cert.provider}</p>
+                          </div>
+                          <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full ${cert.relevance === 'High' ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                            {cert.relevance}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 font-medium">{cert.why}</p>
+                      </a>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
 
           {/* Strengths */}
           <motion.div variants={itemVariants} className="space-y-6">

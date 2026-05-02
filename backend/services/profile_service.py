@@ -1,4 +1,7 @@
 """
+C:\project-2026\Career-navigator\backend\services\profile_service.py
+
+
 Profile Service
 Business logic for profile operations including:
 - Merging resume skills + manual skills
