@@ -146,7 +146,10 @@ export default function AnalysisPage() {
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null)
   const [selectedPath, setSelectedPath] = useState<string>('')
   const [pathDetails, setPathDetails] = useState<Record<string, { skill_gaps: SkillGap[], roadmap: Roadmap }>>({})
+  const [roadmapProgress, setRoadmapProgress] = useState<Record<number, string>>({})
+  const [progressLoading, setProgressLoading] = useState(false)
   const [error, setError] = useState('')
+  const [milestoneError, setMilestoneError] = useState('')
 
   const runAnalysis = useCallback(async (userId: string) => {
     setAnalyzing(true)
@@ -277,6 +280,76 @@ export default function AnalysisPage() {
     checkAuth()
   }, [router, checkExistingAnalysis])
 
+  const fetchRoadmapProgress = useCallback(async (careerPath: string) => {
+    if (!careerPath) return
+    setProgressLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+      const token = session.access_token
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/v1/roadmap/progress/${careerPath}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setRoadmapProgress(data.progress_map || {})
+      }
+    } catch (err) {
+      console.error('Fetch roadmap progress error:', err)
+    } finally {
+      setProgressLoading(false)
+    }
+  }, [])
+
+  const updateMilestone = useCallback(async (week: number, currentStatus: string) => {
+    if (!selectedPath) return
+    const nextStatus = currentStatus === 'pending' ? 'in_progress'
+      : currentStatus === 'in_progress' ? 'completed'
+      : 'pending'
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+      const token = session.access_token
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/v1/roadmap/milestone`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          career_path: selectedPath,
+          milestone_week: week,
+          status: nextStatus
+        })
+      })
+      const data = await response.json()
+
+      if(response.status === 429){
+        setMilestoneError(data?.detail || data?.error || 'wait before completing the next milestone.')
+        setTimeout(() => setMilestoneError(''), 4000)
+        return 
+      }
+      if (response.ok && data?.success) {
+        setRoadmapProgress(prev => ({ ...prev, [week]: nextStatus }))
+        if (data?.data?.roadmap_completed === true) {
+          console.log('Roadmap completed!')
+        }
+      }
+    } catch (err) {
+      console.error('Update milestone error:', err)
+    }
+  }, [selectedPath])
+
+  useEffect(() => {
+    if (selectedPath) {
+      fetchRoadmapProgress(selectedPath)
+    }
+  }, [selectedPath, fetchRoadmapProgress])
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0F172A] flex items-center justify-center">
@@ -345,11 +418,6 @@ export default function AnalysisPage() {
   }
 
   return (
-    
-    
-    // backgroung colour
-
-
     <div className="min-h-screen bg-[#0F172A] text-white">
       <Navbar />
       <main className="container mx-auto px-4 py-12 max-w-6xl">
@@ -608,25 +676,73 @@ export default function AnalysisPage() {
               Strategic {(pathDetails[selectedPath]?.roadmap || analysis.roadmap)?.duration_months || 6}-Month Growth Path
             </h3>
             <div className="bg-[#1E293B] rounded-2xl p-10 border border-white/5 relative">
-              <div className="absolute left-[3.35rem] top-24 bottom-24 w-0.5 bg-gradient-to-b from-primary-violet/50 via-primary-violet/20 to-transparent" />
-              {(pathDetails[selectedPath]?.roadmap || analysis.roadmap)?.milestones?.map((m, i) => (
-                <div key={i} className="flex gap-8 mb-12 last:mb-0 relative group">
-                  <div className="relative z-10 w-12 h-12 rounded-full bg-[#0F172A] border-4 border-primary-violet text-primary-violet flex items-center justify-center font-black text-xl shadow-[0_0_15px_rgba(108,63,200,0.4)] group-hover:scale-110 transition-transform">
-                    {m.week}
+              {/* Progress Bar */}
+              {((pathDetails[selectedPath]?.roadmap || analysis.roadmap)?.milestones?.length > 0) && (
+                <div className="mb-8">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-bold text-slate-400">Roadmap Progress</span>
+                    <span className="text-sm font-black text-primary-violet">
+                      {Object.values(roadmapProgress).filter((s: string) => s === 'completed').length} / {(pathDetails[selectedPath]?.roadmap || analysis.roadmap)?.milestones?.length} completed
+                    </span>
                   </div>
-                  <div className="flex-1 bg-slate-900/40 p-8 rounded-2xl border border-white/5 group-hover:border-primary-violet/30 transition-all hover:bg-slate-900/60">
-                    <h4 className="text-xl font-black text-white mb-2 leading-tight">{m.title}</h4>
-                    <p className="text-sm text-slate-400 font-medium leading-relaxed mb-6 italic opacity-80">"{m.description}"</p>
-                    <div className="flex flex-wrap gap-2">
-                      {m.skills?.map((s, si) => (
-                        <span key={si} className="text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-primary-violet/10 text-primary-violet rounded-lg border border-primary-violet/20">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
+                  <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-primary-violet to-purple-500 rounded-full transition-all duration-500"
+                      style={{
+                        width: `${(Object.values(roadmapProgress).filter((s: string) => s === 'completed').length / ((pathDetails[selectedPath]?.roadmap || analysis.roadmap)?.milestones?.length || 1)) * 100}%`
+                      }}
+                    />
                   </div>
                 </div>
-              ))}
+              )}
+              <div className="absolute left-[3.35rem] top-24 bottom-24 w-0.5 bg-gradient-to-b from-primary-violet/50 via-primary-violet/20 to-transparent" />
+              {(pathDetails[selectedPath]?.roadmap || analysis.roadmap)?.milestones?.map((m, i) => {
+                const currentStatus = roadmapProgress[m.week] || 'pending'
+                const isCompleted = currentStatus === 'completed'
+                return (
+                  <div key={i} className={`flex gap-8 mb-12 last:mb-0 relative group ${isCompleted ? 'opacity-60' : ''}`}>
+                    <div className="relative z-10 w-12 h-12 rounded-full bg-[#0F172A] border-4 border-primary-violet text-primary-violet flex items-center justify-center font-black text-xl shadow-[0_0_15px_rgba(108,63,200,0.4)] group-hover:scale-110 transition-transform">
+                      {m.week}
+                    </div>
+                    <div className={`flex-1 bg-slate-900/40 p-8 rounded-2xl border border-white/5 group-hover:border-primary-violet/30 transition-all hover:bg-slate-900/60 ${isCompleted ? 'border-green-500/30' : ''}`}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <h4 className="text-xl font-black text-white mb-2 leading-tight">{m.title}</h4>
+                          <p className="text-sm text-slate-400 font-medium leading-relaxed mb-6 italic opacity-80">"{m.description}"</p>
+                          <div className="flex flex-wrap gap-2">
+                            {m.skills?.map((s, si) => (
+                              <span key={si} className="text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-primary-violet/10 text-primary-violet rounded-lg border border-primary-violet/20">
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => updateMilestone(m.week, currentStatus)}
+                          className={`w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-110 ${currentStatus === 'completed' ? 'bg-green-500/20 text-green-500 border border-green-500/30' : currentStatus === 'in_progress' ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30' : 'bg-slate-700/50 text-slate-500 border border-slate-600/50'}`}
+                          title={`Status: ${currentStatus} - Click to cycle`}
+                        >
+                          {currentStatus === 'completed' ? (
+                            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          ) : currentStatus === 'in_progress' ? (
+                            <div className="w-3 h-3 rounded-full bg-current" />
+                          ) : (
+                            <div className="w-3 h-3 rounded-full bg-current" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+              {milestoneError && (
+                <div className="mb-4 px-4 py-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-3">
+                <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                <p className="text-xs font-bold text-amber-400">{milestoneError}</p>
+              </div>
+              )}
             </div>
           </motion.div>
 

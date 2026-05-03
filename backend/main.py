@@ -83,6 +83,7 @@ from fastapi.responses import JSONResponse
 from routers import analysis, jobs, auth, resume, interview, streaks, ranks, challenges, weekly_challenge, badges, email_report, career, career_brain
 from routers import profile as profile_unified_router
 from routers import documents as documents_unified_router
+from routers import roadmap
 
 # Import security middleware
 from core.middleware import StructuredLoggingMiddleware, AuthMiddleware, APIResponse
@@ -136,6 +137,7 @@ app.include_router(badges.router, prefix="/api/v1/badges", tags=["Badges"])
 app.include_router(email_report.router, prefix="/api/v1/email", tags=["Email Report"])
 app.include_router(career.router, prefix="/api/v1/career", tags=["Career Evolution"])
 app.include_router(career_brain.router, prefix="/api/v1", tags=["Career Brain"])
+app.include_router(roadmap.router, prefix="/api/v1/roadmap", tags=["Roadmap"])
 
 # Include WebSocket router
 app.include_router(ws_router)

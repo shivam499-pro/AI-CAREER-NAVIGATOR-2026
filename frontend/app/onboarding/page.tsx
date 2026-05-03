@@ -400,7 +400,7 @@ export default function OnboardingPage()
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">Degree *</label>
-                    <select
+                    <select 
                       value={profileData.degree}
                       onChange={(e) => setProfileData({ ...profileData, degree: e.target.value })}
                       className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-[#6C3FC8] focus:border-transparent"

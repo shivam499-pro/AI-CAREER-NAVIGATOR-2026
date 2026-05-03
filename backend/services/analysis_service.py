@@ -165,6 +165,10 @@ async def run_analysis(user_id: str) -> Dict[str, Any]:
             "roadmap": analysis_result.get("roadmap", {}),
             "path_details": analysis_result.get("path_details", {}),
             "experience_level": analysis_result.get("analysis", {}).get("experience_level", "Intermediate"),
+            "resume_score": analysis_result.get("resume_score", {}),
+            "salary_insights": analysis_result.get("salary_insights", {}),
+            "top_companies": analysis_result.get("top_companies", []),
+            "certifications": analysis_result.get("certifications", []),
             "updated_at": datetime.utcnow().isoformat()
         }
         

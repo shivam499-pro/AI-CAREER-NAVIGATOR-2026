@@ -469,6 +469,22 @@ Use this exact structure:
             "why": "One line why this cert matters for their specific career path"
         }}   
     ]
+For resume_score, score each dimension 0-100 based on actual data:
+- skills_match: how well their skills match their target career path
+- github_activity: repo count, commit frequency, project quality
+- leetcode_strength: problems solved, difficulty distribution
+- certifications: relevant certs they already have
+- resume_quality: based on resume content provided
+overall = weighted average of all 5 dimensions
+
+For salary_insights, base estimates on Indian tech market 2025 
+for their specific career path and current experience level.
+
+For top_companies, list 5 real companies actively hiring for 
+their career path in India. Mix large, mid, and startup.
+
+For certifications, list 4 most impactful certs they DON'T already 
+have, specific to their career path.
 
 For each of the 3 career paths in career_paths, generate a SEPARATE and SPECIFIC 
 skill_gaps list and roadmap tailored to that exact career path. Store these in 
