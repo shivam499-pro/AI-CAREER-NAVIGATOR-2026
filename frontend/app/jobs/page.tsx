@@ -37,19 +37,19 @@ export default function JobsPage() {
     setJobsError(null)
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      
+
       // Get Supabase session for authenticated requests
       const { data: { session } } = await supabase.auth.getSession()
-      
+
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       }
-      
+
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`
       }
-      
-      const response = await fetch(`${apiUrl}/api/jobs?query=${encodeURIComponent(query)}`, {
+
+      const response = await fetch(`${apiUrl}/api/v1/jobs/recommendations?query=${encodeURIComponent(query)}`, {
         headers
       })
       if (!response.ok) {
@@ -67,16 +67,6 @@ export default function JobsPage() {
 
   const loadUserData = useCallback(async (userId: string) => {
     try {
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .single()
-
-      if (profileData) {
-        setProfile(profileData)
-      }
-
       const { data: analysisData } = await supabase
         .from('analyses')
         .select('*')
@@ -116,17 +106,17 @@ export default function JobsPage() {
   const saveJob = async (job: any) => {
     if (!user || savingJobId) return
     setSavingJobId(job.id || job.job_id)
-    
+
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
       const { data: { session } } = await supabase.auth.getSession()
-      
+
       const headers: Record<string, string> = {}
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`
       }
-      
-      const response = await fetch(`${apiUrl}/api/jobs/save`, {
+
+      const response = await fetch(`${apiUrl}/api/v1/jobs/save`, {
         method: 'POST',
         headers: {
           ...headers,
@@ -143,7 +133,7 @@ export default function JobsPage() {
           missing_skills: job.missing_skills
         })
       })
-      
+
       if (response.ok) {
         setSavedJobIds(prev => new Set([...prev, job.id || job.job_id]))
       }
@@ -156,17 +146,17 @@ export default function JobsPage() {
 
   const applyToJob = async (job: any) => {
     if (!user) return
-    
+
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
       const { data: { session } } = await supabase.auth.getSession()
-      
+
       const headers: Record<string, string> = {}
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`
       }
-      
-      const response = await fetch(`${apiUrl}/api/jobs/apply`, {
+
+      const response = await fetch(`${apiUrl}/api/v1/jobs/apply`, {
         method: 'POST',
         headers: {
           ...headers,
@@ -183,7 +173,7 @@ export default function JobsPage() {
           missing_skills: job.missing_skills
         })
       })
-      
+
       if (response.ok) {
         // Open the apply URL
         const applyUrl = job.url || job.apply_url || `https://www.google.com/search?q=${encodeURIComponent(job.title + ' ' + job.company + ' job apply')}`
@@ -312,7 +302,7 @@ export default function JobsPage() {
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-12">
         <motion.div initial="hidden" animate="visible" variants={containerVariants}>
-          
+
           {/* Section: Intel Hero */}
           <motion.div variants={itemVariants} className="bg-[#1E293B] rounded-[2.5rem] p-10 mb-12 border border-white/5 relative overflow-hidden group shadow-2xl">
             <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-purple-500/10 to-transparent pointer-events-none" />
@@ -338,7 +328,7 @@ export default function JobsPage() {
                 </p>
               </div>
               <div className="text-right">
-                 <div className="text-5xl font-black text-white/5 uppercase tracking-tighter select-none">VALIDATED</div>
+                <div className="text-5xl font-black text-white/5 uppercase tracking-tighter select-none">VALIDATED</div>
               </div>
             </div>
           </motion.div>
@@ -346,33 +336,32 @@ export default function JobsPage() {
           {/* Section: Recommended Career Paths */}
           {analysis?.career_paths && analysis.career_paths.length > 0 && (
             <motion.div variants={itemVariants} className="mb-12">
-               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 mb-6 ml-2 flex items-center gap-2">
-                 <Layers className="w-4 h-4" /> Neural Compatibility Matrix
-               </h3>
-               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  {analysis.career_paths.slice(0, 4).map((path: any, i: number) => (
-                    <motion.div
-                      key={i}
-                      whileHover={{ y: -5 }}
-                      className={`bg-[#1E293B] rounded-3xl p-6 border-l-4 transition-all ${
-                        i === 0 ? 'border-l-purple-500 border-purple-500/20 shadow-[0_10px_30px_-10px_rgba(108,63,200,0.3)]' : 'border-l-slate-700 border-white/5'
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 mb-6 ml-2 flex items-center gap-2">
+                <Layers className="w-4 h-4" /> Neural Compatibility Matrix
+              </h3>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {analysis.career_paths.slice(0, 4).map((path: any, i: number) => (
+                  <motion.div
+                    key={i}
+                    whileHover={{ y: -5 }}
+                    className={`bg-[#1E293B] rounded-3xl p-6 border-l-4 transition-all ${i === 0 ? 'border-l-purple-500 border-purple-500/20 shadow-[0_10px_30px_-10px_rgba(108,63,200,0.3)]' : 'border-l-slate-700 border-white/5'
                       }`}
-                    >
-                      {i === 0 && (
-                        <div className="flex items-center gap-1.5 text-[9px] font-black text-purple-400 uppercase tracking-widest mb-3">
-                           <Star className="w-3 h-3 fill-current" /> Optimal Match
-                        </div>
-                      )}
-                      <h4 className="font-black text-white text-sm uppercase tracking-tight mb-2 leading-tight">
-                        {path.name || path.career_name}
-                      </h4>
-                      <div className="text-2xl font-black text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.2)]">
-                        {path.match_percentage}%
+                  >
+                    {i === 0 && (
+                      <div className="flex items-center gap-1.5 text-[9px] font-black text-purple-400 uppercase tracking-widest mb-3">
+                        <Star className="w-3 h-3 fill-current" /> Optimal Match
                       </div>
-                      <div className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Similarity Score</div>
-                    </motion.div>
-                  ))}
-               </div>
+                    )}
+                    <h4 className="font-black text-white text-sm uppercase tracking-tight mb-2 leading-tight">
+                      {path.name || path.career_name}
+                    </h4>
+                    <div className="text-2xl font-black text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.2)]">
+                      {path.match_percentage}%
+                    </div>
+                    <div className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Similarity Score</div>
+                  </motion.div>
+                ))}
+              </div>
             </motion.div>
           )}
 
@@ -395,8 +384,8 @@ export default function JobsPage() {
 
             {jobsLoading ? (
               <div className="bg-[#1E293B] rounded-[2rem] border border-white/5 p-20 text-center flex flex-col items-center shadow-xl">
-                 <div className="w-16 h-16 rounded-full border-4 border-[#6C3FC8]/20 border-t-[#6C3FC8] animate-spin mb-6" />
-                 <p className="text-slate-500 font-black uppercase tracking-widest text-xs">Querying Global Recruiters...</p>
+                <div className="w-16 h-16 rounded-full border-4 border-[#6C3FC8]/20 border-t-[#6C3FC8] animate-spin mb-6" />
+                <p className="text-slate-500 font-black uppercase tracking-widest text-xs">Querying Global Recruiters...</p>
               </div>
             ) : jobs.length > 0 ? (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -412,26 +401,25 @@ export default function JobsPage() {
                     >
                       {/* Match Score Badge */}
                       <div className="absolute top-0 right-0 p-4">
-                        <div className={`px-3 py-2 rounded-full text-[11px] font-black uppercase tracking-widest shadow-lg ${
-                          job.match_score >= 80 ? 'bg-green-500/20 border border-green-500/40 text-green-400' :
+                        <div className={`px-3 py-2 rounded-full text-[11px] font-black uppercase tracking-widest shadow-lg ${job.match_score >= 80 ? 'bg-green-500/20 border border-green-500/40 text-green-400' :
                           job.match_score >= 60 ? 'bg-yellow-500/20 border border-yellow-500/40 text-yellow-400' :
-                          'bg-red-500/20 border border-red-500/40 text-red-400'
-                        }`}>
+                            'bg-red-500/20 border border-red-500/40 text-red-400'
+                          }`}>
                           {job.match_score}% Match
                         </div>
                       </div>
-                      
+
                       <div className="mb-6">
                         <h4 className="text-lg font-black text-white leading-tight uppercase tracking-tight mb-4 group-hover:text-purple-300 transition-colors pr-20">
                           {job.title}
                         </h4>
                         <div className="space-y-2">
-                           <div className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-tighter">
-                              <Building2 className="w-3 h-3 text-purple-500" /> {job.company}
-                           </div>
-                           <div className="flex items-center gap-2 text-xs font-black text-slate-500 uppercase tracking-tighter">
-                              <MapPin className="w-3 h-3 text-slate-600" /> {job.location}
-                           </div>
+                          <div className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-tighter">
+                            <Building2 className="w-3 h-3 text-purple-500" /> {job.company}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs font-black text-slate-500 uppercase tracking-tighter">
+                            <MapPin className="w-3 h-3 text-slate-600" /> {job.location}
+                          </div>
                         </div>
                       </div>
 
@@ -451,7 +439,7 @@ export default function JobsPage() {
                               </div>
                             </div>
                           )}
-                          
+
                           {/* Missing Skills */}
                           {job.missing_skills?.length > 0 && (
                             <div>
@@ -479,11 +467,10 @@ export default function JobsPage() {
                             e.stopPropagation()
                             saveJob(job)
                           }}
-                          className={`flex-1 rounded-2xl py-6 font-black uppercase tracking-widest text-[10px] transition-all ${
-                            savedJobIds.has(job.id || job.job_id) || savedJobIds.has(job.id)
-                              ? 'bg-green-500/20 border-green-500/40 text-green-400'
-                              : 'bg-[#0F172A] border-white/10 hover:border-green-500/30 text-slate-400 hover:text-white'
-                          }`}
+                          className={`flex-1 rounded-2xl py-6 font-black uppercase tracking-widest text-[10px] transition-all ${savedJobIds.has(job.id || job.job_id) || savedJobIds.has(job.id)
+                            ? 'bg-green-500/20 border-green-500/40 text-green-400'
+                            : 'bg-[#0F172A] border-white/10 hover:border-green-500/30 text-slate-400 hover:text-white'
+                            }`}
                         >
                           {savingJobId === (job.id || job.job_id) ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -493,7 +480,7 @@ export default function JobsPage() {
                             <><Sparkles className="w-3 h-3 mr-2" /> Save</>
                           )}
                         </Button>
-                        
+
                         <Button
                           className="flex-1 bg-[#6C3FC8] hover:bg-[#6C3FC8]/90 text-white font-black uppercase tracking-tighter py-6 rounded-2xl shadow-[0_10px_30px_-10px_rgba(108,63,200,0.4)] active:scale-95 transition-all group/btn"
                           onClick={(e) => {
@@ -512,12 +499,12 @@ export default function JobsPage() {
               </div>
             ) : jobsError ? (
               <div className="bg-[#1E293B] rounded-[2rem] border border-white/5 border-dashed p-20 text-center flex flex-col items-center">
-                 <p className="text-red-400 font-black uppercase tracking-widest text-xs mb-4">{jobsError}</p>
+                <p className="text-red-400 font-black uppercase tracking-widest text-xs mb-4">{jobsError}</p>
               </div>
             ) : (
               <div className="bg-[#1E293B] rounded-[2rem] border border-white/5 border-dashed p-20 text-center flex flex-col items-center">
-                 <Loader2 className="w-10 h-10 text-slate-800 animate-spin mb-4" />
-                 <p className="text-slate-600 font-black uppercase tracking-widest text-xs">No active vacancies detected in the local sector</p>
+                <Loader2 className="w-10 h-10 text-slate-800 animate-spin mb-4" />
+                <p className="text-slate-600 font-black uppercase tracking-widest text-xs">No active vacancies detected in the local sector</p>
               </div>
             )}
           </motion.section>
@@ -525,7 +512,7 @@ export default function JobsPage() {
           {/* Section: Tech Giants */}
           <motion.section variants={itemVariants} className="mb-16">
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 mb-8 ml-2 flex items-center gap-2">
-               <Building2 className="w-4 h-4" /> Top Tech Hubs
+              <Building2 className="w-4 h-4" /> Top Tech Hubs
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               {techCompanies.map((company, i) => (
@@ -554,7 +541,7 @@ export default function JobsPage() {
           {/* Section: Hybrid Operations (Internships) */}
           <motion.section variants={itemVariants} className="mb-16">
             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 mb-8 ml-2 flex items-center gap-2">
-               <GraduationCap className="w-4 h-4" /> Internship Channels (India)
+              <GraduationCap className="w-4 h-4" /> Internship Channels (India)
             </h3>
             <div className="grid md:grid-cols-3 gap-6">
               {internshipPlatforms.map((platform, i) => (
@@ -585,29 +572,29 @@ export default function JobsPage() {
 
           {/* Section: Rapid Search (Role Based) */}
           <motion.section variants={itemVariants} className="mb-16">
-             <div className="bg-[#1E293B] rounded-[2.5rem] border border-white/5 p-10 shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(108,63,200,0.1),transparent)] pointer-events-none" />
-                <h3 className="text-lg font-black text-white uppercase tracking-tighter mb-8 flex items-center gap-3">
-                  <Search className="w-5 h-5 text-purple-400" /> Sequential Sector Search: <span className="text-purple-500 font-black">{targetCareer}</span>
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {jobSearchByRole.map((platform, i) => (
-                    <motion.a
-                      key={i}
-                      href={platform.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      whileHover={{ scale: 1.05 }}
-                      className="bg-[#0F172A] rounded-2xl border border-white/5 p-6 flex items-center gap-4 group transition-all hover:border-purple-500/30"
-                    >
-                      <div className={`p-2 rounded-xl bg-white/5 ${platform.color} transition-colors`}>
-                        <platform.icon className="w-5 h-5" />
-                      </div>
-                      <span className="text-xs font-black uppercase tracking-widest text-slate-400 group-hover:text-white transition-colors">{platform.platform}</span>
-                    </motion.a>
-                  ))}
-                </div>
-             </div>
+            <div className="bg-[#1E293B] rounded-[2.5rem] border border-white/5 p-10 shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(108,63,200,0.1),transparent)] pointer-events-none" />
+              <h3 className="text-lg font-black text-white uppercase tracking-tighter mb-8 flex items-center gap-3">
+                <Search className="w-5 h-5 text-purple-400" /> Sequential Sector Search: <span className="text-purple-500 font-black">{targetCareer}</span>
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {jobSearchByRole.map((platform, i) => (
+                  <motion.a
+                    key={i}
+                    href={platform.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    whileHover={{ scale: 1.05 }}
+                    className="bg-[#0F172A] rounded-2xl border border-white/5 p-6 flex items-center gap-4 group transition-all hover:border-purple-500/30"
+                  >
+                    <div className={`p-2 rounded-xl bg-white/5 ${platform.color} transition-colors`}>
+                      <platform.icon className="w-5 h-5" />
+                    </div>
+                    <span className="text-xs font-black uppercase tracking-widest text-slate-400 group-hover:text-white transition-colors">{platform.platform}</span>
+                  </motion.a>
+                ))}
+              </div>
+            </div>
           </motion.section>
 
           {/* Section: Career Roadmap */}
@@ -615,12 +602,12 @@ export default function JobsPage() {
             <motion.div variants={itemVariants} className="mb-16">
               <div className="bg-[#1E293B] rounded-[2.5rem] border border-white/5 p-10 shadow-2xl">
                 <div className="flex items-center justify-between mb-10">
-                   <h3 className="text-xl font-black text-white uppercase tracking-tighter flex items-center gap-3">
-                     <TrendingUp className="w-6 h-6 text-purple-500 shadow-[0_0_15px_rgba(108,63,200,0.4)]" /> Tactical Roadmap
-                   </h3>
-                   <div className="px-4 py-1.5 bg-yellow-400/10 rounded-full border border-yellow-400/20 text-[10px] font-black text-yellow-400 uppercase tracking-widest">
-                      Live Phase Tracking
-                   </div>
+                  <h3 className="text-xl font-black text-white uppercase tracking-tighter flex items-center gap-3">
+                    <TrendingUp className="w-6 h-6 text-purple-500 shadow-[0_0_15px_rgba(108,63,200,0.4)]" /> Tactical Roadmap
+                  </h3>
+                  <div className="px-4 py-1.5 bg-yellow-400/10 rounded-full border border-yellow-400/20 text-[10px] font-black text-yellow-400 uppercase tracking-widest">
+                    Live Phase Tracking
+                  </div>
                 </div>
                 <CareerRoadmap roadmap={analysis.roadmap} />
               </div>

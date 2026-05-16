@@ -99,7 +99,7 @@ async def update_milestone(
         )
 
 
-@router.get("/progress/{career_path}")
+@router.get("/progress/{career_path:path}")
 async def get_roadmap_progress(
     career_path: str,
     user: AuthenticatedUser = Depends(get_current_user)

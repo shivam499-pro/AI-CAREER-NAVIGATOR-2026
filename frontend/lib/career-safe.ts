@@ -492,9 +492,9 @@ export async function fetchCareerIntelligence(userId: string): Promise<CareerInt
 
     // Use Promise.allSettled to handle partial failures
     const [progressResult, evolutionResult, profileResult] = await Promise.allSettled([
-      fetch(`${API_URL}/api/interview/progress/${userId}`, { headers: authHeaders }),
-      fetch(`${API_URL}/api/career/evolution/${userId}`, { headers: authHeaders }),
-      fetch(`${API_URL}/api/profile/progress`, { headers: authHeaders })
+      fetch(`${API_URL}/api/v1/interview/progress/${userId}`, { headers: authHeaders }),
+      fetch(`${API_URL}/api/v1/career/evolution/${userId}`, { headers: authHeaders }),
+      fetch(`${API_URL}/api/v1/profile/progress`, { headers: authHeaders })
     ])
 
     // Process progress API (most important)

@@ -674,12 +674,13 @@ def generate_interview_questions(
     career_path: str,
     difficulty: str,
     resume_text: str = "",
-    personality: str = "friendly"
+    personality: str = "friendly",
+    interview_mode: str = "technical"
 ) -> list:
     # Build personality instruction based on the selected mode
     if personality == "friendly":
         personality_instruction = """
-    You are a warm, encouraging interviewer. 
+    You are a warm, encouraging interviewer.
     Ask questions in a supportive tone.
     Use phrases like "Great topic! Tell me about..."
     """
@@ -698,6 +699,25 @@ def generate_interview_questions(
     """
     else:
         personality_instruction = ""
+    
+    # Build interview mode instruction
+    if interview_mode == "hr":
+        interview_mode_instruction = """
+    Focus on behavioral questions: teamwork, communication,
+    conflict resolution, leadership, cultural fit.
+    Avoid deep technical questions.
+    """
+    elif interview_mode == "system_design":
+        interview_mode_instruction = """
+    Focus on system design questions: scalability, architecture,
+    database design, API design, distributed systems.
+    Ask candidates to design real systems.
+    """
+    else:  # technical
+        interview_mode_instruction = """
+    Focus on technical questions: data structures, algorithms,
+    coding problems, debugging, language-specific concepts.
+    """
 
     # Sanitize user-provided inputs
     sanitized_career_path = sanitize_user_input(career_path)
@@ -719,26 +739,27 @@ def generate_interview_questions(
                 sanitized_profile[key] = value
 
     prompt = f"""You are an expert technical interviewer.
-{personality_instruction}
+    {personality_instruction}
+    {interview_mode_instruction}
 
-Session ID: {random.randint(10000, 99999)}
-Timestamp: {int(time.time())}
-Generate FRESH unique questions - do not repeat previous sessions.
+    Session ID: {random.randint(10000, 99999)}
+    Timestamp: {int(time.time())}
+    Generate FRESH unique questions - do not repeat previous sessions.
 
-Generate exactly 5 interview questions for: {sanitized_career_path}
-Difficulty: {sanitized_difficulty}
-Profile: {json.dumps(sanitized_profile)}
-{f"Resume highlights: {sanitized_resume[:500]}" if sanitized_resume else ""}
+    Generate exactly 5 interview questions for: {sanitized_career_path}
+    Difficulty: {sanitized_difficulty}
+    Profile: {json.dumps(sanitized_profile)}
+    {f"Resume highlights: {sanitized_resume[:500]}" if sanitized_resume else ""}
 
-Return ONLY a JSON array with exactly 5 objects.
-Each object must have:
-"id" (number 1-5),
-"question" (string),
-"type" (technical/behavioral/dsa/system_design/project_based),
-"difficulty" (string),
-"hint" (string)
+    Return ONLY a JSON array with exactly 5 objects.
+    Each object must have:
+    "id" (number 1-5),
+    "question" (string),
+    "type" (technical/behavioral/dsa/system_design/project_based),
+    "difficulty" (string),
+    "hint" (string)
 
-Return ONLY the JSON array, no other text."""
+    Return ONLY the JSON array, no other text."""
     try:
         text = _generate(prompt)
         questions = json.loads(_clean_json(text))
@@ -756,15 +777,16 @@ Return ONLY the JSON array, no other text."""
         try:
             # Retry once with simpler prompt
             simple_prompt = f"""Generate exactly 5 interview questions for {career_path} role.
-Difficulty: {difficulty}
-Return ONLY a JSON array with 5 objects.
-Each object must have:
-"id" (number 1-5),
-"question" (string),
-"type" (technical/behavioral/dsa/system_design/project_based),
-"difficulty" (string),
-"hint" (string)
-Return ONLY the JSON array, no other text."""
+            Difficulty: {difficulty}
+            Interview mode: {interview_mode}
+            Return ONLY a JSON array with 5 objects.
+            Each object must have:
+            "id" (number 1-5),
+            "question" (string),
+            "type" (technical/behavioral/dsa/system_design/project_based),
+            "difficulty" (string),
+            "hint" (string)
+            Return ONLY the JSON array, no other text."""
             text = _generate(simple_prompt)
             questions = json.loads(_clean_json(text))
             if isinstance(questions, list) and len(questions) > 0:
@@ -815,9 +837,21 @@ No markdown, no extra text, just JSON."""
             "error": "parse_error",
             "message": "Could not parse AI response. PLease try again."
         }
+    except RateLimitError as e:
+        return {
+            "success": False,
+            "error": "rate_limit",
+            "message": "Too many requests. Please wait and try again."
+        }
+    except json.JSONDecodeError:
+        return {
+            "success": False,
+            "error": "parse_error",
+            "message": "Could not evaluate answer. Please try again."
+        }
     except Exception as e:
         return {
             "success": False,
             "error": "api_error",
-            "message": {str(e)}
+            "message": str(e)
         }

@@ -43,8 +43,8 @@ async def search_jobs(query: str, location: str = None) -> list:
                 "company": job.get("company_name", ""),
                 "location": job.get("location", ""),
                 "type": job.get("job_type", ""),
-                "url": job.get("url", ""),
-                "match_score": 80  # Placeholder
+                "url": job.get("related_links",[{}])[0].get("link",""),
+                "description": job.get("description",""),
             })
         
         return jobs

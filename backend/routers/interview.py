@@ -15,6 +15,7 @@ import logging
 import uuid
 from datetime import datetime
 from dotenv import load_dotenv
+from core.middleware import get_current_user, AuthenticatedUser
 
 # Load environment variables
 load_dotenv()
@@ -225,6 +226,7 @@ class GenerateQuestionsRequest(BaseModel):
     career_path: str
     difficulty: str = "medium"
     personality: str = "friendly"
+    interview_mode: str = "technical"
 
 
 class EvaluateAnswerRequest(BaseModel):
@@ -243,6 +245,7 @@ class SaveSessionRequest(BaseModel):
     total_score: float
     # Optional fields for badge triggering
     difficulty: Optional[str] = "medium"
+    interview_mode: Optional[str] = "technical"
     is_simulation: Optional[bool] = False
     is_voice: Optional[bool] = False
 
@@ -254,7 +257,11 @@ class QuestionHintRequest(BaseModel):
 
 @router.post("/generate-questions")
 @limiter.limit("10/minute")
-async def generate_questions(request: Request, body: GenerateQuestionsRequest):
+async def generate_questions(
+    request: Request,
+    body: GenerateQuestionsRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user)
+):
     """
     Generate 5 personalized interview questions based on user profile.
     
@@ -267,6 +274,10 @@ async def generate_questions(request: Request, body: GenerateQuestionsRequest):
     - Comprehensive logging with structured pipeline logs
     - Always returns 200 OK with valid structure
     """
+    # Verify the user_id from the token matches the body
+    if current_user.user_id != body.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
     # Generate or reuse session ID for this user+career_path combination
     session_key = f"{body.user_id}:{body.career_path}"
     if session_key not in _user_active_sessions:
@@ -354,11 +365,12 @@ async def generate_questions(request: Request, body: GenerateQuestionsRequest):
             # First attempt
             logger.info(f"[Interview] Calling Gemini for {body.user_id}:{body.career_path} (attempt 1)")
             questions = gemini_service.generate_interview_questions(
-                full_profile, 
+                full_profile,
                 body.career_path,
                 body.difficulty,
                 full_profile.get("resume_text", ""),
-                body.personality
+                body.personality,
+                body.interview_mode
             )
         except Exception as gemini_error:
             error_str = str(gemini_error).lower()
@@ -367,14 +379,15 @@ async def generate_questions(request: Request, body: GenerateQuestionsRequest):
                 retry_used = True
                 try:
                     # Retry once
-                    time.sleep(1)  # Brief delay before retry
+                    await asyncio.sleep(1)  # Brief delay before retry
                     logger.info(f"[Interview] Retrying Gemini for {body.user_id}:{body.career_path} (attempt 2)")
                     questions = gemini_service.generate_interview_questions(
-                        full_profile, 
+                        full_profile,
                         body.career_path,
                         body.difficulty,
                         full_profile.get("resume_text", ""),
-                        body.personality
+                        body.personality,
+                        body.interview_mode
                     )
                 except Exception as retry_error:
                     logger.error(f"[Interview] Gemini retry failed: {retry_error}")
@@ -488,8 +501,7 @@ async def generate_questions(request: Request, body: GenerateQuestionsRequest):
             "source": "exception_fallback",
             "meta": {"cached": False, "retry_used": False, "session_id": session_id}
         }
-
-
+ 
 @router.post("/evaluate-answer")
 @limiter.limit("10/minute")
 async def evaluate_answer(request: Request, body: EvaluateAnswerRequest):
@@ -524,36 +536,18 @@ async def evaluate_answer(request: Request, body: EvaluateAnswerRequest):
     return result
 
 
-def get_current_user(authorization: str = Header(None)) -> str:
-    """
-    Dependency to extract and verify the JWT token from Authorization header.
-    Returns the user_id from the token.
-    Raises HTTPException 401 if token is missing or invalid.
-    """
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing authorization header")
-    
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Invalid authorization header format")
-    
-    token = authorization.replace("Bearer ", "")
-    
-    try:
-        user_response = supabase.auth.get_user(token)
-        if not user_response.user:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        return user_response.user.id
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
 @router.post("/save-session")
-async def save_session(body: SaveSessionRequest, current_user_id: str = Depends(get_current_user)):
+async def save_session(
+    body: SaveSessionRequest,
+    user: AuthenticatedUser = Depends(get_current_user)
+):
     """
     Save an interview session to the database.
     """
     # Verify the user_id from the token matches the body
-    if current_user_id != body.user_id:
+    if user.user_id != body.user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
         session_data = {
@@ -562,10 +556,43 @@ async def save_session(body: SaveSessionRequest, current_user_id: str = Depends(
             "questions": body.questions,
             "answers": body.answers,
             "scores": body.scores,
-            "total_score": body.total_score
+            "total_score": body.total_score,
+            "difficulty": getattr(body, 'difficulty', 'medium'),
+            "interview_mode": getattr(body, 'interview_mode', 'technical')
         }
         
         supabase.table("interview_sessions").insert(session_data).execute()
+        
+        # =============================================================================
+        # Write individual question data to interviews table
+        # =============================================================================
+        try:
+            interview_rows = []
+            for i, question in enumerate(body.questions):
+                answer_text = ""
+                feedback_data = {}
+                score_val = 0
+                
+                if i < len(body.answers):
+                    ans = body.answers[i]
+                    answer_text = ans.get("answer", "") if isinstance(ans, dict) else str(ans)
+                
+                if i < len(body.scores):
+                    score_val = int(body.scores[i]) if body.scores[i] else 0
+                    
+                interview_rows.append({
+                    "user_id": body.user_id,
+                    "question": question if isinstance(question, str) else str(question),
+                    "answer": answer_text,
+                    "score": score_val,
+                    "career_path": body.career_path,
+                    "created_at": datetime.utcnow().isoformat()
+                })
+            
+            if interview_rows:
+                supabase.table("interviews").insert(interview_rows).execute()
+        except Exception as interviews_err:
+            logger.warning(f"[INTERVIEWS_INSERT] Failed to save individual questions: {interviews_err}")
         
         # =============================================================================
         # CAREER MEMORY ENGINE INTEGRATION (Non-critical)
@@ -655,13 +682,13 @@ async def get_interview_history(
     user_id: str,
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(10, ge=1, le=50, description="Items per page"),
-    current_user_id: str = Depends(get_current_user)
+    user: AuthenticatedUser = Depends(get_current_user)
 ):
     """
     Get past interview sessions for a user with pagination.
     """
     # Verify the user_id from the token matches the requested user_id
-    if current_user_id != user_id:
+    if user.user_id != user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
         # Get total count
@@ -697,12 +724,17 @@ async def get_interview_history(
         }
         
     except Exception as e:
-        logger.error(f"[History] Unexpected error for user {current_user_id}: {e}", exc_info=True)
+        logger.error(f"[History] Unexpected error for user {user.user_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve interview history")
 
 
 @router.post("/question-hint")
-async def get_question_hint(body: QuestionHintRequest):
+@limiter.limit("10/minute")
+async def get_question_hint(
+    request: Request,
+    body: QuestionHintRequest,
+    current_user_id: str = Depends(get_current_user)
+):
     """
     Get AI coaching hint for a specific interview question.
     """
@@ -749,12 +781,12 @@ No other text or markdown."""
 
 
 @router.get("/progress/{user_id}")
-async def get_user_progress(user_id: str, current_user_id: str = Depends(get_current_user)):
+async def get_user_progress(user_id: str, user: AuthenticatedUser = Depends(get_current_user)):
     """
     Fetch user's progress data including sessions, rank, and streaks.
     """
     # Verify the user_id from the token matches the requested user_id
-    if current_user_id != user_id:
+    if user.user_id != user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
         # Fetch last 10 sessions

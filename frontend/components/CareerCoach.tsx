@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { 
-  Brain, AlertTriangle, Sparkles, TrendingUp, 
+import {
+  Brain, AlertTriangle, Sparkles, TrendingUp,
   Target, CheckCircle, Clock, Zap, Loader2
 } from 'lucide-react'
 
@@ -47,14 +47,14 @@ export default function CareerCoach({ compact = false }: CareerCoachProps) {
     try {
       const supabase = await import('@/lib/supabase')
       const { data: { session } } = await supabase.supabase.auth.getSession()
-      
+
       const headers: Record<string, string> = {}
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`
       }
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiUrl}/api/career-brain`, { headers })
+      const response = await fetch(`${apiUrl}/api/v1/career-brain`, { headers })
 
       if (response.ok) {
         const data = await response.json()
@@ -101,17 +101,17 @@ export default function CareerCoach({ compact = false }: CareerCoachProps) {
 
   // Color based on score
   const scoreColor = brain.job_readiness_score >= 80 ? 'text-green-400' :
-                     brain.job_readiness_score >= 60 ? 'text-yellow-400' :
-                     'text-red-400'
+    brain.job_readiness_score >= 60 ? 'text-yellow-400' :
+      'text-red-400'
 
   const scoreBg = brain.job_readiness_score >= 80 ? 'bg-green-500/20 border-green-500/40' :
-                  brain.job_readiness_score >= 60 ? 'bg-yellow-500/20 border-yellow-500/40' :
-                  'bg-red-500/20 border-red-500/40'
+    brain.job_readiness_score >= 60 ? 'bg-yellow-500/20 border-yellow-500/40' :
+      'bg-red-500/20 border-red-500/40'
 
   if (compact) {
     // Compact view for dashboard
     return (
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-[#1E293B] rounded-3xl p-6 border border-white/5 hover:border-purple-500/30 transition-all"
@@ -162,7 +162,7 @@ export default function CareerCoach({ compact = false }: CareerCoachProps) {
 
   // Full view
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className="bg-[#1E293B] rounded-[2.5rem] p-8 border border-white/5"
@@ -178,7 +178,7 @@ export default function CareerCoach({ compact = false }: CareerCoachProps) {
             <p className="text-slate-400 text-sm">Personalized insights and recommendations</p>
           </div>
         </div>
-        
+
         {/* Score */}
         <div className={`w-24 h-24 rounded-3xl ${scoreBg} border-2 flex flex-col items-center justify-center`}>
           <span className={`text-3xl font-black ${scoreColor}`}>{brain.job_readiness_score}</span>
@@ -205,7 +205,7 @@ export default function CareerCoach({ compact = false }: CareerCoachProps) {
         </h3>
         <div className="space-y-3">
           {brain.recommendations.slice(0, 3).map((rec, i) => (
-            <motion.div 
+            <motion.div
               key={i}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
