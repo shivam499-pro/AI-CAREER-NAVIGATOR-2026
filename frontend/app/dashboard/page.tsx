@@ -133,11 +133,14 @@ export default function DashboardPage() {
 
   // ── Fetchers ──────────────────────────────────────────────────────────────
 
-  const getAuthHeaders = async () => {
+  const getAuthHeaders = async (): Promise<Record<string, string>> => {
     const { data: { session } } = await supabase.auth.getSession()
-    return session?.access_token
-      ? { Authorization: `Bearer ${session.access_token}` }
-      : {}
+    return {
+      'Content-Type': 'application/json',
+      ...(session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {}),
+    }
   }
 
   const loadCareerBrain = async () => {
@@ -173,11 +176,6 @@ export default function DashboardPage() {
         const summary = parseAnalysisSummary(data.data.analysis)
         setAnalysisSummary(summary)
 
-        console.log('Roadmap total after fix:', summary.roadmap_total)
-        console.log('path_detailss keys:', Object.keys(data.data.analysis?.path_details || {}))
-        console.log('Roadmap milestones count:', summary.roadmap_total)
-        console.log('Best career path being used:', summary.best_career_path)
-        console.log('Raw roadmap milestones:', data.data.analysis?.analysis?.roadmap?.milestones?.length, data.data.analysis?.roadmap?.milestones?.length)
         // Fetch roadmap progress for best career path
         if (summary.best_career_path) {
           try {
