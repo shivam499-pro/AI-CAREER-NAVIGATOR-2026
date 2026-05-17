@@ -4,6 +4,8 @@ from supabase import create_client
 import os
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+import logging
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -287,4 +289,29 @@ async def start_weekly_challenge(request: StartChallengeRequest):
         raise
     except Exception as e:
         print(f"Error starting weekly challenge: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/attempt")
+async def get_attempt_status(
+    user_id: str,
+    week_number: int,
+    year: int
+):
+    try:
+        existing = supabase.table("challenge_attempts") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .eq("week_number", week_number) \
+            .eq("year", year) \
+            .execute()
+
+        if existing.data:
+            return {
+                "exists": True,
+                "status": existing.data[0].get("status", "started"),
+                "attempt_id": existing.data[0].get("id")
+            }
+        return {"exists": False, "status": "none"}
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
