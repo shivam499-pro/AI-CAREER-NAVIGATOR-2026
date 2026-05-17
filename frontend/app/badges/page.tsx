@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import Navbar from '@/components/Navbar'
-import { 
-  Trophy, Lock, Sparkles, Star, Target, 
+import {
+  Trophy, Lock, Sparkles, Star, Target,
   ChevronRight, ArrowLeft, Loader2, Award, Zap
 } from 'lucide-react'
 import Link from 'next/link'
@@ -25,6 +25,7 @@ interface BadgeResponse {
   all_badges: Badge[]
 }
 
+
 export default function BadgesPage() {
   const [badges, setBadges] = useState<BadgeResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -33,7 +34,7 @@ export default function BadgesPage() {
   useEffect(() => {
     async function fetchBadges() {
       const { data: { user } } = await supabase.auth.getUser()
-      
+
       if (!user) {
         setLoading(false)
         return
@@ -42,11 +43,24 @@ export default function BadgesPage() {
       setUserId(user.id)
 
       try {
+        const { data: { session } } = await supabase.auth.getSession()
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/badges/${user.id}`
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/badges/${user.id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${session?.access_token}`
+            }
+          }
         )
+        if (!response.ok) {
+          console.error('Badges fetch failed:', response.status)
+          setLoading(false)
+          return
+        }
         const data = await response.json()
-        setBadges(data)
+        if (data?.earned !== undefined && data?.all_badges !== undefined) {
+          setBadges(data)
+        }
       } catch (error) {
         console.error('Error fetching badges:', error)
       } finally {
@@ -60,7 +74,7 @@ export default function BadgesPage() {
   const earnedIds = new Set(badges?.earned.map(b => b.badge_id) || [])
   const earnedBadges = badges?.earned || []
   const lockedBadges = (badges?.all_badges || []).filter(b => !earnedIds.has(b.badge_id))
-  
+
   const totalBadges = badges?.all_badges.length || 12
   const progressPercent = (earnedBadges.length / totalBadges) * 100
 
@@ -99,36 +113,36 @@ export default function BadgesPage() {
   return (
     <div className="min-h-screen bg-[#0F172A] text-white">
       <Navbar />
-      
+
       <main className="max-w-6xl mx-auto px-4 py-12">
         <motion.div
-           initial="hidden"
-           animate="visible"
-           variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          variants={containerVariants}
         >
           {/* Header Section */}
           <div className="text-center mb-16 relative">
             <motion.div variants={itemVariants} className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500/10 rounded-full border border-purple-500/20 text-[#6C3FC8] font-black uppercase tracking-widest text-[10px] mb-4">
-               <Award className="w-4 h-4" /> Mastery Profile
+              <Award className="w-4 h-4" /> Mastery Profile
             </motion.div>
-            
+
             <motion.h1 variants={itemVariants} className="text-6xl font-black mb-6 tracking-tighter leading-tight">
-               <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-400 to-yellow-500">Achievement</span> Gallery
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-400 to-yellow-500">Achievement</span> Gallery
             </motion.h1>
 
             <motion.div variants={itemVariants} className="max-w-2xl mx-auto">
               <div className="flex justify-between items-end mb-4 px-2">
-                 <span className="text-xs font-black uppercase tracking-widest text-[#6C3FC8]">Completion Status</span>
-                 <span className="text-2xl font-black text-white">{earnedBadges.length}<span className="text-slate-600 text-lg mx-1">/</span>{totalBadges}</span>
+                <span className="text-xs font-black uppercase tracking-widest text-[#6C3FC8]">Completion Status</span>
+                <span className="text-2xl font-black text-white">{earnedBadges.length}<span className="text-slate-600 text-lg mx-1">/</span>{totalBadges}</span>
               </div>
               <div className="h-4 bg-[#1E293B] rounded-full overflow-hidden border border-white/5 p-0.5 shadow-inner">
-                <motion.div 
+                <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${progressPercent}%` }}
                   transition={{ duration: 1.5, ease: "circOut" }}
                   className="h-full bg-gradient-to-r from-[#6C3FC8] via-purple-500 to-yellow-400 rounded-full relative"
                 >
-                   <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.1)_50%,transparent_75%)] bg-[length:20px_20px] animate-[slide_1s_linear_infinite]" />
+                  <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.1)_50%,transparent_75%)] bg-[length:20px_20px] animate-[slide_1s_linear_infinite]" />
                 </motion.div>
               </div>
               <p className="text-slate-400 mt-4 font-bold text-sm">Targeting {totalBadges} verified milestones across career intelligence.</p>
@@ -139,11 +153,11 @@ export default function BadgesPage() {
           {earnedBadges.length > 0 && (
             <div className="mb-16">
               <div className="flex items-center gap-3 mb-8 px-2">
-                 <div className="h-px bg-yellow-400/20 flex-1" />
-                 <h2 className="text-sm font-black uppercase tracking-[0.3em] text-yellow-400">Earned Milestones</h2>
-                 <div className="h-px bg-yellow-400/20 flex-1" />
+                <div className="h-px bg-yellow-400/20 flex-1" />
+                <h2 className="text-sm font-black uppercase tracking-[0.3em] text-yellow-400">Earned Milestones</h2>
+                <div className="h-px bg-yellow-400/20 flex-1" />
               </div>
-              <motion.div 
+              <motion.div
                 variants={containerVariants}
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
               >
@@ -157,7 +171,7 @@ export default function BadgesPage() {
                     {/* Shimmer Effect */}
                     <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-yellow-400/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
                     <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-30 transition-opacity">
-                       <Sparkles className="w-12 h-12 text-yellow-500" />
+                      <Sparkles className="w-12 h-12 text-yellow-500" />
                     </div>
 
                     <div className="relative z-10 flex flex-col items-center">
@@ -166,7 +180,7 @@ export default function BadgesPage() {
                       </div>
                       <h3 className="text-xl font-black text-yellow-400 mb-2">{badge.name}</h3>
                       <p className="text-sm text-slate-400 font-medium mb-6 line-clamp-2">{badge.description}</p>
-                      
+
                       <div className="w-full pt-6 border-t border-white/5 flex flex-col items-center gap-2">
                         <div className="flex items-center gap-1.5 text-green-400">
                           <Zap className="w-3 h-3 fill-current" />
@@ -177,7 +191,7 @@ export default function BadgesPage() {
                         </p>
                       </div>
                     </div>
-                    
+
                     {/* Card Glow */}
                     <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-[inset_0_0_40px_rgba(250,204,21,0.05),0_0_20px_rgba(250,204,21,0.1)] rounded-3xl" />
                   </motion.div>
@@ -190,11 +204,11 @@ export default function BadgesPage() {
           {lockedBadges.length > 0 && (
             <div>
               <div className="flex items-center gap-3 mb-8 px-2">
-                 <div className="h-px bg-white/5 flex-1" />
-                 <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500">Locked Intel</h2>
-                 <div className="h-px bg-white/5 flex-1" />
+                <div className="h-px bg-white/5 flex-1" />
+                <h2 className="text-sm font-black uppercase tracking-[0.3em] text-slate-500">Locked Intel</h2>
+                <div className="h-px bg-white/5 flex-1" />
               </div>
-              <motion.div 
+              <motion.div
                 variants={containerVariants}
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
               >
@@ -206,7 +220,7 @@ export default function BadgesPage() {
                     className="bg-[#1E293B] rounded-3xl p-8 text-center border border-white/5 opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all cursor-not-allowed group relative overflow-hidden"
                   >
                     <div className="absolute top-4 right-4">
-                       <Lock className="w-4 h-4 text-slate-600 group-hover:text-red-500 transition-colors" />
+                      <Lock className="w-4 h-4 text-slate-600 group-hover:text-red-500 transition-colors" />
                     </div>
                     <div className="text-7xl mb-6 opacity-30 group-hover:opacity-60 transition-opacity">
                       {badge.emoji}
@@ -221,7 +235,7 @@ export default function BadgesPage() {
 
           {/* No badges initial state */}
           {earnedBadges.length === 0 && (
-            <motion.div 
+            <motion.div
               variants={itemVariants}
               className="text-center py-24 bg-[#1E293B] rounded-[3rem] border border-white/5"
             >
@@ -229,31 +243,31 @@ export default function BadgesPage() {
               <h3 className="text-3xl font-black text-white mb-4">Initial Achievement Sync</h3>
               <p className="text-slate-500 font-bold max-w-sm mx-auto mb-10">Complete your first specialized interview session to authenticate your first milestone.</p>
               <Link href="/interview">
-                 <Button className="bg-[#6C3FC8] hover:bg-purple-600 px-10 py-7 rounded-2xl text-lg font-black uppercase tracking-tighter">
-                    Launch Performance Phase
-                 </Button>
+                <Button className="bg-[#6C3FC8] hover:bg-purple-600 px-10 py-7 rounded-2xl text-lg font-black uppercase tracking-tighter">
+                  Launch Performance Phase
+                </Button>
               </Link>
             </motion.div>
           )}
 
           {/* Global CTA */}
-          <motion.div 
+          <motion.div
             variants={itemVariants}
             className="mt-24 text-center pb-20 border-t border-white/5 pt-12"
           >
-             <p className="text-slate-500 text-xs font-black uppercase tracking-widest mb-6">Want to unlock higher tiers?</p>
-             <div className="flex justify-center gap-4">
-                <Link href="/dashboard">
-                  <Button variant="outline" className="border-white/10 text-slate-400 hover:text-white font-black uppercase tracking-widest px-8 rounded-xl">
-                     Return Terminal
-                  </Button>
-                </Link>
-                <Link href="/analysis">
-                  <Button variant="outline" className="border-white/10 text-slate-400 hover:text-white font-black uppercase tracking-widest px-8 rounded-xl">
-                     View Skill Intel
-                  </Button>
-                </Link>
-             </div>
+            <p className="text-slate-500 text-xs font-black uppercase tracking-widest mb-6">Want to unlock higher tiers?</p>
+            <div className="flex justify-center gap-4">
+              <Link href="/dashboard">
+                <Button variant="outline" className="border-white/10 text-slate-400 hover:text-white font-black uppercase tracking-widest px-8 rounded-xl">
+                  Return Terminal
+                </Button>
+              </Link>
+              <Link href="/analysis">
+                <Button variant="outline" className="border-white/10 text-slate-400 hover:text-white font-black uppercase tracking-widest px-8 rounded-xl">
+                  View Skill Intel
+                </Button>
+              </Link>
+            </div>
           </motion.div>
         </motion.div>
       </main>

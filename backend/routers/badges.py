@@ -2,12 +2,13 @@
 Badges Router
 Handles user achievement badges system
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 from supabase import create_client
 import os
 from dotenv import load_dotenv
 from datetime import datetime
+from core.middleware import get_current_user, AuthenticatedUser
 
 # Load environment variables
 load_dotenv()
@@ -58,8 +59,12 @@ class CheckBadgeRequest(BaseModel):
 async def get_user_badges(
     user_id: str,
     page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(10, ge=1, le=50, description="Items per page")
+    limit: int = Query(10, ge=1, le=50, description="Items per page"),
+    current_user: AuthenticatedUser = Depends(get_current_user)
 ):
+    if current_user.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
     """
     Fetch user's earned badges from "user_badges" table with pagination.
     Returns: { earned: [...badges], all_badges: [...BADGES], pagination: {...} }
@@ -100,7 +105,9 @@ async def get_user_badges(
         
         return {
             "earned": earned_badges,
-            "all_badges": BADGES,  # Static list, no pagination needed
+            "all_badges": [
+                {**b, "badge_id": b["id"]} for b in BADGES
+            ],
             "pagination": {
                 "page": page,
                 "limit": limit,
@@ -115,7 +122,12 @@ async def get_user_badges(
 
 
 @router.post("/check")
-async def check_and_award_badges(request: CheckBadgeRequest):
+async def check_and_award_badges(
+    request: CheckBadgeRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user)
+):
+    if current_user.user_id != request.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     """
     Check which badges user qualifies for based on event
     Events: "session_complete", "perfect_score", "hard_mode", "simulation", "voice_used", "challenge_created"
