@@ -102,29 +102,29 @@ export default function ResumePage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/auth/login'); return }
       setUser(user)
-      await Promise.all([fetchResumeStatus(user.id), fetchUploadedDocs(user.id)])
+      await Promise.all([fetchResumeStatus(), fetchUploadedDocs()])
       setLoading(false)
     }
     init()
   }, [router])
 
-  const getHeaders = async () => {
+  const getHeaders = async (): Promise<Record<string, string>> => {
     const { data: { session } } = await supabase.auth.getSession()
     return session?.access_token
       ? { Authorization: `Bearer ${session.access_token}` }
       : {}
   }
 
-  const fetchResumeStatus = async (userId: string) => {
+  const fetchResumeStatus = async () => {
     try {
       const headers = await getHeaders()
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const res = await fetch(`${apiUrl}/api/v1/resume/status/${userId}`, { headers })
+      const res = await fetch(`${apiUrl}/api/v1/resume/status/`, { headers })
       if (res.ok) setResumeStatus(await res.json())
     } catch { /* keep null */ }
   }
 
-  const fetchUploadedDocs = async (userId: string) => {
+  const fetchUploadedDocs = async () => {
     setLoadingDocs(true)
     try {
       const headers = await getHeaders()
@@ -155,7 +155,6 @@ export default function ResumePage() {
     setResumeError('')
     try {
       const formData = new FormData()
-      formData.append('user_id', user.id)
       formData.append('file', resumeFile)
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -219,7 +218,7 @@ export default function ResumePage() {
       if (data.success) {
         setCertResult(data.extracted)
         setCertFiles([])
-        await fetchUploadedDocs(user.id)
+        await fetchUploadedDocs()
       }
     } catch (err: any) {
       setCertError(err.message || 'Failed to process documents.')

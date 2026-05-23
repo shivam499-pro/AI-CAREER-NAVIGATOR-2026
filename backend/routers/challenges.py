@@ -45,7 +45,7 @@ async def create_challenge(request: CreateChallengeRequest,
         # Get creator name
         creator_name = "Anonymous"
         try:
-            user_response = supabase.table("profiles").select("full_name, email").eq("id", current_user.id).execute()
+            user_response = supabase.table("profiles").select("full_name, email").eq("id", current_user.user_id).execute()
             if user_response.data and user_response.data[0].get("full_name"):
                 creator_name = user_response.data[0]["full_name"]
             elif user_response.data and user_response.data[0].get("email"):
@@ -56,7 +56,7 @@ async def create_challenge(request: CreateChallengeRequest,
         # Insert challenge into database
         data = {
             "challenge_code": challenge_code,
-            "creator_id": current_user.id,
+            "creator_id": current_user.user_id,
             "career_path": request.career_path,
             "questions": request.questions
         }
@@ -120,7 +120,7 @@ async def submit_challenge_result(request: SubmitChallengeRequest, current_user:
         user_email = "Anonymous"
         user_name = "Anonymous"
         try:
-            user_response = supabase.table("profiles").select("full_name, email").eq("id", current_user.id).execute()
+            user_response = supabase.table("profiles").select("full_name, email").eq("id", current_user.user_id).execute()
             if user_response.data:
                 user_name = user_response.data[0].get("full_name") or user_response.data[0].get("email", "Anonymous").split("@")[0]
                 user_email = user_response.data[0].get("email", "Anonymous")
@@ -130,7 +130,7 @@ async def submit_challenge_result(request: SubmitChallengeRequest, current_user:
         # Insert result
         data = {
             "challenge_code": request.challenge_code.upper(),
-            "user_id": current_user.id,
+            "user_id": current_user.user_id,
             "user_email": user_email,
             "user_name": user_name,
             "score": request.score,

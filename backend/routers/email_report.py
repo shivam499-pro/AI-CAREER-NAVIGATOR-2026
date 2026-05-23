@@ -152,16 +152,16 @@ async def send_weekly_report(
         seven_days_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
 
         sessions_response = supabase.table("interview_sessions").select("*") \
-            .eq("user_id", current_user) \
+            .eq("user_id", current_user.id) \
             .gte("created_at", seven_days_ago).execute()
         sessions = sessions_response.data if sessions_response.data else []
 
         streak_response = supabase.table("user_streaks").select("*") \
-            .eq("user_id", current_user).execute()
+            .eq("user_id", current_user.id).execute()
         streak = streak_response.data[0] if streak_response.data else {}
 
         rank_response = supabase.table("user_ranks").select("*") \
-            .eq("user_id", current_user).execute()
+            .eq("user_id", current_user.id).execute()
         rank = rank_response.data[0] if rank_response.data else {}
 
         user_data = {"sessions": sessions, "streak": streak, "rank": rank}
@@ -208,16 +208,16 @@ async def get_report_preview(
         seven_days_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
 
         sessions_response = supabase.table("interview_sessions").select("*") \
-            .eq("user_id", current_user) \
+            .eq("user_id", current_user.id) \
             .gte("created_at", seven_days_ago).execute()
         sessions = sessions_response.data if sessions_response.data else []
 
         streak_response = supabase.table("user_streaks").select("*") \
-            .eq("user_id", current_user).execute()
+            .eq("user_id", current_user.id).execute()
         streak = streak_response.data[0] if streak_response.data else {}
 
         rank_response = supabase.table("user_ranks").select("*") \
-            .eq("user_id", current_user).execute()
+            .eq("user_id", current_user.id).execute()
         rank = rank_response.data[0] if rank_response.data else {}
 
         user_data = {"sessions": sessions, "streak": streak, "rank": rank}

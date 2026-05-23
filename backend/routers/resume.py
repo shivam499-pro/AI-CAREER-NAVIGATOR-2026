@@ -154,7 +154,7 @@ async def upload_resume(
             )
         
         # Upload file to Supabase Storage
-        resume_url = upload_to_supabase_storage(content, file.filename, current_user)
+        resume_url = upload_to_supabase_storage(content, file.filename, current_user.id)
         
         # Save to Supabase profiles table (both text and URL)
         profile_update = {
@@ -165,7 +165,7 @@ async def upload_resume(
 
         
         try:
-            supabase.table("profiles").update(profile_update).eq("user_id", current_user).execute()
+            supabase.table("profiles").update(profile_update).eq("user_id", current_user.id).execute()
         except Exception as e:
             raise HTTPException(
                 status_code=500,
@@ -200,7 +200,7 @@ async def upload_resume(
             
             # Store in user_documents table
             doc_record = {
-                "user_id": current_user,
+                "user_id": current_user.id,
                 "document_name": file.filename,
                 "document_type": "resume",
                 "extracted_data": extracted_data,
@@ -249,7 +249,7 @@ async def get_resume_status(current_user: AuthenticatedUser = Depends(get_curren
     Returns resume status including the URL if available.
     """
     try:
-        response = supabase.table("profiles").select("resume_filename, resume_text, resume_url").eq("user_id", current_user).execute()
+        response = supabase.table("profiles").select("resume_filename, resume_text, resume_url").eq("user_id", current_user.user_id).execute()
         
         if not response.data:
             return {"has_resume": False}

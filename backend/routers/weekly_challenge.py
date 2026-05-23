@@ -107,14 +107,14 @@ async def submit_weekly_challenge(request: SubmitWeeklyChallengeRequest, current
         # Get user info
         user_email = "Anonymous"
         try:
-            user_response = supabase.table("profiles").select("email").eq("id", current_user.id).execute()
+            user_response = supabase.table("profiles").select("email").eq("id", current_user.user_id).execute()
             if user_response.data:
                 user_email = user_response.data[0].get("email", "Anonymous")
         except Exception:
             pass
         
         # Check if user already submitted this week
-        existing = supabase.table("weekly_results").select("*").eq("user_id", current_user.id).eq("week_number", week_number).eq("year", year).execute()
+        existing = supabase.table("weekly_results").select("*").eq("user_id", current_user.user_id).eq("week_number", week_number).eq("year", year).execute()
         
         if existing.data and len(existing.data) > 0:
             # Update existing score if higher
@@ -129,7 +129,7 @@ async def submit_weekly_challenge(request: SubmitWeeklyChallengeRequest, current
             data = {
                 "week_number": week_number,
                 "year": year,
-                "user_id": current_user,
+                "user_id": current_user.user_id,
                 "user_email": user_email,
                 "score": request.score,
                 "answers": request.answers,
@@ -154,7 +154,7 @@ async def submit_weekly_challenge(request: SubmitWeeklyChallengeRequest, current
             }
             leaderboard.append(entry)
             
-            if row.get("user_id") == request.user_id or row.get("user_email") == user_email:
+            if row.get("user_id") == current_user.user_id or row.get("user_email") == user_email:
                 user_rank = i + 1
                 if user_rank == 1:
                     is_winner = True
@@ -170,14 +170,14 @@ async def submit_weekly_challenge(request: SubmitWeeklyChallengeRequest, current
             
             # Check session completion badges
             badge_result = badge_service.check_and_award_badges(
-                user_id=request.user_id,
+                user_id=current_user.user_id,
                 event="session_complete"
             )
             
             # Check for weekly winner badge (if they ranked #1)
             if is_winner:
                 winner_result = badge_service.check_and_award_badges(
-                    user_id=request.user_id,
+                    user_id=current_user.user_id,
                     event="challenge_won",
                     event_data={"rank": 1}
                 )
@@ -185,7 +185,7 @@ async def submit_weekly_challenge(request: SubmitWeeklyChallengeRequest, current
                 badge_result["new_badges"].extend(winner_result.get("new_badges", []))
                 badge_result["total_xp_earned"] += winner_result.get("total_xp_earned", 0)
             
-            logger.info(f"[BADGE_CHECK] Weekly challenge for user {request.user_id}: {len(badge_result.get('new_badges', []))} new badges")
+            logger.info(f"[BADGE_CHECK] Weekly challenge for user {current_user.user_id}: {len(badge_result.get('new_badges', []))} new badges")
         except Exception as badge_error:
             logger.warning(f"[BADGE_ERROR] Failed to check badges: {str(badge_error)}")
         # =============================================================================
@@ -246,7 +246,7 @@ async def start_weekly_challenge(request: StartChallengeRequest,
     """
     try:
         # Check if attempt already exists
-        existing = supabase.table("challenge_attempts").select("*").eq("user_id", current_user.id).eq("week_number", request.week_number).eq("year", request.year).execute()
+        existing = supabase.table("challenge_attempts").select("*").eq("user_id", current_user.user_id).eq("week_number", request.week_number).eq("year", request.year).execute()
         
         if existing.data and len(existing.data) > 0:
             # Return existing attempt
@@ -258,7 +258,7 @@ async def start_weekly_challenge(request: StartChallengeRequest,
         
         # Create new attempt
         new_attempt = {
-            "user_id": current_user.id,
+            "user_id": current_user.user_id,
             "week_number": request.week_number,
             "year": request.year,
             "status": "started",
@@ -293,7 +293,7 @@ async def get_attempt_status(
     try:
         existing = supabase.table("challenge_attempts") \
             .select("*") \
-            .eq("user_id", current_user.id) \
+            .eq("user_id", current_user.user_id) \
             .eq("week_number", week_number) \
             .eq("year", year) \
             .execute()
