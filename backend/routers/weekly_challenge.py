@@ -1,32 +1,23 @@
-from fastapi import APIRouter, HTTPException
+
+from fastapi import APIRouter, HTTPException, Depends
+from core.supabase_client import supabase
+from core.middleware import get_current_user, AuthenticatedUser
 from pydantic import BaseModel
-from supabase import create_client
 import os
-from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import logging
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-load_dotenv()
-
 router = APIRouter()
-
-# Initialize Supabase client
-supabase_url = os.getenv("SUPABASE_URL")
-supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
-supabase = create_client(supabase_url, supabase_key)
 
 
 class SubmitWeeklyChallengeRequest(BaseModel):
-    user_id: str
     score: float
     answers: list
     is_voice: bool = False  # For voice badge
 
 
 class StartChallengeRequest(BaseModel):
-    user_id: str
     week_number: int
     year: int
 
@@ -104,7 +95,7 @@ async def get_current_week_challenge():
 
 
 @router.post("/submit")
-async def submit_weekly_challenge(request: SubmitWeeklyChallengeRequest):
+async def submit_weekly_challenge(request: SubmitWeeklyChallengeRequest, current_user: AuthenticatedUser = Depends(get_current_user)):
     """
     Submit weekly challenge result.
     Request: { user_id, score, answers }
@@ -116,14 +107,14 @@ async def submit_weekly_challenge(request: SubmitWeeklyChallengeRequest):
         # Get user info
         user_email = "Anonymous"
         try:
-            user_response = supabase.table("users").select("email").eq("id", request.user_id).execute()
+            user_response = supabase.table("profiles").select("email").eq("id", current_user.id).execute()
             if user_response.data:
                 user_email = user_response.data[0].get("email", "Anonymous")
         except Exception:
             pass
         
         # Check if user already submitted this week
-        existing = supabase.table("weekly_results").select("*").eq("user_id", request.user_id).eq("week_number", week_number).eq("year", year).execute()
+        existing = supabase.table("weekly_results").select("*").eq("user_id", current_user.id).eq("week_number", week_number).eq("year", year).execute()
         
         if existing.data and len(existing.data) > 0:
             # Update existing score if higher
@@ -138,7 +129,7 @@ async def submit_weekly_challenge(request: SubmitWeeklyChallengeRequest):
             data = {
                 "week_number": week_number,
                 "year": year,
-                "user_id": request.user_id,
+                "user_id": current_user,
                 "user_email": user_email,
                 "score": request.score,
                 "answers": request.answers,
@@ -245,7 +236,8 @@ async def get_weekly_leaderboard():
 
 
 @router.post("/start")
-async def start_weekly_challenge(request: StartChallengeRequest):
+async def start_weekly_challenge(request: StartChallengeRequest,
+                                 current_user: AuthenticatedUser = Depends(get_current_user)):
     """
     Start a weekly challenge attempt.
     Creates a new attempt record if one doesn't exist for this user/week/year.
@@ -254,7 +246,7 @@ async def start_weekly_challenge(request: StartChallengeRequest):
     """
     try:
         # Check if attempt already exists
-        existing = supabase.table("challenge_attempts").select("*").eq("user_id", request.user_id).eq("week_number", request.week_number).eq("year", request.year).execute()
+        existing = supabase.table("challenge_attempts").select("*").eq("user_id", current_user.id).eq("week_number", request.week_number).eq("year", request.year).execute()
         
         if existing.data and len(existing.data) > 0:
             # Return existing attempt
@@ -266,7 +258,7 @@ async def start_weekly_challenge(request: StartChallengeRequest):
         
         # Create new attempt
         new_attempt = {
-            "user_id": request.user_id,
+            "user_id": current_user.id,
             "week_number": request.week_number,
             "year": request.year,
             "status": "started",
@@ -294,14 +286,14 @@ async def start_weekly_challenge(request: StartChallengeRequest):
 
 @router.get("/attempt")
 async def get_attempt_status(
-    user_id: str,
     week_number: int,
-    year: int
+    year: int,
+    current_user: AuthenticatedUser = Depends(get_current_user)
 ):
     try:
         existing = supabase.table("challenge_attempts") \
             .select("*") \
-            .eq("user_id", user_id) \
+            .eq("user_id", current_user.id) \
             .eq("week_number", week_number) \
             .eq("year", year) \
             .execute()

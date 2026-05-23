@@ -2,21 +2,27 @@
 
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { 
-  ArrowRight, 
-  Github, 
-  Linkedin, 
-  FileText, 
-  Brain, 
-  Target, 
-  TrendingUp, 
-  Mic, 
-  Briefcase, 
-  Award, 
+import {
+  ArrowRight,
+  Github,
+  Linkedin,
+  FileText,
+  Brain,
+  Target,
+  TrendingUp,
+  Mic,
+  Briefcase,
+  Award,
   Map,
   CheckCircle2,
   Quote
 } from 'lucide-react'
+import { Dancing_Script } from 'next/font/google'
+const dancing = Dancing_Script({ subsets: ['latin'] })
+
+// import { Pacifico } from 'next/font/google'
+// const pacifico = Pacifico({ subsets: ['latin'], weight: '400' })
+
 
 export default function Home() {
   const fadeIn = {
@@ -34,18 +40,18 @@ export default function Home() {
             <div className="w-10 h-10 rounded-lg bg-primary-violet flex items-center justify-center">
               <Brain className="w-6 h-6 text-white" />
             </div>
-            <span className="text-xl font-bold text-white tracking-tight">AI Career Navigator</span>
+            <span className={`${dancing.className} text-primary-violet font-bold text-5xl`}>Jaisuuu...</span>
           </div>
           <div className="flex items-center space-x-6">
-            <Link 
+            <Link
               href="/auth/login"
-              className="text-sm font-medium text-muted-foreground hover:text-white transition-colors"
+              className="text-lg font-bold text-muted-foreground hover:text-primary-violet transition-colors"
             >
               Sign In
             </Link>
-            <Link 
+            <Link
               href="/auth/signup"
-              className="bg-primary-violet text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-primary-violet/90 transition-all shadow-lg shadow-primary-violet/20"
+              className="bg-primary-violet text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-primary-violet/90 transition-all shadow-lg shadow-primary-violet/20"
             >
               Get Started
             </Link>
@@ -57,9 +63,9 @@ export default function Home() {
         {/* HERO SECTION */}
         <section className="relative pt-20 pb-24 overflow-hidden bg-[#001F5B]">
           <div className="absolute inset-0 bg-gradient-to-b from-primary-violet/10 to-transparent pointer-events-none" />
-          
+
           <div className="container mx-auto px-4 relative z-10">
-            <motion.div 
+            <motion.div
               {...fadeIn}
               className="max-w-4xl mx-auto text-center"
             >
@@ -69,24 +75,24 @@ export default function Home() {
                   Powered by Google Gemini AI
                 </span>
               </div>
-              
+
               <h1 className="text-5xl md:text-6xl font-extrabold text-white mb-6 leading-tight tracking-tight">
                 Your Personal AI <span className="text-primary-violet">Career Mentor</span>
               </h1>
-              
+
               <p className="text-xl text-blue-100/80 mb-10 max-w-2xl mx-auto leading-relaxed">
-                We analyze your real GitHub, LeetCode, LinkedIn, and Resume profiles to provide 
+                We analyze your real GitHub, LeetCode, LinkedIn, and Resume profiles to provide
                 personalized career guidance — not just self-reported data.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-                <Link 
+                <Link
                   href="/auth/signup"
                   className="bg-primary-violet text-white px-8 py-4 rounded-xl text-lg font-bold hover:bg-primary-violet/90 transition-all flex items-center justify-center gap-2 shadow-xl shadow-primary-violet/30"
                 >
                   Start Free Analysis <ArrowRight className="w-5 h-5" />
                 </Link>
-                <Link 
+                <Link
                   href="#features"
                   className="bg-white/5 border border-white/10 text-white px-8 py-4 rounded-xl text-lg font-bold hover:bg-white/10 transition-all backdrop-blur-sm"
                 >
@@ -109,7 +115,7 @@ export default function Home() {
                   <span className="text-white font-medium">Free to Start</span>
                 </div>
               </div>
-              
+
               <p className="mt-8 text-sm font-semibold text-blue-100 uppercase tracking-widest">
                 Built for Indian CS students and fresh graduates
               </p>
@@ -123,43 +129,43 @@ export default function Home() {
             <div className="text-center mb-20">
               <h2 className="text-3xl md:text-4xl font-bold text-white mb-4 tracking-tight">Hard Metrics, Better Careers</h2>
               <p className="text-blue-100/60 max-w-2xl mx-auto text-lg leading-relaxed mt-4">
-                Unlike other career tools, we read your ACTUAL profiles to give you 
+                Unlike other career tools, we read your ACTUAL profiles to give you
                 honest, data-driven recommendations.
               </p>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              <FeatureCard 
+              <FeatureCard
                 icon={<Github className="w-7 h-7" />}
                 title="GitHub Analysis"
                 description="We analyze your real repos and coding activity to understand your true technical strengths."
                 delay={0.1}
               />
-              <FeatureCard 
+              <FeatureCard
                 icon={<Mic className="w-7 h-7" />}
                 title="Voice Interview"
                 description="Practice real-world technical and HR interviews by speaking naturally, not just typing."
                 delay={0.2}
               />
-              <FeatureCard 
+              <FeatureCard
                 icon={<Map className="w-7 h-7" />}
                 title="AI Career Roadmap"
                 description="A personalized 24-week action plan tailored to your target goal and current skill level."
                 delay={0.3}
               />
-              <FeatureCard 
+              <FeatureCard
                 icon={<Target className="w-7 h-7" />}
                 title="Skill Gap Finder"
                 description="See exactly what skills you are missing for specific job roles based on industry data."
                 delay={0.4}
               />
-              <FeatureCard 
+              <FeatureCard
                 icon={<Briefcase className="w-7 h-7" />}
                 title="Job Matching"
                 description="Discover real job and internship opportunities that match your verified skill level."
                 delay={0.5}
               />
-              <FeatureCard 
+              <FeatureCard
                 icon={<Award className="w-7 h-7" />}
                 title="Streaks & XP"
                 description="Stay consistent and motivated with daily study streaks, XP rewards, and leaderboard status."
@@ -174,7 +180,7 @@ export default function Home() {
           <div className="container mx-auto px-4">
             <h2 className="text-3xl font-bold text-white text-center mb-16 italic opacity-90">What our students say</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-              <motion.div 
+              <motion.div
                 {...fadeIn}
                 className="bg-slate-900/40 p-8 rounded-2xl border border-white/5 relative shadow-inner shadow-white/5"
               >
@@ -191,7 +197,7 @@ export default function Home() {
                 </div>
               </motion.div>
 
-              <motion.div 
+              <motion.div
                 {...fadeIn}
                 className="bg-slate-900/40 p-8 rounded-2xl border border-white/5 relative shadow-inner shadow-white/5"
               >
@@ -221,7 +227,7 @@ export default function Home() {
             <p className="text-blue-100/70 mb-10 max-w-2xl mx-auto text-lg font-medium">
               Connect your GitHub and LeetCode. Get your personalized career analysis in minutes.
             </p>
-            <Link 
+            <Link
               href="/auth/signup"
               className="bg-primary-violet text-white px-10 py-5 rounded-xl text-xl font-bold hover:bg-primary-violet/90 transition-all inline-flex items-center gap-3 shadow-2xl shadow-primary-violet/20"
             >
@@ -258,7 +264,7 @@ export default function Home() {
 
 function FeatureCard({ icon, title, description, delay }: { icon: React.ReactNode; title: string; description: string; delay: number }) {
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}

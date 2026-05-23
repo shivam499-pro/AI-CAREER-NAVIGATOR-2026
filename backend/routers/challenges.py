@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
+from core.supabase_client import supabase
+from core.middleware import get_current_user, AuthenticatedUser
 from pydantic import BaseModel
 from supabase import create_client, Client
 import os
@@ -9,21 +11,14 @@ from datetime import datetime
 
 router = APIRouter()
 
-# Initialize Supabase client
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://example.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "example-key")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
 
 class CreateChallengeRequest(BaseModel):
-    user_id: str
     career_path: str
     questions: list
 
 
 class SubmitChallengeRequest(BaseModel):
     challenge_code: str
-    user_id: str
     score: float
     answers: list
 
@@ -35,12 +30,8 @@ def generate_challenge_code(length: int = 8) -> str:
 
 
 @router.post("/create")
-async def create_challenge(request: CreateChallengeRequest):
-    """
-    Create a new challenge with shareable link.
-    Request: { user_id, career_path, questions }
-    Returns: { challenge_code, share_url }
-    """
+async def create_challenge(request: CreateChallengeRequest,
+                           current_user: AuthenticatedUser = Depends(get_current_user)):
     try:
         # Generate unique challenge code
         challenge_code = generate_challenge_code()
@@ -54,7 +45,7 @@ async def create_challenge(request: CreateChallengeRequest):
         # Get creator name
         creator_name = "Anonymous"
         try:
-            user_response = supabase.table("users").select("full_name, email").eq("id", request.user_id).execute()
+            user_response = supabase.table("profiles").select("full_name, email").eq("id", current_user.id).execute()
             if user_response.data and user_response.data[0].get("full_name"):
                 creator_name = user_response.data[0]["full_name"]
             elif user_response.data and user_response.data[0].get("email"):
@@ -65,7 +56,7 @@ async def create_challenge(request: CreateChallengeRequest):
         # Insert challenge into database
         data = {
             "challenge_code": challenge_code,
-            "creator_id": request.user_id,
+            "creator_id": current_user.id,
             "career_path": request.career_path,
             "questions": request.questions
         }
@@ -75,9 +66,8 @@ async def create_challenge(request: CreateChallengeRequest):
         if not response.data:
             raise HTTPException(status_code=500, detail="Failed to create challenge")
         
-        # Generate share URL
-        share_url = f"http://localhost:3000/challenge/{challenge_code}"
-        
+        base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        share_url = f"{base_url}/challenge/{challenge_code}"
         return {
             "challenge_code": challenge_code,
             "share_url": share_url,
@@ -119,7 +109,7 @@ async def get_challenge(challenge_code: str):
 
 
 @router.post("/submit")
-async def submit_challenge_result(request: SubmitChallengeRequest):
+async def submit_challenge_result(request: SubmitChallengeRequest, current_user: AuthenticatedUser = Depends(get_current_user)):
     """
     Submit challenge result.
     Request: { challenge_code, user_id, score, answers }
@@ -130,7 +120,7 @@ async def submit_challenge_result(request: SubmitChallengeRequest):
         user_email = "Anonymous"
         user_name = "Anonymous"
         try:
-            user_response = supabase.table("users").select("full_name, email").eq("id", request.user_id).execute()
+            user_response = supabase.table("profiles").select("full_name, email").eq("id", current_user.id).execute()
             if user_response.data:
                 user_name = user_response.data[0].get("full_name") or user_response.data[0].get("email", "Anonymous").split("@")[0]
                 user_email = user_response.data[0].get("email", "Anonymous")
@@ -140,7 +130,7 @@ async def submit_challenge_result(request: SubmitChallengeRequest):
         # Insert result
         data = {
             "challenge_code": request.challenge_code.upper(),
-            "user_id": request.user_id,
+            "user_id": current_user.id,
             "user_email": user_email,
             "user_name": user_name,
             "score": request.score,

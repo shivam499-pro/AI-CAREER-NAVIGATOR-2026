@@ -49,7 +49,7 @@ export default function ChallengePage() {
       try {
         setLoading(true)
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-        const response = await fetch(`${apiUrl}/api/challenges/${code}`)
+        const response = await fetch(`${apiUrl}/api/v1/challenges/${code}`)
         
         if (!response.ok) {
           if (response.status === 404) {
@@ -63,7 +63,7 @@ export default function ChallengePage() {
         setChallenge(data)
         
         // Fetch leaderboard
-        const leaderboardResponse = await fetch(`${apiUrl}/api/challenges/leaderboard/${code}`)
+        const leaderboardResponse = await fetch(`${apiUrl}/api/v1/challenges/leaderboard/${code}`)
         if (leaderboardResponse.ok) {
           const leaderboardData = await leaderboardResponse.json()
           setLeaderboard(leaderboardData)

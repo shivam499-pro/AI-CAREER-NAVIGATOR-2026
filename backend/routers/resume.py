@@ -12,6 +12,8 @@ import os
 import uuid
 import fitz  # PyMuPDF
 from dotenv import load_dotenv
+from core.middleware import get_current_user, AuthenticatedUser
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Request, Depends
 
 # Import resume service for skill extraction
 from services.resume_service import extract_skills, extract_experience
@@ -108,7 +110,7 @@ def upload_to_supabase_storage(file_content: bytes, filename: str, user_id: str)
 @limiter.limit("10/minute")
 async def upload_resume(
     request: Request,
-    user_id: str = Form(...),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     file: UploadFile = File(...)
 ):
     """
@@ -152,7 +154,7 @@ async def upload_resume(
             )
         
         # Upload file to Supabase Storage
-        resume_url = upload_to_supabase_storage(content, file.filename, user_id)
+        resume_url = upload_to_supabase_storage(content, file.filename, current_user)
         
         # Save to Supabase profiles table (both text and URL)
         profile_update = {
@@ -160,8 +162,17 @@ async def upload_resume(
             "resume_filename": file.filename,
             "resume_url": resume_url
         }
+
         
-        supabase.table("profiles").update(profile_update).eq("user_id", user_id).execute()
+        try:
+            supabase.table("profiles").update(profile_update).eq("user_id", current_user).execute()
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Resume uploaded but profile update failed: {str(e)}"
+            )
+     
+
         
         # --- Store in user_documents table for unified system ---
         try:
@@ -189,7 +200,7 @@ async def upload_resume(
             
             # Store in user_documents table
             doc_record = {
-                "user_id": user_id,
+                "user_id": current_user,
                 "document_name": file.filename,
                 "document_type": "resume",
                 "extracted_data": extracted_data,
@@ -231,14 +242,14 @@ def extract_text_from_pdf(pdf_content: bytes) -> str:
     return text.strip()
 
 
-@router.get("/status/{user_id}")
-async def get_resume_status(user_id: str):
+@router.get("/status")
+async def get_resume_status(current_user: AuthenticatedUser = Depends(get_current_user)):
     """
     Check if user has uploaded a resume.
     Returns resume status including the URL if available.
     """
     try:
-        response = supabase.table("profiles").select("resume_filename, resume_text, resume_url").eq("user_id", user_id).execute()
+        response = supabase.table("profiles").select("resume_filename, resume_text, resume_url").eq("user_id", current_user).execute()
         
         if not response.data:
             return {"has_resume": False}

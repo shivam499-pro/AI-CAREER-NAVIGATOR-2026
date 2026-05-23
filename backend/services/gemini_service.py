@@ -855,3 +855,161 @@ No markdown, no extra text, just JSON."""
             "error": "api_error",
             "message": str(e)
         }
+
+
+"""
+ADD THIS FUNCTION TO THE BOTTOM OF gemini_service.py
+"""
+
+def analyze_certificate(
+    file_content: bytes,
+    filename: str,
+    mime_type: str  # application/pdf | image/jpeg | image/png
+) -> dict:
+    """
+    Analyze a certificate using Gemini vision.
+    
+    For images: sends directly to Gemini vision.
+    For PDFs: extracts text first, then sends to Gemini.
+    
+    Returns structured certificate data.
+    """
+
+    prompt_text = """You are a career intelligence AI that reads certificates and extracts structured data.
+
+Analyze this certificate and return ONLY a valid JSON object with exactly these fields:
+
+{
+  "course_name": "Full course or certification name",
+  "provider": "Who issued it (NPTEL, Coursera, AWS, Google, etc.)",
+  "score": "Score or grade if visible (e.g. 85%, Elite, Pass) or null",
+  "completion_date": "Month Year format if visible (e.g. March 2024) or null",
+  "duration": "Duration if visible (e.g. 12 weeks) or null",
+  "skills_unlocked": ["skill1", "skill2", "skill3"],
+  "certificate_weight": 7,
+  "credibility": "high",
+  "summary": "One sentence describing what this certificate proves about the candidate."
+}
+
+Rules for certificate_weight (1-10 scale):
+- 9: AWS/GCP/Azure/Microsoft official certs
+- 8: NPTEL Elite / Hackathon Winner / Google certs
+- 7: NPTEL with grade / Coursera with certificate / HackerRank
+- 6: Coursera audit / edX / LinkedIn Learning with assessment
+- 5: Hackathon participant / College competition
+- 4: Udemy / Internal college certification
+- 3: YouTube course certificate / self-printed
+
+Rules for credibility:
+- "high": AWS, Google, Microsoft, NPTEL, Coursera (graded), government-issued
+- "medium": Udemy, edX, LinkedIn Learning, hackathon winner
+- "low": unrecognized platforms, college internal, self-issued
+
+For skills_unlocked: list 3-6 specific technical or professional skills 
+this certificate proves. Be specific (e.g. "Python", "Machine Learning", 
+"Data Structures", "Cloud Deployment", "REST APIs").
+
+Return ONLY the JSON object. No markdown, no explanation."""
+
+    try:
+        # ── Image certificate (JPG/PNG) → Gemini vision ──────────────────────
+        if mime_type in ("image/jpeg", "image/jpg", "image/png"):
+            from google.genai import types as genai_types
+
+            response = client_genai.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[
+                    {
+                        "inline_data": {
+                            "mime_type": mime_type,
+                            "data": __import__('base64').b64encode(file_content).decode()
+                        }
+                    },
+                    {"text": prompt_text}
+                ]
+            )
+            raw = response.text
+
+        # ── PDF certificate → extract text → Gemini ──────────────────────────
+        elif mime_type == "application/pdf":
+            import fitz  # PyMuPDF
+
+            pdf_text = ""
+            with fitz.open(stream=file_content, filetype="pdf") as doc:
+                for page in doc:
+                    pdf_text += page.get_text()
+
+            if not pdf_text.strip():
+                # Scanned PDF with no text layer — try vision on first page
+                with fitz.open(stream=file_content, filetype="pdf") as doc:
+                    if len(doc) > 0:
+                        page = doc[0]
+                        pix = page.get_pixmap(dpi=150)
+                        img_bytes = pix.tobytes("png")
+
+                        from google.genai import types as genai_types
+                        response = client_genai.models.generate_content(
+                            model="gemini-2.5-flash",
+                            contents=[
+                                genai_types.Part.from_bytes(
+                                    data=img_bytes,
+                                    mime_type="image/png"
+                                ),
+                                prompt_text
+                            ]
+                        )
+                        raw = response.text
+                    else:
+                        return _certificate_fallback(filename)
+            else:
+                # Text PDF — send extracted text
+                sanitized_text = sanitize_user_input(pdf_text, max_length=3000)
+                text_prompt = f"{prompt_text}\n\nCertificate text content:\n{sanitized_text}"
+                raw = _generate(text_prompt)
+        else:
+            return _certificate_fallback(filename)
+
+        # ── Parse response ────────────────────────────────────────────────────
+        result = json.loads(_clean_json(raw))
+
+        # Ensure required fields exist with defaults
+        return {
+            "course_name":        result.get("course_name", filename),
+            "provider":           result.get("provider", "Unknown"),
+            "score":              result.get("score"),
+            "completion_date":    result.get("completion_date"),
+            "duration":           result.get("duration"),
+            "skills_unlocked":    result.get("skills_unlocked", []),
+            "certificate_weight": max(1, min(10, result.get("certificate_weight", 5))),
+            "credibility":        result.get("credibility", "medium"),
+            "summary":            result.get("summary", ""),
+            "document_type":      "certificate"
+        }
+
+    except RateLimitError:
+        # Rate limited — return basic fallback without crashing
+        return _certificate_fallback(filename)
+    except json.JSONDecodeError:
+        return _certificate_fallback(filename)
+    except Exception as e:
+        print(f"[Certificate AI] Error analyzing {filename}: {e}")
+        return _certificate_fallback(filename)
+
+
+def _certificate_fallback(filename: str) -> dict:
+    """
+    Fallback when AI analysis fails.
+    Returns minimal structure so the upload still succeeds.
+    """
+    return {
+        "course_name":        filename.replace(".pdf", "").replace("_", " ").replace("-", " "),
+        "provider":           "Unknown",
+        "score":              None,
+        "completion_date":    None,
+        "duration":           None,
+        "skills_unlocked":    [],
+        "certificate_weight": 5,
+        "credibility":        "medium",
+        "summary":            "Certificate uploaded. AI analysis pending.",
+        "document_type":      "certificate"
+    }

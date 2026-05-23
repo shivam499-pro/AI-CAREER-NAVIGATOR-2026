@@ -105,7 +105,9 @@ async def get_job_recommendations(
                 if results:
                     jobs_list = results
             except Exception as e:
-                print(f"[Jobs] SerpAPI error: {e}")
+                raise HTTPException(status_code=503, detail=str(e))
+            except Exception as e:
+                raise HTTPException(status_code=502, detail=f"Job search unavailable: {str(e)}")
 
         # Fallback mock data
         if not jobs_list:

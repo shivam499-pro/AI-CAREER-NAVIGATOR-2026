@@ -48,6 +48,13 @@ export default function ChallengesPage() {
     setError(null)
     try {
       const { data: { user } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) {
+        alert('Please log in to start the challenge.')
+        setIsStarting(false)
+        return
+      }
       setUser(user)
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -74,8 +81,12 @@ export default function ChallengesPage() {
       // ── Check attempt status using saved variables ─────────────
       if (user && challengeData) {
         try {
+          const { data: { session }} = await supabase.auth.getSession()
           const attemptRes = await fetch(
-            `${apiUrl}/api/v1/weekly-challenge/attempt?user_id=${user.id}&week_number=${challengeData.week_number}&year=${challengeData.year}`
+            `${apiUrl}/api/v1/weekly-challenge/attempt?week_number=${challengeData.week_number}&year=${challengeData.year}`,
+            {
+              headers: { 'Authorization': `Bearer ${session?.access_token}` }
+            }
           )
           if (attemptRes.ok) {
             const attemptData = await attemptRes.json()
@@ -150,9 +161,8 @@ export default function ChallengesPage() {
 
       const response = await fetch(`${apiUrl}/api/v1/weekly-challenge/start`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
-          user_id: user.id,
           week_number: challenge.week_number,
           year: challenge.year
         })

@@ -6,872 +6,765 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import Navbar from '@/components/Navbar'
-import { 
-  Brain, Upload, FileText, Loader2, CheckCircle, 
-  AlertCircle, ArrowRight, X, Sparkles, Image, 
-  FilePlus2, Trash2, Award, BookOpen
+import {
+  Upload, FileText, Loader2, CheckCircle,
+  AlertCircle, ArrowRight, X, Sparkles,
+  Trash2, Award, Star, TrendingUp,
+  RefreshCw, Eye, Plus
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-// ─────────────────────────────────────────────
-// Types for multi-document upload
-// ─────────────────────────────────────────────
-interface ExtractedData {
-  certificates: { name: string; issuer: string; date: string; skills: string[] }[]
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface Certificate {
+  name: string
+  issuer: string
+  date: string
+  score?: string
+  skills: string[]
+  weight: number        // 0-10 credibility score
+  credibility: 'high' | 'medium' | 'low'
+  type: 'cloud' | 'academic' | 'hackathon' | 'course' | 'competition' | 'other'
+}
+
+interface DocumentResult {
+  certificates: Certificate[]
   skills_extracted: string[]
-  grades: { subject: string; score: string }[]
   achievements: string[]
   summary: string
+  impact_score: number  // how much this improves profile
 }
 
-interface SkillProfile {
-  name: string
-  count: number
-  sources: string[]
-  confidence: number
+interface ResumeStatus {
+  has_resume: boolean
+  filename?: string
+  resume_url?: string
 }
 
-interface UserProfile {
-  skills: SkillProfile[]
+interface UploadedDoc {
+  id: string
+  document_name: string
+  document_type: string
+  extracted_data: any
+  created_at: string
 }
+
+// ─── Certificate type config ──────────────────────────────────────────────────
+
+const CERT_TYPE_CONFIG = {
+  cloud: { emoji: '☁️', color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/20' },
+  academic: { emoji: '🎓', color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
+  hackathon: { emoji: '🏆', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/20' },
+  course: { emoji: '📚', color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/20' },
+  competition: { emoji: '🥇', color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
+  other: { emoji: '📄', color: 'text-slate-400', bg: 'bg-slate-500/10 border-slate-500/20' },
+}
+
+const CREDIBILITY_CONFIG = {
+  high: { label: 'Industry Recognised', color: 'text-green-400', dot: 'bg-green-400' },
+  medium: { label: 'Verified Course', color: 'text-yellow-400', dot: 'bg-yellow-400' },
+  low: { label: 'Participation', color: 'text-slate-400', dot: 'bg-slate-400' },
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ResumePage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [uploading, setUploading] = useState(false)
-  const [dragActive, setDragActive] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [uploadSuccess, setUploadSuccess] = useState(false)
-  const [error, setError] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [activeTab, setActiveTab] = useState<'resume' | 'certificates'>('resume')
 
-  // ─── Multi-doc state ───
-  const [docFiles, setDocFiles] = useState<File[]>([])
-  const [docUploading, setDocUploading] = useState(false)
-  const [docError, setDocError] = useState('')
-  const [docResult, setDocResult] = useState<ExtractedData | null>(null)
-  const [docFilesProcessed, setDocFilesProcessed] = useState(0)
-  const [docDragActive, setDocDragActive] = useState(false)
-  const docInputRef = useRef<HTMLInputElement>(null)
-  
-  // ─── Unified Profile state ───
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [loadingProfile, setLoadingProfile] = useState(false)
+  // Resume state
+  const [resumeStatus, setResumeStatus] = useState<ResumeStatus | null>(null)
+  const [resumeFile, setResumeFile] = useState<File | null>(null)
+  const [resumeUploading, setResumeUploading] = useState(false)
+  const [resumeSuccess, setResumeSuccess] = useState(false)
+  const [resumeError, setResumeError] = useState('')
+  const [resumeDrag, setResumeDrag] = useState(false)
+  const resumeInputRef = useRef<HTMLInputElement>(null)
+
+  // Certificate state
+  const [certFiles, setCertFiles] = useState<File[]>([])
+  const [certUploading, setCertUploading] = useState(false)
+  const [certError, setCertError] = useState('')
+  const [certResult, setCertResult] = useState<DocumentResult | null>(null)
+  const [certDrag, setCertDrag] = useState(false)
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([])
+  const [loadingDocs, setLoadingDocs] = useState(false)
+  const certInputRef = useRef<HTMLInputElement>(null)
+
+  const ALLOWED_CERT_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']
+
+  // ── Auth + init ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/auth/login')
-        return
-      }
+      if (!user) { router.push('/auth/login'); return }
       setUser(user)
+      await Promise.all([fetchResumeStatus(user.id), fetchUploadedDocs(user.id)])
       setLoading(false)
     }
-    checkAuth()
+    init()
   }, [router])
 
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true)
-    } else if (e.type === 'dragleave') {
-      setDragActive(false)
-    }
+  const getHeaders = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {}
   }
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDragActive(false)
-    
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFile(e.dataTransfer.files[0])
-    }
+  const fetchResumeStatus = async (userId: string) => {
+    try {
+      const headers = await getHeaders()
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const res = await fetch(`${apiUrl}/api/v1/resume/status/${userId}`, { headers })
+      if (res.ok) setResumeStatus(await res.json())
+    } catch { /* keep null */ }
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      handleFile(e.target.files[0])
-    }
+  const fetchUploadedDocs = async (userId: string) => {
+    setLoadingDocs(true)
+    try {
+      const headers = await getHeaders()
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const res = await fetch(`${apiUrl}/api/v1/documents/list`, { headers })
+      if (res.ok) {
+        const data = await res.json()
+        // Filter out resumes — show only certificates/documents
+        const docs = (data.documents || []).filter((d: UploadedDoc) => d.document_type !== 'resume')
+        setUploadedDocs(docs)
+      }
+    } catch { /* keep empty */ }
+    setLoadingDocs(false)
   }
 
-  const handleFile = (file: File) => {
-    if (file.type !== 'application/pdf') {
-      setError('Invalid format: Only PDF documents are authorized.')
-      return
-    }
-    
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Payload exceeded: Maximum file size is 5MB.')
-      return
-    }
-    
-    setSelectedFile(file)
-    setError('')
+  // ── Resume handlers ──────────────────────────────────────────────────────────
+
+  const handleResumeFile = (file: File) => {
+    if (file.type !== 'application/pdf') { setResumeError('Only PDF files are supported.'); return }
+    if (file.size > 10 * 1024 * 1024) { setResumeError('File must be under 10MB.'); return }
+    setResumeFile(file)
+    setResumeError('')
   }
 
-  const handleUpload = async () => {
-    if (!selectedFile || !user) return
-    
-    setUploading(true)
-    setError('')
-    
+  const handleResumeUpload = async () => {
+    if (!resumeFile || !user) return
+    setResumeUploading(true)
+    setResumeError('')
     try {
       const formData = new FormData()
       formData.append('user_id', user.id)
-      formData.append('file', selectedFile)
-      
+      formData.append('file', resumeFile)
+
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiUrl}/api/v1/resume/upload`, {
-        method: 'POST',
-        body: formData,
-      })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Upload protocol failed.')
+      const res = await fetch(`${apiUrl}/api/v1/resume/upload`, { method: 'POST', body: formData })
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.detail || 'Upload failed.')
       }
-      
-      const data = await response.json()
-      
-      if (data.success) {
-        setUploadSuccess(true)
-      } else {
-        throw new Error('Upload verification failed.')
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to establish connection for upload.')
-    } finally {
-      setUploading(false)
-    }
-  }
 
-  const handleRemoveFile = () => {
-    setSelectedFile(null)
-    if (inputRef.current) {
-      inputRef.current.value = ''
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // Multi-document handlers
-  // ─────────────────────────────────────────────
-  const ALLOWED_DOC_TYPES = [
-    'application/pdf',
-    'image/jpeg',
-    'image/jpg',
-    'image/png',
-  ]
-
-  const handleDocDrag = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDocDragActive(true)
-    } else if (e.type === 'dragleave') {
-      setDocDragActive(false)
-    }
-  }
-
-  const handleDocDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDocDragActive(false)
-    if (e.dataTransfer.files) {
-      addDocFiles(Array.from(e.dataTransfer.files))
-    }
-  }
-
-  const handleDocFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      addDocFiles(Array.from(e.target.files))
-    }
-  }
-
-  const addDocFiles = (incoming: File[]) => {
-    setDocError('')
-    const valid: File[] = []
-    for (const f of incoming) {
-      if (!ALLOWED_DOC_TYPES.includes(f.type)) {
-        setDocError(`Unsupported file: ${f.name}. Only PDF, JPG, JPEG, PNG allowed.`)
-        continue
-      }
-      if (f.size > 5 * 1024 * 1024) {
-        setDocError(`File "${f.name}" exceeds 5MB limit.`)
-        continue
-      }
-      valid.push(f)
-    }
-    setDocFiles(prev => {
-      const combined = [...prev, ...valid]
-      if (combined.length > 10) {
-        setDocError('Maximum 10 files allowed.')
-        return combined.slice(0, 10)
-      }
-      return combined
-    })
-  }
-
-  const removeDocFile = (index: number) => {
-    setDocFiles(prev => prev.filter((_, i) => i !== index))
-  }
-
-  const fetchProfile = async () => {
-    if (!user) return
-    setLoadingProfile(true)
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const res = await fetch(`${apiUrl}/api/v1/profile/${user.id}`)
       const data = await res.json()
       if (data.success) {
-        setProfile(data.profile)
+        setResumeSuccess(true)
+        setResumeStatus({ has_resume: true, filename: resumeFile.name })
+        setResumeFile(null)
       }
-    } catch (err) {
-      console.error('Failed to fetch profile', err)
+    } catch (err: any) {
+      setResumeError(err.message || 'Upload failed. Please try again.')
     }
-    setLoadingProfile(false)
+    setResumeUploading(false)
   }
 
-  const handleDocUpload = async () => {
-    if (!docFiles.length || !user) return
-    setDocUploading(true)
-    setDocError('')
-    setDocResult(null)
-    setProfile(null)
+  // ── Certificate handlers ─────────────────────────────────────────────────────
+
+  const addCertFiles = (incoming: File[]) => {
+    setCertError('')
+    const valid: File[] = []
+    for (const f of incoming) {
+      if (!ALLOWED_CERT_TYPES.includes(f.type)) { setCertError(`${f.name} — unsupported format.`); continue }
+      if (f.size > 5 * 1024 * 1024) { setCertError(`${f.name} exceeds 5MB.`); continue }
+      valid.push(f)
+    }
+    setCertFiles(prev => [...prev, ...valid].slice(0, 10))
+  }
+
+  const handleCertUpload = async () => {
+    if (!certFiles.length || !user) return
+    setCertUploading(true)
+    setCertError('')
+    setCertResult(null)
 
     try {
+      const headers = await getHeaders()
       const formData = new FormData()
       formData.append('user_id', user.id)
-      for (const f of docFiles) {
-        formData.append('files', f)
-      }
+      certFiles.forEach(f => formData.append('files', f))
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiUrl}/api/v1/documents/upload`, {
+      const res = await fetch(`${apiUrl}/api/v1/documents/upload-files`, {
         method: 'POST',
+        headers,   // auth header only — no Content-Type (browser sets multipart boundary)
         body: formData,
       })
 
-      if (!response.ok) {
-        const errData = await response.json()
-        throw new Error(errData.detail || 'Document upload failed.')
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.detail || 'Analysis failed.')
       }
 
-      const data = await response.json()
+      const data = await res.json()
       if (data.success) {
-        setDocResult(data.extracted)
-        setDocFilesProcessed(data.files_processed)
-        // Check for fallback (AI was unavailable)
-        if (data.fallback) {
-          setDocError('⚠️ AI analysis is temporarily unavailable. Your documents are सुरक्षित (safe) and will be processed soon.')
-        }
-        // Fetch unified profile after successful upload
-        await fetchProfile()
-      } else {
-        throw new Error('Document analysis failed.')
+        setCertResult(data.extracted)
+        setCertFiles([])
+        await fetchUploadedDocs(user.id)
       }
     } catch (err: any) {
-      setDocError(err.message || 'Failed to process documents.')
-    } finally {
-      setDocUploading(false)
+      setCertError(err.message || 'Failed to process documents.')
     }
+    setCertUploading(false)
   }
 
-  const getFileIcon = (file: File) => {
-    if (file.type === 'application/pdf') {
-      return <FileText className="w-5 h-5 text-red-400" />
-    }
-    return <Image className="w-5 h-5 text-blue-400" />
+  const deleteDoc = async (docId: string) => {
+    try {
+      const headers = await getHeaders()
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      await fetch(`${apiUrl}/api/v1/documents/${docId}`, { method: 'DELETE', headers })
+      setUploadedDocs(prev => prev.filter(d => d.id !== docId))
+    } catch { /* silent */ }
   }
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
+  // ── Helpers ──────────────────────────────────────────────────────────────────
 
-  // ─────────────────────────────────────────────
+  const formatSize = (bytes: number) =>
+    bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+
+  const fadeUp = { hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }
+
+  // ── Loading ──────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0F172A] flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-purple-500 mx-auto mb-4" />
-          <p className="text-slate-400 font-black uppercase tracking-widest text-[10px]">Initializing Upload Protocol...</p>
-        </div>
+        <Loader2 className="w-10 h-10 animate-spin text-purple-500" />
       </div>
     )
   }
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
-  }
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0 }
-  }
-
-  if (uploadSuccess) {
-    return (
-      <div className="min-h-screen bg-[#0F172A] text-white selection:bg-purple-500/30">
-        <Navbar />
-        <main className="container mx-auto px-4 py-20 flex justify-center items-center">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }} 
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-lg bg-[#1E293B] rounded-[2.5rem] border-2 border-green-500/50 p-12 text-center relative overflow-hidden shadow-[0_0_50px_rgba(34,197,94,0.15)] group"
-          >
-            <div className="absolute inset-0 bg-green-500/5 pointer-events-none group-hover:bg-green-500/10 transition-colors" />
-            
-            <motion.div 
-               initial={{ scale: 0 }}
-               animate={{ scale: 1 }}
-               transition={{ type: 'spring', damping: 15 }}
-               className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-8 relative"
-            >
-              <div className="absolute inset-0 bg-green-500/20 blur-xl rounded-full animate-pulse" />
-              <CheckCircle className="w-12 h-12 text-green-400 relative z-10" />
-            </motion.div>
-            
-            <h2 className="text-3xl font-black text-yellow-400 uppercase tracking-tighter mb-4">Resume Uploaded!</h2>
-            <p className="text-slate-400 font-bold mb-10 text-sm leading-relaxed px-4">
-              Your professional history has been successfully parsed. Analysis modules will now incorporate this data.
-            </p>
-            
-            <div className="flex flex-col gap-4">
-              <Link href="/analysis">
-                <Button className="w-full bg-gradient-to-r from-[#6C3FC8] to-purple-600 hover:scale-105 active:scale-95 text-white font-black uppercase tracking-widest h-14 rounded-2xl shadow-[0_10px_30px_-10px_rgba(108,63,200,0.5)] transition-all">
-                  Initialize Analysis
-                  <ArrowRight className="ml-2 w-5 h-5" />
-                </Button>
-              </Link>
-              <Link href="/dashboard">
-                <Button variant="outline" className="w-full border-white/5 bg-[#0F172A]/50 text-slate-400 hover:text-white hover:border-white/20 h-14 rounded-2xl font-black uppercase tracking-widest transition-all">
-                  Return to Dashboard
-                </Button>
-              </Link>
-            </div>
-          </motion.div>
-        </main>
-      </div>
-    )
-  }
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-[#0F172A] text-white selection:bg-purple-500/30">
+    <div className="min-h-screen bg-[#0F172A] text-white">
       <Navbar />
-      <main className="container mx-auto px-4 py-12">
-        <motion.div initial="hidden" animate="visible" variants={containerVariants} className="max-w-2xl mx-auto space-y-8">
-          
-          {/* ═══════════════════════════════════════════
-              SECTION 1: Existing Resume Upload (unchanged)
-              ═══════════════════════════════════════════ */}
-          <motion.div variants={itemVariants} className="bg-[#1E293B] rounded-[2.5rem] p-8 md:p-12 border border-white/5 relative overflow-hidden shadow-2xl">
-            <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-purple-500/10 to-transparent pointer-events-none" />
-            
-            <div className="text-center mb-10 relative z-10">
-              <div className="w-16 h-16 bg-purple-500/20 rounded-2xl border border-purple-500/30 flex items-center justify-center mx-auto mb-6 shadow-[0_0_20px_rgba(108,63,200,0.3)]">
-                 <FileText className="w-8 h-8 text-[#6C3FC8]" />
-              </div>
-              <h1 className="text-3xl font-black text-yellow-400 uppercase tracking-tighter mb-2 drop-shadow-[0_0_10px_rgba(250,204,21,0.2)]">Document Induction</h1>
-              <p className="text-xs font-black text-slate-500 uppercase tracking-[0.2em]">
-                Provide your Resume (PDF) for deep neural analysis
-              </p>
-            </div>
 
-            <div 
-              className={`relative border-2 border-dashed rounded-[2rem] p-12 text-center transition-all duration-300 ${
-                dragActive 
-                  ? 'border-purple-400 bg-purple-500/10 scale-105' 
-                  : 'border-purple-500/30 bg-[#0F172A]/50 hover:border-purple-400 hover:bg-[#0F172A]/80'
-              }`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
+      <main className="max-w-3xl mx-auto px-4 py-10 space-y-8">
+
+        {/* ── Page header ───────────────────────────────────────────────────── */}
+        <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}>
+          <h1 className="text-3xl font-black text-white tracking-tight mb-1">
+            Documents & Certificates
+          </h1>
+          <p className="text-slate-400 text-sm font-medium">
+            Upload your resume and certificates — our AI reads them and adds verified skills to your profile.
+          </p>
+        </motion.div>
+
+        {/* ── Tabs ──────────────────────────────────────────────────────────── */}
+        <div className="flex gap-1 p-1 bg-[#1E293B] rounded-2xl border border-white/5 w-fit">
+          {(['resume', 'certificates'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-6 py-2.5 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${activeTab === tab
+                ? 'bg-purple-600 text-white shadow-lg'
+                : 'text-slate-500 hover:text-slate-300'
+                }`}
             >
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".pdf"
-                onChange={handleFileChange}
-                className="hidden"
-                id="resume-upload"
-              />
-              
-              <AnimatePresence mode="wait">
-                {selectedFile ? (
-                  <motion.div 
-                    key="selected"
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    className="flex flex-col items-center z-10 relative"
-                  >
-                    <div className="relative mb-6">
-                       <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center border-2 border-green-500/50 shadow-[0_0_30px_rgba(34,197,94,0.3)]">
-                         <CheckCircle className="w-10 h-10 text-green-400" />
-                       </div>
-                    </div>
-                    <p className="font-black text-white px-4 py-2 bg-white/5 rounded-xl border border-white/10 mb-2 truncate max-w-full text-sm uppercase tracking-widest">
-                      {selectedFile.name}
+              {tab === 'resume' ? '📄 Resume' : '🏆 Certificates'}
+            </button>
+          ))}
+        </div>
+
+        <AnimatePresence mode="wait">
+
+          {/* ══════════════════════════════════════════
+              RESUME TAB
+              ══════════════════════════════════════════ */}
+          {activeTab === 'resume' && (
+            <motion.div
+              key="resume"
+              initial={{ opacity: 0, x: -12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 12 }}
+              className="space-y-6"
+            >
+
+              {/* Current resume status */}
+              {resumeStatus?.has_resume && (
+                <motion.div variants={fadeUp} initial="hidden" animate="visible"
+                  className="flex items-center gap-4 p-5 bg-green-500/10 border border-green-500/20 rounded-2xl"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                    <CheckCircle className="w-5 h-5 text-green-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-black text-white">Resume uploaded</p>
+                    <p className="text-xs text-green-400/70 font-medium truncate mt-0.5">
+                      {resumeStatus.filename || 'resume.pdf'}
                     </p>
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6">
-                      {(selectedFile.size / 1024).toFixed(1)} KB
-                    </p>
-                    <button
-                      onClick={handleRemoveFile}
-                      className="group flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-colors font-black text-[10px] uppercase tracking-widest"
-                    >
-                      <X className="w-3 h-3 group-hover:scale-110 transition-transform" />
-                      Eject Payload
+                  </div>
+                  <Link href="/analysis">
+                    <button className="text-xs font-black text-green-400 hover:text-green-300 transition-colors flex items-center gap-1 flex-shrink-0">
+                      View analysis <ArrowRight className="w-3 h-3" />
                     </button>
-                  </motion.div>
-                ) : (
-                  <motion.div 
-                    key="unselected"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="z-10 relative"
+                  </Link>
+                </motion.div>
+              )}
+
+              {/* Upload success */}
+              <AnimatePresence>
+                {resumeSuccess && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="p-6 bg-[#1E293B] border border-green-500/30 rounded-2xl text-center"
                   >
-                    <div className="w-20 h-20 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-6 relative">
-                      <div className="absolute inset-0 bg-purple-500/20 blur-xl rounded-full" />
-                      <Upload className="w-10 h-10 text-purple-400 relative z-10" />
+                    <div className="w-14 h-14 bg-green-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                      <CheckCircle className="w-7 h-7 text-green-400" />
                     </div>
-                    <p className="font-black text-slate-300 text-sm uppercase tracking-widest mb-2">
-                      Drag & Drop Protocol
+                    <h3 className="text-lg font-black text-white mb-2">Resume uploaded successfully</h3>
+                    <p className="text-sm text-slate-400 mb-5">
+                      Your resume has been parsed. Run a new analysis to see updated scores.
                     </p>
-                    <p className="text-[10px] font-bold text-slate-500 mb-8 uppercase tracking-[0.2em]">
-                      Hover file or click to locate
-                    </p>
-                    <label htmlFor="resume-upload">
-                      <div 
-                        className="inline-flex items-center justify-center px-8 py-4 bg-[#1E293B] border border-white/10 hover:border-purple-500/50 text-white rounded-2xl cursor-pointer font-black uppercase tracking-widest text-xs transition-all shadow-lg hover:shadow-purple-500/20 active:scale-95">
-                        <Sparkles className="w-4 h-4 mr-2 text-purple-400" />
-                        Select Payload
-                      </div>
-                    </label>
-                    <div className="mt-8 px-4 py-2 bg-white/5 rounded-full inline-block border border-white/5">
-                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
-                        Limit: 5MB | Format: PDF Only
-                      </p>
+                    <div className="flex gap-3 justify-center">
+                      <Link href="/analysis">
+                        <Button className="bg-purple-600 hover:bg-purple-700 text-white font-black text-sm px-6 py-2.5 rounded-xl">
+                          Run Analysis <ArrowRight className="w-4 h-4 ml-2" />
+                        </Button>
+                      </Link>
+                      <button
+                        onClick={() => setResumeSuccess(false)}
+                        className="text-sm font-bold text-slate-400 hover:text-white px-4 py-2.5 rounded-xl border border-white/10 hover:border-white/20 transition-all"
+                      >
+                        Upload another
+                      </button>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
 
-            <AnimatePresence>
-              {error && (
-                <motion.div 
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center gap-3"
-                >
-                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-                  <p className="text-[10px] font-black text-red-400 uppercase tracking-widest">{error}</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {selectedFile && (
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-10 flex justify-center"
-              >
-                <Button 
-                  onClick={handleUpload}
-                  disabled={uploading}
-                  className="w-full md:w-auto bg-gradient-to-r from-[#6C3FC8] to-purple-600 hover:scale-105 active:scale-95 text-white font-black uppercase tracking-widest h-14 px-10 rounded-2xl shadow-[0_10px_30px_-10px_rgba(108,63,200,0.5)] transition-all group"
-                >
-                  {uploading ? (
-                    <>
-                      <Loader2 className="w-5 h-5 mr-3 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      Initialize Upload
-                      <ArrowRight className="ml-3 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                    </>
-                  )}
-                </Button>
-              </motion.div>
-            )}
-
-            <div className="mt-8 text-center border-t border-white/5 pt-8">
-              <Link href="/analysis">
-                <span className="text-[10px] font-black text-slate-500 hover:text-white uppercase tracking-[0.2em] cursor-pointer transition-colors px-4 py-2 rounded-lg hover:bg-white/5">
-                  Bypass this step
-                </span>
-              </Link>
-            </div>
-          </motion.div>
-
-          {/* ═══════════════════════════════════════════
-              SECTION 2: Multi-Document Upload (NEW)
-              ═══════════════════════════════════════════ */}
-          <motion.div
-            variants={itemVariants}
-            className="bg-[#1E293B] rounded-[2.5rem] p-8 md:p-12 border border-white/5 relative overflow-hidden shadow-2xl"
-          >
-            {/* Decorative gradient */}
-            <div className="absolute top-0 left-0 w-1/2 h-full bg-gradient-to-r from-cyan-500/5 to-transparent pointer-events-none" />
-            <div className="absolute bottom-0 right-0 w-1/3 h-1/2 bg-gradient-to-tl from-purple-500/5 to-transparent pointer-events-none" />
-
-            {/* Header */}
-            <div className="text-center mb-10 relative z-10">
-              <div className="w-16 h-16 bg-cyan-500/20 rounded-2xl border border-cyan-500/30 flex items-center justify-center mx-auto mb-6 shadow-[0_0_20px_rgba(6,182,212,0.3)]">
-                <FilePlus2 className="w-8 h-8 text-cyan-400" />
-              </div>
-              <h2 className="text-2xl font-black text-yellow-400 uppercase tracking-tighter mb-2 drop-shadow-[0_0_10px_rgba(250,204,21,0.2)]">
-                Upload Career Documents
-              </h2>
-              <p className="text-xs font-black text-slate-500 uppercase tracking-[0.15em]">
-                Optional — Certificates, Marksheets, Transcripts & More
-              </p>
-              <p className="text-[10px] text-slate-600 mt-2 max-w-md mx-auto leading-relaxed">
-                Upload multiple documents and our AI will extract certificates, skills, grades, and achievements to strengthen your career analysis.
-              </p>
-            </div>
-
-            {/* Drop zone */}
-            <div
-              className={`relative border-2 border-dashed rounded-[2rem] p-8 text-center transition-all duration-300 ${
-                docDragActive
-                  ? 'border-cyan-400 bg-cyan-500/10 scale-[1.02]'
-                  : 'border-cyan-500/20 bg-[#0F172A]/50 hover:border-cyan-400/50 hover:bg-[#0F172A]/80'
-              }`}
-              onDragEnter={handleDocDrag}
-              onDragLeave={handleDocDrag}
-              onDragOver={handleDocDrag}
-              onDrop={handleDocDrop}
-            >
-              <input
-                ref={docInputRef}
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
-                multiple
-                onChange={handleDocFileChange}
-                className="hidden"
-                id="doc-upload"
-              />
-
-              {docFiles.length === 0 ? (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="relative z-10"
-                >
-                  <div className="w-16 h-16 bg-cyan-500/15 rounded-full flex items-center justify-center mx-auto mb-5 relative">
-                    <div className="absolute inset-0 bg-cyan-500/10 blur-xl rounded-full" />
-                    <Upload className="w-8 h-8 text-cyan-400 relative z-10" />
-                  </div>
-                  <p className="font-black text-slate-300 text-sm uppercase tracking-widest mb-1">
-                    Drop Documents Here
-                  </p>
-                  <p className="text-[10px] font-bold text-slate-500 mb-6 uppercase tracking-[0.2em]">
-                    Or click to browse files
-                  </p>
-                  <label htmlFor="doc-upload">
-                    <div className="inline-flex items-center justify-center px-8 py-4 bg-[#1E293B] border border-white/10 hover:border-cyan-500/50 text-white rounded-2xl cursor-pointer font-black uppercase tracking-widest text-xs transition-all shadow-lg hover:shadow-cyan-500/20 active:scale-95">
-                      <FilePlus2 className="w-4 h-4 mr-2 text-cyan-400" />
-                      Select Documents
-                    </div>
-                  </label>
-                  <div className="mt-6 px-4 py-2 bg-white/5 rounded-full inline-block border border-white/5">
-                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
-                      Max: 5MB each | 10 files | PDF, JPG, PNG
+              {/* Upload area */}
+              {!resumeSuccess && (
+                <div className="bg-[#1E293B] rounded-3xl border border-white/5 overflow-hidden">
+                  <div className="p-6 border-b border-white/5">
+                    <h2 className="text-base font-black text-white">
+                      {resumeStatus?.has_resume ? 'Replace Resume' : 'Upload Resume'}
+                    </h2>
+                    <p className="text-xs text-slate-400 font-medium mt-1">
+                      PDF only · Max 10MB · Your resume text is used to improve skill matching
                     </p>
                   </div>
-                </motion.div>
-              ) : (
-                /* File list */
-                <div className="relative z-10 space-y-3">
+
+                  <div className="p-6">
+                    <div
+                      onDragEnter={e => { e.preventDefault(); setResumeDrag(true) }}
+                      onDragLeave={e => { e.preventDefault(); setResumeDrag(false) }}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => { e.preventDefault(); setResumeDrag(false); if (e.dataTransfer.files[0]) handleResumeFile(e.dataTransfer.files[0]) }}
+                      onClick={() => !resumeFile && resumeInputRef.current?.click()}
+                      className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all cursor-pointer ${resumeDrag
+                        ? 'border-purple-400 bg-purple-500/10'
+                        : resumeFile
+                          ? 'border-green-500/40 bg-green-500/5 cursor-default'
+                          : 'border-white/10 hover:border-purple-500/40 hover:bg-purple-500/5'
+                        }`}
+                    >
+                      <input
+                        ref={resumeInputRef}
+                        type="file"
+                        accept=".pdf"
+                        onChange={e => e.target.files?.[0] && handleResumeFile(e.target.files[0])}
+                        className="hidden"
+                      />
+
+                      {resumeFile ? (
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-xl bg-green-500/20 border border-green-500/30 flex items-center justify-center flex-shrink-0">
+                            <FileText className="w-6 h-6 text-green-400" />
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="text-sm font-black text-white truncate">{resumeFile.name}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">{formatSize(resumeFile.size)}</p>
+                          </div>
+                          <button
+                            onClick={e => { e.stopPropagation(); setResumeFile(null) }}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mx-auto mb-4">
+                            <Upload className="w-6 h-6 text-purple-400" />
+                          </div>
+                          <p className="text-sm font-bold text-white mb-1">
+                            Drop your resume here or click to browse
+                          </p>
+                          <p className="text-xs text-slate-500">PDF files only, up to 10MB</p>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Error */}
+                    <AnimatePresence>
+                      {resumeError && (
+                        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                          className="mt-4 flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl"
+                        >
+                          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                          <p className="text-xs font-bold text-red-400">{resumeError}</p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Upload button */}
+                    {resumeFile && (
+                      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5">
+                        <Button
+                          onClick={handleResumeUpload}
+                          disabled={resumeUploading}
+                          className="w-full bg-purple-600 hover:bg-purple-700 text-white font-black h-12 rounded-2xl transition-all disabled:opacity-50"
+                        >
+                          {resumeUploading
+                            ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading...</>
+                            : <><Upload className="w-4 h-4 mr-2" /> Upload Resume</>
+                          }
+                        </Button>
+                      </motion.div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Why upload */}
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { icon: '📊', title: 'Resume Score', desc: 'Raises resume quality from 0 to a real score' },
+                  { icon: '🎯', title: 'Better Matches', desc: 'More accurate job recommendations' },
+                  { icon: '🔍', title: 'Skill Detection', desc: 'Automatically extracts your skills' },
+                ].map((item, i) => (
+                  <div key={i} className="bg-[#1E293B] rounded-2xl p-4 border border-white/5 text-center">
+                    <div className="text-2xl mb-2">{item.icon}</div>
+                    <p className="text-xs font-black text-white mb-1">{item.title}</p>
+                    <p className="text-[10px] text-slate-500 font-medium leading-snug">{item.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* ══════════════════════════════════════════
+              CERTIFICATES TAB
+              ══════════════════════════════════════════ */}
+          {activeTab === 'certificates' && (
+            <motion.div
+              key="certificates"
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -12 }}
+              className="space-y-6"
+            >
+
+              {/* What to upload */}
+              <div className="p-5 bg-[#1E293B] rounded-2xl border border-white/5">
+                <p className="text-sm font-black text-white mb-3">What you can upload</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { emoji: '☁️', label: 'AWS / Azure / GCP' },
+                    { emoji: '🎓', label: 'NPTEL certificates' },
+                    { emoji: '🏆', label: 'Hackathon wins' },
+                    { emoji: '📚', label: 'Coursera / Udemy' },
+                    { emoji: '🥇', label: 'Competition awards' },
+                    { emoji: '📄', label: 'Any PDF or image' },
+                  ].map((item, i) => (
+                    <span key={i} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0F172A] rounded-full text-xs font-bold text-slate-300 border border-white/5">
+                      {item.emoji} {item.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Upload area */}
+              <div className="bg-[#1E293B] rounded-3xl border border-white/5 overflow-hidden">
+                <div className="p-6 border-b border-white/5">
+                  <h2 className="text-base font-black text-white">Upload certificates</h2>
+                  <p className="text-xs text-slate-400 font-medium mt-1">
+                    PDF, JPG or PNG · Max 5MB each · Up to 10 files
+                  </p>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  {/* Drop zone */}
+                  <div
+                    onDragEnter={e => { e.preventDefault(); setCertDrag(true) }}
+                    onDragLeave={e => { e.preventDefault(); setCertDrag(false) }}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); setCertDrag(false); addCertFiles(Array.from(e.dataTransfer.files)) }}
+                    onClick={() => certInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${certDrag
+                      ? 'border-yellow-400 bg-yellow-500/10'
+                      : 'border-white/10 hover:border-yellow-500/40 hover:bg-yellow-500/5'
+                      }`}
+                  >
+                    <input
+                      ref={certInputRef}
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      multiple
+                      onChange={e => e.target.files && addCertFiles(Array.from(e.target.files))}
+                      className="hidden"
+                    />
+                    <div className="w-10 h-10 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center mx-auto mb-3">
+                      <Plus className="w-5 h-5 text-yellow-400" />
+                    </div>
+                    <p className="text-sm font-bold text-white mb-1">Add certificates</p>
+                    <p className="text-xs text-slate-500">Drop files or click to browse</p>
+                  </div>
+
+                  {/* File list */}
                   <AnimatePresence>
-                    {docFiles.map((file, idx) => (
+                    {certFiles.map((file, idx) => (
                       <motion.div
                         key={`${file.name}-${idx}`}
-                        initial={{ opacity: 0, x: -20 }}
+                        initial={{ opacity: 0, x: -12 }}
                         animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 20 }}
-                        transition={{ delay: idx * 0.05 }}
-                        className="flex items-center gap-3 px-4 py-3 bg-[#1E293B]/80 rounded-xl border border-white/5 hover:border-white/10 transition-colors group"
+                        exit={{ opacity: 0, x: 12 }}
+                        className="flex items-center gap-3 p-3 bg-[#0F172A] rounded-xl border border-white/5 group"
                       >
-                        <div className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center bg-white/5">
-                          {getFileIcon(file)}
+                        <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0">
+                          <span className="text-sm">{file.type === 'application/pdf' ? '📄' : '🖼️'}</span>
                         </div>
-                        <div className="flex-1 min-w-0 text-left">
-                          <p className="text-xs font-bold text-white truncate">
-                            {file.name}
-                          </p>
-                          <p className="text-[10px] text-slate-500 font-semibold">
-                            {formatFileSize(file.size)}
-                          </p>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-white truncate">{file.name}</p>
+                          <p className="text-[10px] text-slate-500">{formatSize(file.size)}</p>
                         </div>
                         <button
-                          onClick={() => removeDocFile(idx)}
-                          className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
-                          title="Remove file"
+                          onClick={() => setCertFiles(prev => prev.filter((_, i) => i !== idx))}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </motion.div>
                     ))}
                   </AnimatePresence>
 
-                  {/* Add more files */}
-                  {docFiles.length < 10 && (
-                    <label htmlFor="doc-upload">
-                      <div className="flex items-center justify-center gap-2 px-4 py-3 border border-dashed border-white/10 hover:border-cyan-500/40 rounded-xl cursor-pointer transition-all hover:bg-white/[0.02]">
-                        <FilePlus2 className="w-4 h-4 text-cyan-500/60" />
-                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                          Add More Files ({docFiles.length}/10)
-                        </span>
-                      </div>
-                    </label>
+                  {/* Error */}
+                  <AnimatePresence>
+                    {certError && (
+                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl"
+                      >
+                        <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                        <p className="text-xs font-bold text-red-400">{certError}</p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Upload button */}
+                  {certFiles.length > 0 && (
+                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+                      <Button
+                        onClick={handleCertUpload}
+                        disabled={certUploading}
+                        className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-black h-12 rounded-2xl transition-all disabled:opacity-50"
+                      >
+                        {certUploading ? (
+                          <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> AI is reading your certificates...</>
+                        ) : (
+                          <><Sparkles className="w-4 h-4 mr-2" /> Analyse {certFiles.length} certificate{certFiles.length > 1 ? 's' : ''}</>
+                        )}
+                      </Button>
+                    </motion.div>
                   )}
                 </div>
-              )}
-            </div>
+              </div>
 
-            {/* Error display */}
-            <AnimatePresence>
-              {docError && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center gap-3"
-                >
-                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-                  <p className="text-[10px] font-black text-red-400 uppercase tracking-widest">{docError}</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
+              {/* Analysis result */}
+              <AnimatePresence>
+                {certResult && (
+                  <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
 
-            {/* Upload button */}
-            {docFiles.length > 0 && !docResult && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-8 flex justify-center"
-              >
-                <Button
-                  onClick={handleDocUpload}
-                  disabled={docUploading}
-                  className="w-full md:w-auto bg-gradient-to-r from-cyan-600 via-purple-600 to-purple-700 hover:scale-105 active:scale-95 text-white font-black uppercase tracking-widest h-14 px-10 rounded-2xl shadow-[0_10px_30px_-10px_rgba(6,182,212,0.4)] transition-all group"
-                >
-                  {docUploading ? (
-                    <span className="flex items-center gap-3">
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span className="flex flex-col items-start">
-                        <span className="text-xs">AI is reading your documents...</span>
-                      </span>
-                    </span>
-                  ) : (
-                    <>
-                      <Sparkles className="w-5 h-5 mr-3" />
-                      Upload & Analyze Documents
-                      <ArrowRight className="ml-3 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                    </>
-                  )}
-                </Button>
-              </motion.div>
-            )}
-
-            {/* Loading state overlay */}
-            <AnimatePresence>
-              {docUploading && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="mt-6 p-6 bg-[#0F172A]/60 backdrop-blur border border-purple-500/20 rounded-2xl"
-                >
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="relative">
-                      <div className="w-16 h-16 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin" />
-                      <Brain className="w-7 h-7 text-purple-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm font-black text-white uppercase tracking-widest mb-1">
-                        AI is reading your documents...
-                      </p>
-                      <p className="text-[10px] text-slate-500 font-bold">
-                        Extracting certificates, skills, grades & achievements
-                      </p>
-                    </div>
-                    {/* Animated dots */}
-                    <div className="flex gap-1.5">
-                      {[0, 1, 2, 3, 4].map(i => (
-                        <motion.div
-                          key={i}
-                          className="w-2 h-2 rounded-full bg-purple-500"
-                          animate={{ opacity: [0.2, 1, 0.2], scale: [0.8, 1.2, 0.8] }}
-                          transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* ── Success results ── */}
-            <AnimatePresence>
-              {docResult && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mt-8 space-y-5"
-                >
-                  {/* Success banner */}
-                  <div className="p-5 bg-green-500/10 border border-green-500/30 rounded-2xl">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center">
-                        <CheckCircle className="w-5 h-5 text-green-400" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-black text-green-400 uppercase tracking-widest">
-                          Analysis Complete
-                        </p>
-                        <p className="text-[10px] text-slate-500 font-bold">
-                          {docFilesProcessed} document{docFilesProcessed !== 1 ? 's' : ''} processed successfully
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Stats grid */}
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Certificates */}
-                    <div className="p-4 bg-[#0F172A]/60 rounded-2xl border border-white/5">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Award className="w-4 h-4 text-yellow-400" />
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Certificates</span>
-                      </div>
-                      <p className="text-2xl font-black text-white">{docResult.certificates?.length || 0}</p>
-                      {docResult.certificates?.length > 0 && (
-                        <div className="mt-2 space-y-1">
-                          {docResult.certificates.slice(0, 3).map((cert, i) => (
-                            <p key={i} className="text-[10px] text-slate-400 truncate">
-                              • {cert.name}
-                            </p>
-                          ))}
-                          {docResult.certificates.length > 3 && (
-                            <p className="text-[10px] text-slate-600">+{docResult.certificates.length - 3} more</p>
-                          )}
+                    {/* Impact banner */}
+                    {certResult.impact_score > 0 && (
+                      <div className="flex items-center gap-4 p-5 bg-green-500/10 border border-green-500/20 rounded-2xl">
+                        <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                          <TrendingUp className="w-5 h-5 text-green-400" />
                         </div>
-                      )}
-                    </div>
-
-                    {/* Skills - Unified Profile */}
-                    <div className="p-4 bg-[#0F172A]/60 rounded-2xl border border-white/5">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Sparkles className="w-4 h-4 text-purple-400" />
-                        <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">🧠 AI Skill Intelligence</span>
+                        <div>
+                          <p className="text-sm font-black text-white">Profile score improved</p>
+                          <p className="text-xs text-green-400/80 font-medium mt-0.5">
+                            These certificates added +{certResult.impact_score} points to your profile
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-[9px] text-slate-500 mb-3">
-                        AI analyzed your documents and identified your strongest skills with confidence scores.
-                      </p>
-                      {loadingProfile ? (
-                        <p className="text-2xl font-black text-white">Analyzing...</p>
-                      ) : profile && profile.skills.length > 0 ? (
-                        <>
-                          <p className="text-2xl font-black text-white">{profile.skills.length}</p>
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {profile.skills.slice(0, 5).map((skill, i) => (
-                              <span key={i} className="text-[9px] font-bold px-2 py-0.5 bg-purple-500/15 text-purple-300 rounded-full border border-purple-500/20 flex items-center gap-1">
-                                {skill.name} ({Math.round(skill.confidence * 100)}%)
-                                <span className="text-purple-400/50 ml-1 text-[8px]">from {skill.sources.join(", ")}</span>
-                              </span>
-                            ))}
-                            {profile.skills.length > 5 && (
-                              <span className="text-[9px] font-bold px-2 py-0.5 text-slate-500">
-                                +{profile.skills.length - 5}
-                              </span>
-                            )}
-                          </div>
-                        </>
-                      ) : docResult.skills_extracted?.length > 0 ? (
-                        <>
-                          <p className="text-2xl font-black text-white">{docResult.skills_extracted?.length || 0}</p>
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {docResult.skills_extracted.slice(0, 4).map((skill, i) => (
-                              <span key={i} className="text-[9px] font-bold px-2 py-0.5 bg-purple-500/15 text-purple-300 rounded-full border border-purple-500/20">
-                                {skill}
-                              </span>
-                            ))}
-                            {docResult.skills_extracted.length > 4 && (
-                              <span className="text-[9px] font-bold px-2 py-0.5 text-slate-500">
-                                +{docResult.skills_extracted.length - 4}
-                              </span>
-                            )}
-                          </div>
-                        </>
-                      ) : (
-                        <p className="text-2xl font-black text-white">0</p>
-                      )}
-                    </div>
+                    )}
 
-                    {/* Grades */}
-                    <div className="p-4 bg-[#0F172A]/60 rounded-2xl border border-white/5">
-                      <div className="flex items-center gap-2 mb-2">
-                        <BookOpen className="w-4 h-4 text-cyan-400" />
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Grades</span>
+                    {/* Certificate cards */}
+                    {certResult.certificates?.length > 0 && (
+                      <div className="space-y-3">
+                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                          Certificates found — {certResult.certificates.length}
+                        </p>
+                        {certResult.certificates.map((cert, i) => {
+                          const typeConfig = CERT_TYPE_CONFIG[cert.type] || CERT_TYPE_CONFIG.other
+                          const credConfig = CREDIBILITY_CONFIG[cert.credibility] || CREDIBILITY_CONFIG.low
+                          return (
+                            <motion.div
+                              key={i}
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: i * 0.08 }}
+                              className="bg-[#1E293B] rounded-2xl p-5 border border-white/5"
+                            >
+                              <div className="flex items-start gap-4">
+                                <div className={`w-12 h-12 rounded-xl border flex items-center justify-center text-2xl flex-shrink-0 ${typeConfig.bg}`}>
+                                  {typeConfig.emoji}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2 mb-1">
+                                    <p className="text-sm font-black text-white leading-snug">{cert.name}</p>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                      <div className={`w-1.5 h-1.5 rounded-full ${credConfig.dot}`} />
+                                      <span className={`text-[10px] font-black ${credConfig.color}`}>
+                                        {credConfig.label}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-slate-400 font-medium mb-3">
+                                    {cert.issuer} {cert.date && `· ${cert.date}`} {cert.score && `· ${cert.score}`}
+                                  </p>
+                                  {cert.skills?.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5">
+                                      <span className="text-[10px] text-slate-500 font-bold mr-1">Skills unlocked:</span>
+                                      {cert.skills.map((skill, si) => (
+                                        <span key={si} className="text-[10px] font-bold px-2 py-0.5 bg-purple-500/10 text-purple-300 rounded-full border border-purple-500/20">
+                                          {skill}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                {/* Weight bar */}
+                                <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                                  <span className={`text-base font-black ${cert.weight >= 7 ? 'text-green-400' : cert.weight >= 5 ? 'text-yellow-400' : 'text-slate-400'}`}>
+                                    {cert.weight}/10
+                                  </span>
+                                  <span className="text-[9px] text-slate-600 font-bold">value</span>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )
+                        })}
                       </div>
-                      <p className="text-2xl font-black text-white">{docResult.grades?.length || 0}</p>
-                    </div>
+                    )}
 
-                    {/* Achievements */}
-                    <div className="p-4 bg-[#0F172A]/60 rounded-2xl border border-white/5">
-                      <div className="flex items-center gap-2 mb-2">
-                        <CheckCircle className="w-4 h-4 text-green-400" />
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Achievements</span>
+                    {/* Skills summary */}
+                    {certResult.skills_extracted?.length > 0 && (
+                      <div className="p-5 bg-[#1E293B] rounded-2xl border border-white/5">
+                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
+                          Skills added to your profile
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {certResult.skills_extracted.map((skill, i) => (
+                            <span key={i} className="text-xs font-bold px-3 py-1 bg-purple-500/10 text-purple-300 rounded-full border border-purple-500/20">
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                      <p className="text-2xl font-black text-white">{docResult.achievements?.length || 0}</p>
-                    </div>
-                  </div>
+                    )}
 
-                  {/* Summary */}
-                  {docResult.summary && (
-                    <div className="p-4 bg-[#0F172A]/60 rounded-2xl border border-white/5">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">AI Summary</p>
-                      <p className="text-sm text-slate-300 leading-relaxed">{docResult.summary}</p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setCertResult(null)}
+                        className="flex-1 text-sm font-bold text-slate-400 hover:text-white py-3 rounded-xl border border-white/10 hover:border-white/20 transition-all"
+                      >
+                        Upload more
+                      </button>
+                      <Link href="/analysis" className="flex-1">
+                        <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-black text-sm h-12 rounded-xl">
+                          Re-run Analysis <ArrowRight className="w-4 h-4 ml-2" />
+                        </Button>
+                      </Link>
                     </div>
-                  )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-                  {/* Upload more button */}
-                  <div className="flex justify-center pt-2">
+              {/* Previously uploaded documents */}
+              {uploadedDocs.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                      Previously uploaded — {uploadedDocs.length}
+                    </p>
                     <button
-                      onClick={() => { setDocResult(null); setDocFiles([]); setDocFilesProcessed(0); }}
-                      className="text-[10px] font-black text-slate-500 hover:text-cyan-400 uppercase tracking-[0.2em] cursor-pointer transition-colors px-4 py-2 rounded-lg hover:bg-white/5"
+                      onClick={() => fetchUploadedDocs(user.id)}
+                      className="text-[10px] text-slate-500 hover:text-white transition-colors flex items-center gap-1"
                     >
-                      Upload More Documents
+                      <RefreshCw className="w-3 h-3" /> Refresh
                     </button>
                   </div>
-                </motion.div>
+                  {uploadedDocs.map((doc) => {
+                    const certs = doc.extracted_data?.certificates || []
+                    const skills = doc.extracted_data?.skills_extracted || []
+                    return (
+                      <div key={doc.id} className="flex items-center gap-3 p-4 bg-[#1E293B] rounded-2xl border border-white/5 group">
+                        <div className="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center flex-shrink-0 text-base">
+                          {doc.document_name?.match(/\.(jpg|jpeg|png)$/i) ? '🖼️' : '📄'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-white truncate">{doc.document_name}</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            {certs.length > 0 ? `${certs.length} cert${certs.length > 1 ? 's' : ''}` : ''}
+                            {certs.length > 0 && skills.length > 0 ? ' · ' : ''}
+                            {skills.length > 0 ? `${skills.length} skills` : ''}
+                            {certs.length === 0 && skills.length === 0 ? 'Processed' : ''}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => deleteDoc(doc.id)}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               )}
-            </AnimatePresence>
-          </motion.div>
 
-        </motion.div>
+              {/* Empty state */}
+              {!loadingDocs && uploadedDocs.length === 0 && !certResult && certFiles.length === 0 && (
+                <div className="text-center py-12 bg-[#1E293B] rounded-2xl border border-white/5">
+                  <div className="text-4xl mb-4">🏆</div>
+                  <p className="text-sm font-black text-white mb-1">No certificates yet</p>
+                  <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                    Upload your certificates above and our AI will verify the skills they prove.
+                  </p>
+                </div>
+              )}
+
+            </motion.div>
+          )}
+
+        </AnimatePresence>
       </main>
-
-      {/* Decorative Orbs */}
-      <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden opacity-30">
-        <div className="absolute top-[20%] left-[-10%] w-[500px] h-[500px] bg-purple-900/20 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[20%] right-[-10%] w-[400px] h-[400px] bg-blue-900/20 rounded-full blur-[100px]" />
-      </div>
     </div>
   )
 }
