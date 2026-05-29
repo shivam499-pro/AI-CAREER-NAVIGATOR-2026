@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
+import { useResume } from './hooks/useResume'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import Navbar from '@/components/Navbar'
 import {
@@ -14,42 +13,6 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Certificate {
-  name: string
-  issuer: string
-  date: string
-  score?: string
-  skills: string[]
-  weight: number        // 0-10 credibility score
-  credibility: 'high' | 'medium' | 'low'
-  type: 'cloud' | 'academic' | 'hackathon' | 'course' | 'competition' | 'other'
-}
-
-interface DocumentResult {
-  certificates: Certificate[]
-  skills_extracted: string[]
-  achievements: string[]
-  summary: string
-  impact_score: number  // how much this improves profile
-}
-
-interface ResumeStatus {
-  has_resume: boolean
-  filename?: string
-  resume_url?: string
-}
-
-interface UploadedDoc {
-  id: string
-  document_name: string
-  document_type: string
-  extracted_data: any
-  created_at: string
-}
-
-// ─── Certificate type config ──────────────────────────────────────────────────
 
 const CERT_TYPE_CONFIG = {
   cloud: { emoji: '☁️', color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/20' },
@@ -69,173 +32,21 @@ const CREDIBILITY_CONFIG = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ResumePage() {
-  const router = useRouter()
-  const [user, setUser] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+  
+
+  // ── Hook — owns all state, auth, and data ──────────────────────────────
+  const {
+    user, loading,
+    resumeStatus, resumeFile, resumeUploading, resumeSuccess, resumeError, resumeDrag,
+    setResumeFile, setResumeDrag, setResumeSuccess, handleResumeFile, handleResumeUpload,
+    certFiles, certUploading, certError, certResult, certDrag, uploadedDocs, loadingDocs,
+    setCertDrag, setCertResult, addCertFiles, removeCertFile, handleCertUpload, refreshDocs, deleteDoc,
+  } = useResume()
+
+   // ── UI-only state — stays in page ──────────────────────────────────────
   const [activeTab, setActiveTab] = useState<'resume' | 'certificates'>('resume')
-
-  // Resume state
-  const [resumeStatus, setResumeStatus] = useState<ResumeStatus | null>(null)
-  const [resumeFile, setResumeFile] = useState<File | null>(null)
-  const [resumeUploading, setResumeUploading] = useState(false)
-  const [resumeSuccess, setResumeSuccess] = useState(false)
-  const [resumeError, setResumeError] = useState('')
-  const [resumeDrag, setResumeDrag] = useState(false)
   const resumeInputRef = useRef<HTMLInputElement>(null)
-
-  // Certificate state
-  const [certFiles, setCertFiles] = useState<File[]>([])
-  const [certUploading, setCertUploading] = useState(false)
-  const [certError, setCertError] = useState('')
-  const [certResult, setCertResult] = useState<DocumentResult | null>(null)
-  const [certDrag, setCertDrag] = useState(false)
-  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([])
-  const [loadingDocs, setLoadingDocs] = useState(false)
-  const certInputRef = useRef<HTMLInputElement>(null)
-
-  const ALLOWED_CERT_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']
-
-  // ── Auth + init ─────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/auth/login'); return }
-      setUser(user)
-      await Promise.all([fetchResumeStatus(), fetchUploadedDocs()])
-      setLoading(false)
-    }
-    init()
-  }, [router])
-
-  const getHeaders = async (): Promise<Record<string, string>> => {
-    const { data: { session } } = await supabase.auth.getSession()
-    return session?.access_token
-      ? { Authorization: `Bearer ${session.access_token}` }
-      : {}
-  }
-
-  const fetchResumeStatus = async () => {
-    try {
-      const headers = await getHeaders()
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const res = await fetch(`${apiUrl}/api/v1/resume/status/`, { headers })
-      if (res.ok) setResumeStatus(await res.json())
-    } catch { /* keep null */ }
-  }
-
-  const fetchUploadedDocs = async () => {
-    setLoadingDocs(true)
-    try {
-      const headers = await getHeaders()
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const res = await fetch(`${apiUrl}/api/v1/documents/list`, { headers })
-      if (res.ok) {
-        const data = await res.json()
-        // Filter out resumes — show only certificates/documents
-        const docs = (data.documents || []).filter((d: UploadedDoc) => d.document_type !== 'resume')
-        setUploadedDocs(docs)
-      }
-    } catch { /* keep empty */ }
-    setLoadingDocs(false)
-  }
-
-  // ── Resume handlers ──────────────────────────────────────────────────────────
-
-  const handleResumeFile = (file: File) => {
-    if (file.type !== 'application/pdf') { setResumeError('Only PDF files are supported.'); return }
-    if (file.size > 10 * 1024 * 1024) { setResumeError('File must be under 10MB.'); return }
-    setResumeFile(file)
-    setResumeError('')
-  }
-
-  const handleResumeUpload = async () => {
-    if (!resumeFile || !user) return
-    setResumeUploading(true)
-    setResumeError('')
-    try {
-      const formData = new FormData()
-      formData.append('file', resumeFile)
-
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const res = await fetch(`${apiUrl}/api/v1/resume/upload`, { method: 'POST', body: formData })
-
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.detail || 'Upload failed.')
-      }
-
-      const data = await res.json()
-      if (data.success) {
-        setResumeSuccess(true)
-        setResumeStatus({ has_resume: true, filename: resumeFile.name })
-        setResumeFile(null)
-      }
-    } catch (err: any) {
-      setResumeError(err.message || 'Upload failed. Please try again.')
-    }
-    setResumeUploading(false)
-  }
-
-  // ── Certificate handlers ─────────────────────────────────────────────────────
-
-  const addCertFiles = (incoming: File[]) => {
-    setCertError('')
-    const valid: File[] = []
-    for (const f of incoming) {
-      if (!ALLOWED_CERT_TYPES.includes(f.type)) { setCertError(`${f.name} — unsupported format.`); continue }
-      if (f.size > 5 * 1024 * 1024) { setCertError(`${f.name} exceeds 5MB.`); continue }
-      valid.push(f)
-    }
-    setCertFiles(prev => [...prev, ...valid].slice(0, 10))
-  }
-
-  const handleCertUpload = async () => {
-    if (!certFiles.length || !user) return
-    setCertUploading(true)
-    setCertError('')
-    setCertResult(null)
-
-    try {
-      const headers = await getHeaders()
-      const formData = new FormData()
-      formData.append('user_id', user.id)
-      certFiles.forEach(f => formData.append('files', f))
-
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const res = await fetch(`${apiUrl}/api/v1/documents/upload-files`, {
-        method: 'POST',
-        headers,   // auth header only — no Content-Type (browser sets multipart boundary)
-        body: formData,
-      })
-
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.detail || 'Analysis failed.')
-      }
-
-      const data = await res.json()
-      if (data.success) {
-        setCertResult(data.extracted)
-        setCertFiles([])
-        await fetchUploadedDocs()
-      }
-    } catch (err: any) {
-      setCertError(err.message || 'Failed to process documents.')
-    }
-    setCertUploading(false)
-  }
-
-  const deleteDoc = async (docId: string) => {
-    try {
-      const headers = await getHeaders()
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      await fetch(`${apiUrl}/api/v1/documents/${docId}`, { method: 'DELETE', headers })
-      setUploadedDocs(prev => prev.filter(d => d.id !== docId))
-    } catch { /* silent */ }
-  }
-
-  // ── Helpers ──────────────────────────────────────────────────────────────────
+  const certInputRef   = useRef<HTMLInputElement>(null)
 
   const formatSize = (bytes: number) =>
     bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
@@ -382,6 +193,7 @@ export default function ResumePage() {
                     >
                       <input
                         ref={resumeInputRef}
+                        aria-label="Resume upload input"
                         type="file"
                         accept=".pdf"
                         onChange={e => e.target.files?.[0] && handleResumeFile(e.target.files[0])}
@@ -400,6 +212,7 @@ export default function ResumePage() {
                           <button
                             onClick={e => { e.stopPropagation(); setResumeFile(null) }}
                             className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                            aria-label="Remove resume"
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -520,6 +333,7 @@ export default function ResumePage() {
                   >
                     <input
                       ref={certInputRef}
+                      aria-label="Certificate upload input"
                       type="file"
                       accept=".pdf,.jpg,.jpeg,.png"
                       multiple
@@ -551,7 +365,8 @@ export default function ResumePage() {
                           <p className="text-[10px] text-slate-500">{formatSize(file.size)}</p>
                         </div>
                         <button
-                          onClick={() => setCertFiles(prev => prev.filter((_, i) => i !== idx))}
+                          onClick={() => removeCertFile(idx)}
+                          aria-label="Remove file"
                           className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -690,6 +505,7 @@ export default function ResumePage() {
                       <button
                         onClick={() => setCertResult(null)}
                         className="flex-1 text-sm font-bold text-slate-400 hover:text-white py-3 rounded-xl border border-white/10 hover:border-white/20 transition-all"
+                        aria-label="Upload more certificates"
                       >
                         Upload more
                       </button>
@@ -711,7 +527,7 @@ export default function ResumePage() {
                       Previously uploaded — {uploadedDocs.length}
                     </p>
                     <button
-                      onClick={() => fetchUploadedDocs(user.id)}
+                      onClick={() => refreshDocs()}
                       className="text-[10px] text-slate-500 hover:text-white transition-colors flex items-center gap-1"
                     >
                       <RefreshCw className="w-3 h-3" /> Refresh
@@ -737,6 +553,7 @@ export default function ResumePage() {
                         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={() => deleteDoc(doc.id)}
+                            aria-label="Delete document"
                             className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
