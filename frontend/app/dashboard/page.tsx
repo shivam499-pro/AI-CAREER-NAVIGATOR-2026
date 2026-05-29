@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { supabase } from '@/lib/supabase'
+import { useDashboard } from './hooks/useDashboard'
+import { formatUsername } from '@/lib/utils'
 import Navbar from '@/components/Navbar'
 import ProgressTracker from '@/components/ProgressTracker'
 import CareerCoach from '@/components/CareerCoach'
@@ -15,212 +15,13 @@ import {
   Mic, FileText, Award, Code, GitBranch
 } from 'lucide-react'
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-interface CareerBrainData {
-  job_readiness_score: number
-  recommendations: string[]
-  alerts: string[]
-  streak: number
-  rank: string
-  level: number
-  skill_insights: { strong: string[]; weak: string[]; missing: string[] }
-}
-
-interface ResumeScore {
-  overall: number
-  breakdown: {
-    skills_match: number
-    github_activity: number
-    leetcode_strength: number
-    certifications: number
-    resume_quality: number
-  }
-  summary: string
-}
-
-interface AnalysisSummary {
-  experience_level: string
-  resume_score: ResumeScore | null
-  best_match: { name: string; percentage: number } | null
-  roadmap_total: number
-  roadmap_completed: number
-  skill_gaps_count: number
-  best_career_path: string
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function parseAnalysisSummary(record: any): AnalysisSummary {
-  const analysisObj = record?.analysis || {}
-  const experienceLevel =
-    analysisObj.analysis?.experience_level ||
-    analysisObj.experience_level ||
-    record.experience_level ||
-    'Beginner'
-
-  const resumeScore =
-    record.resume_score?.overall != null
-      ? record.resume_score
-      : analysisObj.resume_score || null
-
-  const careerPaths = record.career_paths || analysisObj.career_paths || []
-  const bestPath =
-    Array.isArray(careerPaths) && careerPaths.length > 0
-      ? careerPaths[0]
-      : null
-  const bestMatch = bestPath
-    ? {
-      name:
-        bestPath.name ||
-        bestPath.career_name ||
-        bestPath.title ||
-        'Unknown',
-      percentage:
-        bestPath.match_percentage ??
-        bestPath.match ??
-        bestPath.percentage ??
-        0,
-    }
-    : null
-
-  const firstPathName = bestMatch?.name || ''
-
-  const pathDetails = record?.path_details || {}
-  const pathSpecificRoadmap = firstPathName ? pathDetails[firstPathName]?.roadmap : null
-  const roadmap = pathSpecificRoadmap ||
-    analysisObj.roadmap ||
-    record.roadmap ||
-    { milestones: [] }
-  const roadmapTotal = roadmap?.milestones?.length || 0
-
-  const skillGaps =
-    analysisObj.skill_gaps ||
-    analysisObj.skill_gap ||
-    record.skill_gaps ||
-    []
-
-  return {
-    experience_level: experienceLevel,
-    resume_score: resumeScore,
-    best_match: bestMatch,
-    roadmap_total: roadmapTotal,
-    roadmap_completed: 0, // filled after roadmap progress fetch
-    skill_gaps_count: Array.isArray(skillGaps) ? skillGaps.length : 0,
-    best_career_path: bestMatch?.name || '',
-  }
-}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<{ email: string; id?: string } | null>(null)
-  const [loading, setLoading] = useState(true)
 
-  // Data states
-  const [brain, setBrain] = useState<CareerBrainData | null>(null)
-  const [brainLoading, setBrainLoading] = useState(true)
-  const [appStats, setAppStats] = useState({ applied: 0, interview: 0, rejected: 0, offer: 0 })
-  const [analysisSummary, setAnalysisSummary] = useState<AnalysisSummary | null>(null)
-  const [roadmapCompleted, setRoadmapCompleted] = useState(0)
-
-  const formatUsername = (email: string) => {
-    const prefix = email.split('@')[0]
-    const match = prefix.match(/^[a-zA-Z]+/)
-    if (match) return match[0].charAt(0).toUpperCase() + match[0].slice(1).toLowerCase()
-    return prefix.charAt(0).toUpperCase() + prefix.slice(1)
-  }
-
-  // ── Fetchers ──────────────────────────────────────────────────────────────
-
-  const getAuthHeaders = async (): Promise<Record<string, string>> => {
-    const { data: { session } } = await supabase.auth.getSession()
-    return {
-      'Content-Type': 'application/json',
-      ...(session?.access_token
-        ? { Authorization: `Bearer ${session.access_token}` }
-        : {}),
-    }
-  }
-
-  const loadCareerBrain = async () => {
-    try {
-      const headers = await getAuthHeaders()
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const res = await fetch(`${apiUrl}/api/v1/career-brain`, { headers })
-      if (res.ok) setBrain(await res.json())
-    } catch { /* no brain data */ }
-    finally { setBrainLoading(false) }
-  }
-
-  const loadAppStats = async () => {
-    try {
-      const headers = await getAuthHeaders()
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const res = await fetch(`${apiUrl}/api/v1/jobs/applications`, { headers })
-      if (res.ok) {
-        const data = await res.json()
-        setAppStats(data.status_counts || { applied: 0, interview: 0, rejected: 0, offer: 0 })
-      }
-    } catch { /* keep zeros */ }
-  }
-
-  const loadAnalysisSummary = async () => {
-    try {
-      const headers = await getAuthHeaders()
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const res = await fetch(`${apiUrl}/api/v1/analysis/`, { headers })
-      if (!res.ok) return
-      const data = await res.json()
-      if (data?.success && data?.data?.analysis) {
-        const summary = parseAnalysisSummary(data.data.analysis)
-        setAnalysisSummary(summary)
-
-        // Fetch roadmap progress for best career path
-        if (summary.best_career_path) {
-          try {
-            const progRes = await fetch(
-              `${apiUrl}/api/v1/roadmap/progress/${encodeURIComponent(summary.best_career_path)}`,
-              { headers }
-            )
-            if (progRes.ok) {
-              const progData = await progRes.json()
-              const progressMap: Record<number, string> = progData.progress_map || {}
-              const completed = Object.values(progressMap).filter(s => s === 'completed').length
-              setRoadmapCompleted(completed)
-              setAnalysisSummary(prev => prev ? { ...prev, roadmap_completed: completed } : prev)
-            }
-          } catch { /* roadmap progress unavailable */ }
-        }
-      }
-    } catch { /* no analysis data */ }
-  }
-
-  // ── Init ──────────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    const init = async () => {
-      try {
-        const { data: { user }, error } = await supabase.auth.getUser()
-        if (error || !user || !user.email) {
-          window.location.href = '/auth/login'
-          return
-        }
-        setUser({ email: user.email, id: user.id })
-        await Promise.all([
-          loadCareerBrain(),
-          loadAppStats(),
-          loadAnalysisSummary(),
-        ])
-      } catch {
-        window.location.href = '/auth/login'
-      } finally {
-        setLoading(false)
-      }
-    }
-    init()
-  }, [])
-
+  const { user, loading, brain, brainLoading, appStats, analysisSummary, roadmapCompleted } = useDashboard()
+  
   // ── Loading ───────────────────────────────────────────────────────────────
 
   if (loading) {
