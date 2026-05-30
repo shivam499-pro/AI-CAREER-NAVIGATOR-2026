@@ -170,7 +170,8 @@ export function useAnalysis(): UseAnalysisReturn {
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/auth/login'); return }
+      if (!user) { setLoading(false) 
+        router.push('/auth/login'); return }
       setUser(user)
       await checkExistingAnalysis(user.id)
     }
