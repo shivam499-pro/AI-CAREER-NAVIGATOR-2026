@@ -64,7 +64,9 @@ const INITIAL_PROFILE: ProfileFormData = {
 export function useProfile() {
   const router = useRouter()
   const isMountedRef = useRef(true)
-  useEffect(() => { return () => { isMountedRef.current = false } }, [])
+  useEffect(() => { 
+    isMountedRef.current = true
+    return () => { isMountedRef.current = false } }, [])
 
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<ProfileFormData>(INITIAL_PROFILE)
@@ -80,7 +82,7 @@ export function useProfile() {
     const { data: { session } } = await supabase.auth.getSession()
     return session?.access_token
       ? {
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${session.access_token}`, 
           'Content-Type': 'application/json',
         }
       : { 'Content-Type': 'application/json' }
@@ -102,7 +104,8 @@ export function useProfile() {
 
       setResumeUploaded(!!data.resume_text)
 
-      setProfile({
+      
+      if(isMountedRef.current) setProfile({
         user_type:            data.user_type            || '',
         college_name:         data.college_name         || '',
         degree:               data.degree               || '',

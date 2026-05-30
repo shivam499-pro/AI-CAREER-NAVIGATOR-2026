@@ -69,7 +69,9 @@ function parseAnalysisSummary(record: any): AnalysisSummary {
 
 export function useDashboard(): UseDashboardReturn {
   const isMountedRef = useRef(true)
-  useEffect(() => { return () => { isMountedRef.current = false } }, [])
+  useEffect(() => { 
+    isMountedRef.current = true
+    return () => { isMountedRef.current = false } }, [])
 
   const router = useRouter()
   const [user, setUser]                       = useState<{ email: string; id?: string } | null>(null)

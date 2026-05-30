@@ -66,7 +66,9 @@ function parseAnalysisRecord(record: any) {
 
 export function useAnalysis(): UseAnalysisReturn {
   const isMountedRef = useRef(true)
-  useEffect(() => { return () => { isMountedRef.current = false } }, [])
+  useEffect(() => { 
+    isMountedRef.current = true
+    return () => { isMountedRef.current = false } }, [])
 
   const router = useRouter()
   const [loading, setLoading] = useState(true)

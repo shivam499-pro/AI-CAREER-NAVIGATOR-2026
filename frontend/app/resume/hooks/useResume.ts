@@ -47,7 +47,9 @@ export interface UseResumeReturn {
 
 export function useResume(): UseResumeReturn {
   const isMountedRef = useRef(true)
-  useEffect(() => { return () => { isMountedRef.current = false } }, [])
+  useEffect(() => { 
+    isMountedRef.current = true
+    return () => { isMountedRef.current = false } }, [])
 
   const router = useRouter()
   const [user, setUser]                     = useState<any>(null)
