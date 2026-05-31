@@ -133,10 +133,6 @@ export default function InterviewPage() {
             <SetupScreen
               key="setup"
               careerPath={session.careerPath}
-              difficulty={session.difficulty}
-              personality={session.personality}
-              interviewMode={session.interviewMode}
-              simMode={session.simMode}
               careerPaths={session.careerPaths}
               pastSessions={session.pastSessions}
               loading={pageLoading}
