@@ -293,7 +293,7 @@ export default function OnboardingPage()
             <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-[#6C3FC8] to-[#8B5CF6] flex items-center justify-center">
               <Brain className="w-6 h-6 text-white" />
             </div>
-            <span className="text-xl font-bold text-white">AI Career Navigator</span>
+            <span className="text-xl font-bold text-white">Jaisuuu...</span>
           </Link>
           <div className="text-sm text-gray-400">
             Step {currentStep} of 7
