@@ -4,40 +4,72 @@
 
 @layer base {
   :root {
-    --background: 222 100% 18%;
-    /* Navy Blue - 60% dominant */
-    --foreground: 0 0% 100%;
-    /* White text */
-    --card: 222 100% 22%;
-    /* Slightly lighter Navy for cards */
-    --card-foreground: 0 0% 100%;
-    /* White text on cards */
-    --primary: 51 100% 50%;
-    /* Gold - accent */
-    --primary-foreground: 222 100% 18%;
-    /* Navy text on Gold buttons */
-    --secondary: 222 100% 25%;
-    /* Lighter Navy */
-    --secondary-foreground: 0 0% 100%;
-    /* White */
-    --muted: 222 100% 25%;
-    /* Muted Navy */
-    --muted-foreground: 0 0% 80%;
-    /* Light grey text */
-    --accent: 51 100% 50%;
-    /* Gold accent */
-    --accent-foreground: 222 100% 18%;
-    /* Navy on Gold */
-    --destructive: 0 84.2% 60.2%;
+    --background: 24 24% 8%;
+    /* Warm near-black - Sahara dark mode base */
+    --foreground: 34 62% 95%;
+    /* Warm off-white text */
+    --card: 28 25% 10%;
+    /* Slightly lighter warm-dark for cards */
+    --card-foreground: 34 62% 95%;
+    /* Warm off-white text on cards */
+    --primary: 23 64% 46%;
+    /* Terracotta - core brand color, CTAs */
+    --primary-foreground: 0 0% 100%;
+    /* White text on terracotta buttons */
+    --secondary: 30 26% 18%;
+    /* Warm muted dark */
+    --secondary-foreground: 34 62% 95%;
+    /* Warm off-white */
+    --muted: 30 26% 18%;
+    /* Muted warm dark */
+    --muted-foreground: 28 19% 65%;
+    /* Muted warm tan text */
+    --accent: 31 75% 64%;
+    /* Amber - secondary highlights, hover states */
+    --accent-foreground: 23 37% 12%;
+    /* Deep brown on amber */
+    --tech: 171 36% 48%;
+    /* Muted teal - sparing use for AI/data badges only */
+    --tech-foreground: 0 0% 100%;
+    /* White on teal */
+    --destructive: 0 72% 59%;
     /* Keep red for errors */
     --destructive-foreground: 0 0% 100%;
-    --border: 51 100% 50%;
-    /* Gold border */
-    --input: 222 100% 25%;
-    /* Navy input */
-    --ring: 51 100% 50%;
-    /* Gold focus ring */
+    --border: 30 26% 18%;
+    /* Warm dark border, subtle by default */
+    --input: 30 26% 18%;
+    /* Warm dark input */
+    --ring: 23 64% 46%;
+    /* Terracotta focus ring */
     --radius: 0.75rem;
+  }
+
+  .light {
+    --background: 34 62% 95%;
+    /* Warm off-white - Sahara light mode base */
+    --foreground: 23 37% 12%;
+    /* Deep brown text */
+    --card: 0 0% 100%;
+    /* White cards */
+    --card-foreground: 23 37% 12%;
+    /* Deep brown text on cards */
+    --primary: 23 64% 46%;
+    /* Terracotta - stays consistent across modes */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 37 40% 85%;
+    /* Light warm border/surface tone */
+    --secondary-foreground: 23 37% 12%;
+    --muted: 37 40% 90%;
+    --muted-foreground: 28 19% 45%;
+    --accent: 31 75% 64%;
+    --accent-foreground: 23 37% 12%;
+    --tech: 171 36% 40%;
+    --tech-foreground: 0 0% 100%;
+    --destructive: 0 72% 59%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 37 40% 85%;
+    --input: 37 40% 90%;
+    --ring: 23 64% 46%;
   }
 }
 
@@ -51,17 +83,21 @@
   }
 }
 
-/* Updated gradients - Navy + Gold theme */
+/* Sahara gradients - Terracotta + warm dark theme */
 .gradient-primary {
-  background: linear-gradient(135deg, #001F5B 0%, #002d8a 50%, #003580 100%);
+  background: linear-gradient(135deg, #1A1410 0%, #2B1D14 50%, #3A2E22 100%);
 }
 
 .gradient-hero {
-  background: linear-gradient(180deg, #001F5B 0%, #002470 100%);
+  background: linear-gradient(180deg, #1A1410 0%, #211A14 100%);
 }
 
 .gradient-card {
-  background: linear-gradient(145deg, #002470 0%, #001F5B 100%);
+  background: linear-gradient(145deg, #211A14 0%, #1A1410 100%);
+}
+
+.gradient-cta {
+  background: linear-gradient(135deg, #C2652A 0%, #E8A55C 100%);
 }
 
 /* Animation classes */
@@ -81,24 +117,37 @@
   }
 }
 
-/* Scrollbar styling - Gold theme */
+@keyframes shimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+@keyframes ping-slow {
+  75%, 100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+
+/* Scrollbar styling - Sahara theme */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #001F5B;
-  /* Navy track */
+  background: #1A1410;
+  /* Warm dark track */
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #FFD700;
-  /* Gold thumb */
+  background: #C2652A;
+  /* Terracotta thumb */
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #FFC200;
-  /* Darker Gold on hover */
+  background: #A8531F;
+  /* Darker terracotta on hover */
 }

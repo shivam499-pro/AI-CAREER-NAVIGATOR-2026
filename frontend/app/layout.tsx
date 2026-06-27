@@ -10,7 +10,7 @@ export const metadata = {
   title: 'Jaisuuu - Your Personal AI Career Mentor',
   description: 'Get personalized career analysis, skill gap insights, and AI interview coaching.',
   icons: {
-    icon: '/favicon.ico',
+    icon: '/logo.png',
   },
 }
 
@@ -21,7 +21,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}<Toaster /></body>
+      <body className={inter.className}>
+        {children}
+        <Toaster />
+      </body>
     </html>
   )
 }
