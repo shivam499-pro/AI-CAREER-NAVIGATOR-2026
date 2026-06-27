@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from datetime import date, timedelta
-from core.supabase_client import supabase
+from core.supabase_client import get_supabase
 from core.middleware import get_current_user, AuthenticatedUser
 
 limiter = Limiter(key_func=get_remote_address)
@@ -19,7 +19,7 @@ async def get_streak(current_user: AuthenticatedUser = Depends(get_current_user)
     Fetch current user's streak data.
     """
     try:
-        response = supabase.table("user_streaks").select("*").eq("user_id", current_user.id).execute()
+        response = get_supabase().table("user_streaks").select("*").eq("user_id", current_user.user_id).execute()
 
         if response.data and len(response.data) > 0:
             streak_data = response.data[0]
@@ -53,7 +53,7 @@ async def update_streak(
     try:
         today = date.today()
 
-        response = supabase.table("user_streaks").select("*").eq("user_id", current_user.id).execute()
+        response = get_supabase().table("user_streaks").select("*").eq("user_id", current_user.user_id).execute()
 
         if response.data and len(response.data) > 0:
             streak_data = response.data[0]
@@ -82,13 +82,13 @@ async def update_streak(
                 new_longest = max(longest_streak, new_streak)
                 new_total = streak_data.get("total_sessions", 0) + 1
 
-                supabase.table("user_streaks").update({
+                get_supabase().table("user_streaks").update({
                     "current_streak": new_streak,
                     "longest_streak": new_longest,
                     "last_practice_date": today.isoformat(),
                     "total_sessions": new_total,
                     "updated_at": "now()"
-                }).eq("user_id", current_user.id).execute()
+                }).eq("user_id", current_user.user_id).execute()
 
                 return {
                     "current_streak": new_streak,
@@ -100,12 +100,12 @@ async def update_streak(
             else:
                 new_total = streak_data.get("total_sessions", 0) + 1
 
-                supabase.table("user_streaks").update({
+                get_supabase().table("user_streaks").update({
                     "current_streak": 1,
                     "last_practice_date": today.isoformat(),
                     "total_sessions": new_total,
                     "updated_at": "now()"
-                }).eq("user_id", current_user.id).execute()
+                }).eq("user_id", current_user.user_id).execute()
 
                 return {
                     "current_streak": 1,
@@ -115,8 +115,8 @@ async def update_streak(
                     "message": "Don't break your streak! Come back tomorrow 💪"
                 }
         else:
-            supabase.table("user_streaks").insert({
-                "user_id": current_user.id,
+            get_supabase().table("user_streaks").insert({
+                "user_id": current_user.user_id,
                 "current_streak": 1,
                 "longest_streak": 1,
                 "last_practice_date": today.isoformat(),

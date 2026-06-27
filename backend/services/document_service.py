@@ -5,6 +5,7 @@ Business logic for document operations including:
 - Extract skills (basic or AI-ready)
 - List documents
 """
+import re
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from core.supabase_client import get_supabase
@@ -41,7 +42,8 @@ def extract_basic_skills(text: str) -> List[str]:
     found_skills = set()
     
     for skill in TECH_SKILLS:
-        if skill in text_lower:
+        pattern = r'\b' + re.escape(skill) + r'\b'
+        if re.search(pattern, text_lower):
             found_skills.add(skill)
     
     return list(found_skills)

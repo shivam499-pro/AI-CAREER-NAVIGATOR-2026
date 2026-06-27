@@ -41,8 +41,7 @@ export default function SignUpPage() {
       setError(error.message)
       setLoading(false)
     } else {
-      // Use window.location.href for full page reload to ensure middleware picks up session
-      window.location.href = '/onboarding'
+      router.push('/onboarding')
     }
   }
 
@@ -87,7 +86,7 @@ export default function SignUpPage() {
 
           {/* Error message */}
           {error && (
-            <div className="mb-6 p-4 bg-error/10 border border-error/20 rounded-lg text-error text-sm">
+            <div role="alert" className="mb-6 p-4 bg-error/10 border border-error/20 rounded-lg text-error text-sm">
               {error}
             </div>
           )}

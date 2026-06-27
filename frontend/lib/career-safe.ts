@@ -1,21 +1,7 @@
-/**
- * 🎯 CAREER SAFE - Unified Data Contract Layer
- * 
- * This is the single source of truth for all career data safety.
- * All pages (interview, progress, evolution API, profile API) use these
- * safe accessors to prevent null/undefined crashes.
- * 
- * Usage:
- *   import { safeSession, safeNumber, safeArray, fetchCareerIntelligence } from '@/lib/career-safe'
- */
 
 import { supabase } from './supabase'
 
-// ============================================
-// TYPE DEFINITIONS
-// ============================================
 
-/** Career path with score from evolution API */
 export interface SafeCareerPath {
   career_path: string
   avg_score: number
@@ -157,27 +143,13 @@ export function safeSession(session: unknown): SafeSession {
   }
 }
 
-/**
- * Safe evolution accessor - always returns valid evolution object
- * Handles empty arrays as valid (new user) not null (error)
- */
 export function safeEvolution(evolution: unknown): EvolutionData | null {
   if (!evolution || typeof evolution !== 'object') {
     return null
   }
   
   const e = evolution as Record<string, unknown>
-  
-  // Handle both null/undefined AND empty array as valid empty state
-  if (!e.career_paths) {
-    return null
-  }
-  
-  // Empty array is a valid empty state (new user), not null
-  if (!Array.isArray(e.career_paths)) {
-    return null
-  }
-  
+
   // Normalize trend values from backend (could be lowercase or uppercase)
   const normalizeTrend = (trend: unknown): EvolutionData['overall_growth_state'] => {
     const t = safeString(trend, 'stagnating').toLowerCase()
@@ -186,6 +158,8 @@ export function safeEvolution(evolution: unknown): EvolutionData | null {
     return 'stagnating'
   }
 
+  // Missing or non-array career_paths is a valid empty state (new user),
+  // not a reason to null out the entire object.
   return {
     user_id: safeString(e.user_id),
     career_paths: safeArray<SafeCareerPath>(e.career_paths),
@@ -287,13 +261,6 @@ export function safeProfileProgress(progress: unknown): SafeProfileProgress | nu
   }
 }
 
-// ============================================
-// READINESS HELPERS
-// ============================================
-
-/**
- * Determine readiness mode from progress
- */
 export function determineReadiness(profileProgress: SafeProfileProgress | null): 'FOUNDATION' | 'GROWTH' | 'JOB_READY' {
   if (!profileProgress) return 'FOUNDATION'
   
@@ -305,51 +272,33 @@ export function determineReadiness(profileProgress: SafeProfileProgress | null):
   return 'FOUNDATION'
 }
 
-/**
- * Calculate intelligence score from multiple sources
- */
 export function calculateIntelligenceScore(
   progress: ProgressData | null,
   evolution: EvolutionData | null,
   profileProgress: SafeProfileProgress | null
 ): number {
   let score = 0
-  let weights = 0
-  
-  // Progress sessions (40%)
+
+  // Progress sessions (40% of total, fixed)
   if (progress?.sessions && progress.sessions.length > 0) {
     const avgScore = progress.sessions.reduce((sum: number, s: SafeSession) => sum + safeNumber(s.total_score), 0) / progress.sessions.length
     score += (avgScore / 50) * 40
-    weights += 40
   }
-  
-  // Evolution confidence (30%)
+
+  // Evolution confidence (30% of total, fixed)
   if (evolution?.career_paths && evolution.career_paths.length > 0) {
     const avgConfidence = evolution.career_paths.reduce((sum: number, cp: SafeCareerPath) => sum + safeNumber(cp.confidence), 0) / evolution.career_paths.length
-    score += avgConfidence * 0.3
-    weights += 30
+    score += avgConfidence * 30
   }
-  
-  // Profile completion (30%)
+
+  // Profile completion (30% of total, fixed)
   if (profileProgress) {
     score += profileProgress.total * 0.3
-    weights += 30
   }
-  
-  if (weights > 0) {
-    return Math.round((score / weights) * 100)
-  }
-  
-  return 0
+
+  return Math.round(score)
 }
 
-// ============================================
-// VALIDATION HELPERS
-// ============================================
-
-/**
- * Check if career path data is valid
- */
 export function isValidCareerPath(path: SafeCareerPath | null | undefined): boolean {
   if (!path) return false
   return path.career_path.length > 0 && path.total_sessions > 0
@@ -386,15 +335,7 @@ export function getStrongestPath(evolution: EvolutionData | null): SafeCareerPat
     .sort((a, b) => b.avg_score - a.avg_score)[0] || null
 }
 
-// ============================================
-// STEP 3.2: UNIFIED API LAYER - fetchCareerIntelligence
-// ============================================
-
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-
-// =============================================================================
-// DEBUG LOGGING SYSTEM
-// =============================================================================
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
@@ -451,17 +392,6 @@ export const careerLogger = {
   clear: () => logBuffer.length = 0
 }
 
-/**
- * 🎯 fetchCareerIntelligence - Single brain API layer
- * 
- * Fetches all career intelligence data in one call:
- * - Progress data from /api/interview/progress/{userId}
- * - Evolution data from /api/career/evolution/{userId}
- * - Profile progress from /api/profile/progress/{userId}
- * 
- * IMPROVED: Handles partial API failures gracefully.
- * If one endpoint fails, we still return what we have.
- */
 export async function fetchCareerIntelligence(userId: string): Promise<CareerIntelligence> {
   const defaultResult: CareerIntelligence = {
     progress: null,
@@ -562,20 +492,10 @@ export async function fetchCareerIntelligence(userId: string): Promise<CareerInt
   }
 }
 
-// ============================================
-// STEP 3.3: STANDARDIZED LOADING STATE SYSTEM
-// ============================================
-
-/**
- * Check if loading state is considered "loading"
- */
 export function isLoading(state: CareerLoadingState): boolean {
   return state === 'loading'
 }
 
-/**
- * Check if loading state has data ready
- */
 export function isReady(state: CareerLoadingState): boolean {
   return state === 'ready'
 }
@@ -587,14 +507,6 @@ export function hasError(state: CareerLoadingState): boolean {
   return state === 'error'
 }
 
-// ============================================
-// STEP 3.4: FALLBACK DATA
-// ============================================
-
-/**
- * Fallback questions for interview page when no questions available
- * This ensures the interview page NEVER shows a blank screen
- */
 export const FALLBACK_QUESTIONS = [
   {
     id: 1,
@@ -648,15 +560,6 @@ export const EMPTY_EVOLUTION_DATA: EvolutionData = {
   overall_growth_state: 'stagnating'
 }
 
-// ============================================
-// STEP 6.7: DEBUG MODE FLAG
-// ============================================
-
-/**
- * DEBUG MODE FLAG
- * Set to true in browser console to see career brain logs
- * Usage: In console type: window.__DEV_SHOW_CAREER_BRAIN = true
- */
 export function enableBrainDebug() {
   if (typeof window !== 'undefined') {
     (window as any).__DEV_SHOW_CAREER_BRAIN = true

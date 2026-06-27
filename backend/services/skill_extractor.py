@@ -4,6 +4,7 @@ AI-powered extraction of skills from resumes, job descriptions, and profiles.
 """
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from typing import Optional
 from supabase import create_client
@@ -74,7 +75,8 @@ class SkillExtractor:
             found_skills = []
             for skill in keywords:
                 # Check for exact match or word boundary
-                if skill in text_lower:
+                pattern = r'\b' + re.escape(skill) + r'\b'
+                if re.search(pattern, text_lower):
                     found_skills.append(skill)
             
             if found_skills:
@@ -106,13 +108,15 @@ class SkillExtractor:
         # Extract all skills
         for category, keywords in SKILL_CATEGORIES.items():
             for skill in keywords:
-                if skill in text_lower:
+                pattern = r'\b' + re.escape(skill) + r'\b'
+                if re.search(pattern, text_lower):
                     required_skills.append(skill)
         
         # Try to identify preferred skills (nice to have, plus, preferred)
         nice_to_have_keywords = ["preferred", "nice to have", "plus", "bonus"]
         for keyword in nice_to_have_keywords:
-            if keyword in text_lower:
+            pattern = r'\b' + re.escape(keyword) + r'\b'
+            if re.search(pattern, text_lower):
                 # This would need more sophisticated parsing
                 # For now, mark all as required
                 break

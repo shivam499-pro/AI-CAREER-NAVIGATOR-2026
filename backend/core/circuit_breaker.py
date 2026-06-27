@@ -120,7 +120,7 @@ class CircuitBreaker:
             self._failure_count = 0
             self._success_count += 1
             
-            if self._state == CircuitState.HALF_OPEN:
+            if self.state == CircuitState.HALF_OPEN:
                 # After enough successes, close the circuit
                 if self._success_count >= self.config.half_open_max_calls:
                     logger.info(f"Circuit {self.name} recovered, CLOSING")
@@ -134,7 +134,7 @@ class CircuitBreaker:
             self._failure_count += 1
             self._last_failure_time = time.time()
             
-            if self._state == CircuitState.HALF_OPEN:
+            if self.state == CircuitState.HALF_OPEN:
                 # Any failure in half-open reopens the circuit
                 logger.warning(f"Circuit {self.name} failure in HALF_OPEN, REOPENING")
                 self._state = CircuitState.OPEN

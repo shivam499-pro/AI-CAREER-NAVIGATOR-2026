@@ -20,11 +20,34 @@ interface UseVoiceInputProps {
 }
 
 // ─── Filler words for communication score ────────────────────────────────────
-
+//
+// KNOWN GAP (documented, not changed - pending product/feature-owner review):
+// 'right' and 'okay' are common, legitimate words in normal articulate speech
+// (e.g. "that felt right for the use case", "everything turned out okay") and
+// not exclusively filler. Counting them as fillers produces real false
+// positives: a thoughtful, completely filler-free answer that happens to use
+// these words a few times can be scored as if it were full of verbal tics.
+// This was confirmed with concrete examples during testing - a 68-word,
+// filler-free sample answer dropped from "Masterful delivery!" to "Try
+// pausing briefly..." purely from natural use of "right" (x3) and "okay"
+// (x2). Left as-is because this is a product/scoring-design decision (how
+// aggressively to flag these words), not a code-correctness bug - whoever
+// owns this coaching feature should decide whether the false-positive rate
+// is acceptable for the value caught.
 const FILLER_WORDS = [
     'um', 'uh', 'like', 'you know', 'basically', 'literally',
     'actually', 'sort of', 'kind of', 'right', 'okay', 'so yeah',
 ]
+
+// Minimum substantive word count before a transcript can earn the
+// "Masterful delivery!" tip. FIX: previously, an empty or near-empty
+// transcript (e.g. speech recognition produced no usable text) trivially
+// had zero filler words, so it could still score >= 80 and be told it was
+// "Masterful" - misleading feedback about an answer that wasn't really
+// given. This floor is an engineering judgment call on what counts as
+// "substantive", not a value derived from any specific research; adjust if
+// product feedback suggests otherwise.
+const MIN_WORDS_FOR_MASTERFUL_TIP = 10
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -254,7 +277,11 @@ export function useVoiceInput({
         if (wordCount > 200) score -= 10
         score = Math.max(0, score)
 
-        const tip = score >= 80
+        // FIX: require a minimum substantive word count before the
+        // "Masterful" tip can apply. See MIN_WORDS_FOR_MASTERFUL_TIP comment
+        // above for why - an empty/near-empty transcript trivially has zero
+        // filler words and could otherwise be told it was masterful.
+        const tip = (score >= 80 && wordCount >= MIN_WORDS_FOR_MASTERFUL_TIP)
             ? 'Masterful delivery! 🎙️'
             : 'Try pausing briefly instead of using filler words.'
 

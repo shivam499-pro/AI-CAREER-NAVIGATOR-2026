@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from typing import Optional, List
 from pydantic import BaseModel
 from services import profile_service
+from lib.auth import get_current_user
 
 # Import security middleware components
 from core.middleware import (
@@ -36,7 +37,7 @@ class ProfileSaveRequest(BaseModel):
     branch: Optional[str] = None
     year_of_study: Optional[str] = None
     graduation_year: Optional[int] = None
-    cgpa: Optional[float] = None
+    cgpa: Optional[str] = None
     # Professional
     current_job_title: Optional[str] = None
     current_company: Optional[str] = None
@@ -66,6 +67,7 @@ class ProfileSaveRequest(BaseModel):
 # Using centralized get_current_user from middleware
 
 
+
 @router.get("/me")
 async def get_my_profile(user: AuthenticatedUser = Depends(get_current_user)):
     """
@@ -92,16 +94,14 @@ async def get_my_profile(user: AuthenticatedUser = Depends(get_current_user)):
 @router.post("/save")
 async def save_my_profile(
     profile_data: ProfileSaveRequest,
-    user: AuthenticatedUser = Depends(
-        require_permission(Permission.WRITE_PROFILE)
-    )
+    user: AuthenticatedUser = Depends(get_current_user)
 ):
     """
     Save current user's profile.
     """
     try:
         # Convert to dict, excluding None values
-        data = profile_data.dict(exclude_none=True)
+        data = profile_data.model_dump(exclude_none=True)
         
         success = profile_service.save_profile(user.user_id, data)
         

@@ -104,6 +104,9 @@ describe('useAnalysis', () => {
       })
 
       const { result } = renderHook(() => useAnalysis())
+      await act(async () => {
+        await result.current.runAnalysis('user-123')
+      })
 
       await waitFor(() => expect(result.current.loading).toBe(false))
 
@@ -173,8 +176,8 @@ describe('useAnalysis', () => {
   // -- Run new analysis ------------------------------------------------------
 
   describe('runAnalysis', () => {
-    beforeEach(() => { jest.useFakeTimers() })   // ← ADD
-    afterEach(() => { jest.useRealTimers() })    // ← ADD
+    beforeEach(() => { jest.useFakeTimers() })
+    afterEach(() => { jest.useRealTimers() })
     it.skip('starts analysis job and polls until completed', async () => {
       mockAuthOk()
       mockCheckExisting.mockResolvedValue({ exists: false })
@@ -251,16 +254,18 @@ describe('useAnalysis', () => {
       expect(mockGetJobStatus).toHaveBeenCalledTimes(10)
     })
 
-    it.skip('sets error when no auth token during runAnalysis', async () => {
+    it('sets error when no auth token during runAnalysis', async () => {
       mockGetUser.mockResolvedValue({ data: { user: USER } })
       mockGetSession.mockResolvedValue({ data: { session: null } })
       mockCheckExisting.mockResolvedValue({ exists: false })
 
       const { result } = renderHook(() => useAnalysis())
 
-      await waitFor(() => expect(result.current.loading).toBe(false))
-
-      expect(result.current.error).toBe('User not authenticated. Please login again.')
+      await waitFor(() => {
+        expect(result.current.error).toBe(
+          'User not authenticated. Please login again.'
+        )
+      })
     })
   })
 
@@ -390,8 +395,7 @@ describe('useAnalysis', () => {
 
       renderHook(() => useAnalysis())
 
-      await act(async () => { jest.advanceTimersByTime(100) })
-
+      await new Promise(resolve => setTimeout(resolve, 50))
       expect(mockGetProgress).not.toHaveBeenCalled()
     })
   })
@@ -399,6 +403,10 @@ describe('useAnalysis', () => {
   // -- parseAnalysisRecord edge cases ----------------------------------------
 
   describe('parseAnalysisRecord edge cases', () => {
+
+    beforeEach(() => jest.useRealTimers())
+    afterEach(() => jest.useFakeTimers())
+
     it('handles missing career_paths gracefully', async () => {
       mockAuthOk()
       const emptyRecord = {

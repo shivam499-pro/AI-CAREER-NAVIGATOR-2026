@@ -66,69 +66,118 @@ function parseAnalysisSummary(record: any): AnalysisSummary {
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
-
 export function useDashboard(): UseDashboardReturn {
   const isMountedRef = useRef(true)
-  useEffect(() => { 
+
+  useEffect(() => {
     isMountedRef.current = true
-    return () => { isMountedRef.current = false } }, [])
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   const router = useRouter()
-  const [user, setUser]                       = useState<{ email: string; id?: string } | null>(null)
-  const [loading, setLoading]                 = useState(true)
-  const [brain, setBrain]                     = useState<CareerBrainData | null>(null)
-  const [brainLoading, setBrainLoading]       = useState(true)
-  const [appStats, setAppStats]               = useState<AppStats>({ applied: 0, interview: 0, rejected: 0, offer: 0 })
+
+  const [user, setUser] = useState<{ email: string; id?: string } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [brain, setBrain] = useState<CareerBrainData | null>(null)
+  const [brainLoading, setBrainLoading] = useState(true)
+  const [appStats, setAppStats] = useState<AppStats>({
+    applied: 0,
+    interview: 0,
+    rejected: 0,
+    offer: 0,
+  })
   const [analysisSummary, setAnalysisSummary] = useState<AnalysisSummary | null>(null)
   const [roadmapCompleted, setRoadmapCompleted] = useState(0)
 
   const loadData = useCallback(async (token: string) => {
-    const [brainData, stats, rawAnalysis] = await Promise.all([
-      dashboardClient.getCareerBrain(token),
-      dashboardClient.getApplicationStats(token),
-      dashboardClient.getAnalysis(token),
-    ])
+    setBrainLoading(true)
+    
+    try {
+      const [brainData, stats, rawAnalysis] = await Promise.all([
+        dashboardClient.getCareerBrain(token),
+        dashboardClient.getApplicationStats(token),
+        dashboardClient.getAnalysis(token),
+      ])
 
-    if (!isMountedRef.current) return
+      if (!isMountedRef.current) return
+      let summary: AnalysisSummary | null = null
+      let completed = 0
+    
+      if (rawAnalysis) {
+        summary = parseAnalysisSummary(rawAnalysis)
+        setAnalysisSummary(summary)
 
-    setBrain(brainData)
-    setBrainLoading(false)
-    setAppStats(stats)
+        if (summary.best_career_path) {
+          const progressMap =
+            await dashboardClient.getRoadmapProgress(
+              token,
+              summary.best_career_path
+            )
 
-    if (rawAnalysis) {
-      const summary = parseAnalysisSummary(rawAnalysis)
-      setAnalysisSummary(summary)
+          if (!isMountedRef.current) return
 
-      if (summary.best_career_path) {
-        const progressMap = await dashboardClient.getRoadmapProgress(token, summary.best_career_path)
-        if (!isMountedRef.current) return
-        const completed = Object.values(progressMap).filter(s => s === 'completed').length
-        setRoadmapCompleted(completed)
-        setAnalysisSummary(prev => prev ? { ...prev, roadmap_completed: completed } : prev)
+          completed = Object.values(progressMap).filter(
+            s => s === 'completed'
+          ).length
+        }
+      }
+      if (!isMountedRef.current) return
+      setBrain(brainData)
+      setAppStats(stats)
+      setAnalysisSummary(
+        summary ? { ...summary, roadmap_completed: completed } : null
+      )
+      setRoadmapCompleted(completed)
+    } catch (e) {
+      router.push('/auth/login')
+    } finally {
+      if (isMountedRef.current) {
+        setBrainLoading(false)
+        setLoading(false)
       }
     }
-  }, [])
+  }, [router])
 
   useEffect(() => {
     const init = async () => {
       try {
         const { data: { user }, error } = await supabase.auth.getUser()
-        if (error || !user?.email) { router.push('/auth/login'); return }
+
+        if (error || !user?.email) {
+          router.push('/auth/login')
+          return
+        }
 
         setUser({ email: user.email, id: user.id })
 
         const { data: { session } } = await supabase.auth.getSession()
-        if (!session?.access_token) { router.push('/auth/login'); return }
+
+        if (!session?.access_token) {
+          router.push('/auth/login')
+          return
+        }
 
         await loadData(session.access_token)
+
       } catch {
         router.push('/auth/login')
       } finally {
         if (isMountedRef.current) setLoading(false)
       }
     }
+
     init()
   }, [router, loadData])
 
-  return { user, loading, brain, brainLoading, appStats, analysisSummary, roadmapCompleted }
+  return {
+    user,
+    loading,
+    brain,
+    brainLoading,
+    appStats,
+    analysisSummary,
+    roadmapCompleted,
+  }
 }

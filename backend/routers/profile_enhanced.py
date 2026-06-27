@@ -1,26 +1,3 @@
-"""
-C:\project-2026\Career-navigator\backend\routers\profile_enhanced.py
-
-
-Enhanced Profile Router
-Handles enhanced profile data (academic, skills, experience, achievements, goals)
-
-Run this in Supabase SQL Editor to add missing columns:
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS user_type text;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS year_of_study text;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS graduation_year integer;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS cgpa text;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS current_job_title text;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS current_company text;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS years_of_experience integer;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS current_tech_stack jsonb;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS reason_for_switching text;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS career_goal text;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS target_companies jsonb;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS preferred_work_type text;
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS job_search_timeline text;
-"""
-
 from fastapi import APIRouter, HTTPException, Depends
 from lib.auth import get_current_user
 from pydantic import BaseModel
@@ -116,7 +93,7 @@ async def save_enhanced_profile(profile: EnhancedProfileRequest, user: Any = Dep
     """
     try:
         user_id = profile.user_id
-        profile_data = profile.dict(exclude_unset=True)
+        profile_data = profile.model_dump(exclude_unset=True)
         
         # Remove user_id from profile_data since we'll use it for matching
         profile_data.pop("user_id", None)

@@ -6,18 +6,14 @@ Called internally by backend endpoints (no frontend dependency).
 import os
 import logging
 from datetime import datetime
-from supabase import create_client
 from dotenv import load_dotenv
+from core.supabase_client import get_supabase
+
 
 # Load environment
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-
-# Supabase client
-supabase_url = os.getenv("SUPABASE_URL")
-supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
-supabase = create_client(supabase_url, supabase_key)
 
 
 # =============================================================================
@@ -139,7 +135,7 @@ BADGES = {
 def get_user_earned_badges(user_id: str) -> set:
     """Get set of badge_ids user already has."""
     try:
-        response = supabase.table("user_badges").select("badge_id").eq("user_id", user_id).execute()
+        response = get_supabase().table("user_badges").select("badge_id").eq("user_id", user_id).execute()
         if response.data:
             return {b.get("badge_id") for b in response.data}
         return set()
@@ -151,7 +147,7 @@ def get_user_earned_badges(user_id: str) -> set:
 def get_user_streak_data(user_id: str) -> dict:
     """Get user's streak data."""
     try:
-        response = supabase.table("user_streaks").select("*").eq("user_id", user_id).execute()
+        response = get_supabase().table("user_streaks").select("*").eq("user_id", user_id).execute()
         if response.data and len(response.data) > 0:
             return response.data[0]
         return {
@@ -167,7 +163,7 @@ def get_user_streak_data(user_id: str) -> dict:
 def get_user_rank_data(user_id: str) -> dict:
     """Get user's rank/level data."""
     try:
-        response = supabase.table("user_ranks").select("*").eq("user_id", user_id).execute()
+        response = get_supabase().table("user_ranks").select("*").eq("user_id", user_id).execute()
         if response.data and len(response.data) > 0:
             return response.data[0]
         return {"xp": 0, "level": 1}
@@ -179,7 +175,7 @@ def get_user_rank_data(user_id: str) -> dict:
 def get_challenges_created_count(user_id: str) -> int:
     """Get number of challenges created by user."""
     try:
-        response = supabase.table("challenges").select("id").eq("creator_id", user_id).execute()
+        response = get_supabase().table("challenges").select("id").eq("creator_id", user_id).execute()
         return len(response.data) if response.data else 0
     except Exception as e:
         logger.error(f"Error fetching challenges count: {e}")
@@ -190,7 +186,7 @@ def award_badge(user_id: str, badge_id: str) -> dict | None:
     """Award a badge to user. Returns badge info if successful, None if duplicate."""
     try:
         # Insert badge (DB unique constraint prevents duplicates)
-        supabase.table("user_badges").insert({
+        get_supabase().table("user_badges").insert({
             "user_id": user_id,
             "badge_id": badge_id,
             "earned_at": datetime.utcnow().isoformat()
@@ -222,14 +218,14 @@ def add_xp_to_user(user_id: str, xp_amount: int) -> dict:
         
         # Update or insert rank
         if rank_data.get("xp", 0) > 0:
-            supabase.table("user_ranks").update({
+            get_supabase().table("user_ranks").update({
                 "xp": new_xp,
                 "level": new_level,
                 "rank_title": new_title,
                 "updated_at": datetime.utcnow().isoformat()
             }).eq("user_id", user_id).execute()
         else:
-            supabase.table("user_ranks").insert({
+            get_supabase().table("user_ranks").insert({
                 "user_id": user_id,
                 "xp": new_xp,
                 "level": new_level,
@@ -326,7 +322,7 @@ def check_and_award_badges(user_id: str, event: str, event_data: dict = None) ->
         # =========================================================================
         if event == "session_complete":
             # First session
-            if "first_session" not in earned_badges and total_sessions >= 1:
+            if "first_session" not in earned_badges and total_sessions >= 0:
                 badges_to_award.append("first_session")
             
             # 10 sessions
@@ -428,48 +424,69 @@ def check_and_award_badges(user_id: str, event: str, event_data: dict = None) ->
             "rank_update": None
         }
 
+"""
+badge_service.py — PATCH
+Replace the broken check_badges_on_session_complete function (bottom of file).
 
-# =============================================================================
-# HELPER FUNCTION FOR ENDPOINTS
-# Easy way for endpoints to check badges without knowing implementation details
-# =============================================================================
+The original builds an `events` list then ignores it entirely,
+hardcoding "session_complete" and never firing hard_mode/simulation/voice_used.
 
-def check_badges_on_session_complete(user_id: str, total_score: float = None, difficulty: str = None, is_simulation: bool = False, is_voice: bool = False) -> dict:
+FIND this entire function in badge_service.py and replace with the version below.
+"""
+
+
+def check_badges_on_session_complete(
+    user_id: str,
+    total_score: float = None,
+    difficulty: str = None,
+    is_simulation: bool = False,
+    is_voice: bool = False
+) -> dict:
     """
-    Convenience function to check badges after interview session completion.
-    
+    Convenience function to check all applicable badges after a session.
+
+    Fires every relevant event independently so each badge check
+    runs with the correct event context — no silent skips.
+
     Args:
-        user_id: User who completed the session
-        total_score: Score achieved (for perfect score check)
-        difficulty: "easy", "medium", "hard"
-        is_simulation: Whether simulation mode was used
-        is_voice: Whether voice input was used
-    
+        user_id:       User who completed the session
+        total_score:   Score achieved (triggers perfect_score check if == 50)
+        difficulty:    "easy" | "medium" | "hard"
+        is_simulation: Whether simulation mode was active
+        is_voice:      Whether voice input was used
+
     Returns:
-        Badge check result dict
+        Merged result: { new_badges, total_xp_earned, rank_update }
     """
-    events = ["session_complete"]  # Always check session-based badges
-    
-    # Add event-specific triggers
+    merged: dict = {
+        "new_badges": [],
+        "total_xp_earned": 0,
+        "rank_update": None
+    }
+
+    # Always fire session_complete — covers first_session, sessions_10,
+    # sessions_50, streak_7, streak_30, level_5
+    _merge(merged, check_and_award_badges(user_id, "session_complete"))
+
     if total_score == 50:
-        events.append("perfect_score")
-    
+        _merge(merged, check_and_award_badges(user_id, "perfect_score"))
+
     if difficulty == "hard":
-        events.append("hard_mode")
-    
+        _merge(merged, check_and_award_badges(user_id, "hard_mode"))
+
     if is_simulation:
-        events.append("simulation")
-    
+        _merge(merged, check_and_award_badges(user_id, "simulation"))
+
     if is_voice:
-        events.append("voice_used")
-    
-    # Run badge check with all applicable events
-    result = check_and_award_badges(user_id, "session_complete")
-    
-    # Also check perfect score if applicable
-    if total_score == 50:
-        ps_result = check_and_award_badges(user_id, "perfect_score")
-        result["new_badges"].extend(ps_result["new_badges"])
-        result["total_xp_earned"] += ps_result["total_xp_earned"]
-    
-    return result
+        _merge(merged, check_and_award_badges(user_id, "voice_used"))
+
+    return merged
+
+
+def _merge(base: dict, update: dict) -> None:
+    """Merge a badge check result into the accumulator in-place."""
+    base["new_badges"].extend(update.get("new_badges", []))
+    base["total_xp_earned"] += update.get("total_xp_earned", 0)
+    # Keep the latest rank_update (last event that awarded XP wins)
+    if update.get("rank_update") is not None:
+        base["rank_update"] = update["rank_update"]

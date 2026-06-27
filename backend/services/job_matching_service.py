@@ -256,16 +256,17 @@ def calculate_career_goal_match(profile: Dict[str, Any], job_title: str) -> floa
     
     goal_lower = career_goal.lower()
     title_lower = job_title.lower()
-    
+    goal_category = None
     # Check which category the career goal belongs to
     for category, keywords in CAREER_GOAL_KEYWORDS.items():
         if any(kw in goal_lower for kw in keywords):
-            # User wants this category, check if job matches
-            if any(kw in title_lower for kw in keywords):
-                return 1.0
+            goal_category = (category, keywords)
             break
-    
-    # Also check job title for tech stack alignment
+    if goal_category:
+        _, keywords = goal_category
+        if any(kw in title_lower for kw in keywords):
+            return 1.0 
+        return 0.5  
     for skill in TECH_SKILLS:
         if skill in goal_lower and skill in title_lower:
             return 1.0

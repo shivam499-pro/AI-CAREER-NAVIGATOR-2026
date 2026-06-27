@@ -2,6 +2,7 @@
 AI Service using Google Gemini 2.5 Flash (Free Tier)
 6 calls combined into 1 using smart caching
 """
+from core.gemini_transport import AsyncGeminiTransport, RateLimitError as TransportRateLimitError
 import os
 import json
 import re
@@ -12,6 +13,15 @@ from google import genai
 from dotenv import load_dotenv
 
 load_dotenv()
+# Initialize async transport singleton
+_gemini_transport = None
+
+def _get_transport():
+    """Get or create the async Gemini transport."""
+    global _gemini_transport
+    if _gemini_transport is None:
+        _gemini_transport = AsyncGeminiTransport.create()
+    return _gemini_transport
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
@@ -125,7 +135,6 @@ def sanitize_user_input(text: str, max_length: int = MAX_INPUT_LENGTH) -> str:
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY is missing from .env file")
 
-client_genai = genai.Client(api_key=GEMINI_API_KEY)
 
 # Cache configuration
 CACHE_MAX_SIZE = 100  # Maximum number of entries
@@ -198,41 +207,15 @@ def _is_retriable_error(error: Exception) -> bool:
     return any(keyword in error_str for keyword in RETRIABLE_ERRORS)
 
 
-def _generate_with_retry(prompt: str) -> str:
+async def _generate_with_retry(prompt: str) -> str:
     """
     Generate content with retry logic.
     - Does NOT retry on rate limit errors (429)
     - Retries with exponential backoff on temporary errors (max 2 retries)
     """
-    last_exception = None
+    transport = _get_transport()
+    return await transport.generate(prompt)
     
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            response = client_genai.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt
-            )
-            return response.text
-        except Exception as e:
-            last_exception = e
-            
-            # If it's a rate limit error, do NOT retry - return immediately
-            if _is_rate_limit_error(e):
-                raise RateLimitError(
-                    "Gemini API rate limit exceeded. Please wait a moment and try again."
-                ) from e
-            
-            # If it's a retriable error and we have retries left
-            if attempt < MAX_RETRIES and _is_retriable_error(e):
-                delay = RETRY_BASE_DELAY * (2 ** attempt)  # Exponential backoff
-                print(f"Retryable error on attempt {attempt + 1}, waiting {delay}s: {str(e)}")
-                time.sleep(delay)
-                continue
-            
-            # For non-retriable errors or max retries reached, raise
-            raise
-    
-    raise last_exception
 
 
 class RateLimitError(Exception):
@@ -240,11 +223,11 @@ class RateLimitError(Exception):
     pass
 
 
-def _generate(prompt: str) -> str:
-    return _generate_with_retry(prompt)
+async def _generate(prompt: str) -> str:
+    return await _generate_with_retry(prompt)
 
 
-def run_combined_analysis(
+async def run_combined_analysis(
     github_data: dict,
     leetcode_data: dict,
     resume_text: str = "",
@@ -494,7 +477,7 @@ unique skill_gaps and roadmap — do NOT reuse the same content across paths.
     MAX_JSON_RETRIES = 2
     for json_attempt in range(MAX_JSON_RETRIES + 1):
         try:
-            raw_text = _generate(prompt)
+            raw_text = await  _generate(prompt)
             clean_text = _clean_json(raw_text)
             result = json.loads(clean_text)
             return {"success": True, "data": result}
@@ -669,7 +652,7 @@ def generate_roadmap(
     }
 
 
-def generate_interview_questions(
+async def generate_interview_questions(
     profile: dict,
     career_path: str,
     difficulty: str,
@@ -761,7 +744,7 @@ def generate_interview_questions(
 
     Return ONLY the JSON array, no other text."""
     try:
-        text = _generate(prompt)
+        text = await _generate(prompt)
         questions = json.loads(_clean_json(text))
         if isinstance(questions, list) and len(questions) > 0:
             return questions
@@ -787,7 +770,7 @@ def generate_interview_questions(
             "difficulty" (string),
             "hint" (string)
             Return ONLY the JSON array, no other text."""
-            text = _generate(simple_prompt)
+            text = await _generate(simple_prompt)
             questions = json.loads(_clean_json(text))
             if isinstance(questions, list) and len(questions) > 0:
                 return questions
@@ -800,7 +783,7 @@ def generate_interview_questions(
             return []
 
 
-def evaluate_interview_answer(
+async def evaluate_interview_answer(
     question: str,
     answer: str,
     career_path: str
@@ -824,7 +807,7 @@ Return ONLY valid JSON with exactly these fields:
 
 No markdown, no extra text, just JSON."""
     try:
-        return json.loads(_clean_json(_generate(prompt)))
+        return json.loads(_clean_json(await _generate(prompt)))
     except RateLimitError as e:
         return {
             "success": False,
@@ -861,7 +844,7 @@ No markdown, no extra text, just JSON."""
 ADD THIS FUNCTION TO THE BOTTOM OF gemini_service.py
 """
 
-def analyze_certificate(
+async def analyze_certificate(
     file_content: bytes,
     filename: str,
     mime_type: str  # application/pdf | image/jpeg | image/png
@@ -916,9 +899,8 @@ Return ONLY the JSON object. No markdown, no explanation."""
         if mime_type in ("image/jpeg", "image/jpg", "image/png"):
             from google.genai import types as genai_types
 
-            response = client_genai.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=[
+            transport = _get_transport()
+            raw = await transport.generate_multimodal([
                     {
                         "inline_data": {
                             "mime_type": mime_type,
@@ -928,7 +910,6 @@ Return ONLY the JSON object. No markdown, no explanation."""
                     {"text": prompt_text}
                 ]
             )
-            raw = response.text
 
         # ── PDF certificate → extract text → Gemini ──────────────────────────
         elif mime_type == "application/pdf":
@@ -948,9 +929,9 @@ Return ONLY the JSON object. No markdown, no explanation."""
                         img_bytes = pix.tobytes("png")
 
                         from google.genai import types as genai_types
-                        response = client_genai.models.generate_content(
-                            model="gemini-2.5-flash",
-                            contents=[
+                        transport = _get_transport()
+                        raw = await transport.generate_multimodal(
+                            [
                                 genai_types.Part.from_bytes(
                                     data=img_bytes,
                                     mime_type="image/png"
@@ -958,14 +939,13 @@ Return ONLY the JSON object. No markdown, no explanation."""
                                 prompt_text
                             ]
                         )
-                        raw = response.text
                     else:
                         return _certificate_fallback(filename)
             else:
                 # Text PDF — send extracted text
                 sanitized_text = sanitize_user_input(pdf_text, max_length=3000)
                 text_prompt = f"{prompt_text}\n\nCertificate text content:\n{sanitized_text}"
-                raw = _generate(text_prompt)
+                raw = await _generate(text_prompt)
         else:
             return _certificate_fallback(filename)
 

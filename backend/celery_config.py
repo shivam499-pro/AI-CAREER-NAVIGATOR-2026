@@ -73,9 +73,9 @@ class TaskWithRetry(celery_app.Task):
     """Base task class with automatic retry and error handling."""
     
     autoretry_for = (Exception,)
-    retry_backoff=True,
-    retry_backoff_max=600,
-    retry_jitter=True,
+    retry_backoff=True
+    retry_backoff_max=600
+    retry_jitter=True
     
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """Called when task fails."""

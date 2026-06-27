@@ -63,7 +63,7 @@ class MarketAnalyzer:
         # Find matching role category
         matched_category = None
         for category in SKILL_DEMAND:
-            if category.replace("_", " ") in role_lower:
+            if category in role_lower:
                 matched_category = category
                 break
         
@@ -98,15 +98,7 @@ class MarketAnalyzer:
         return 50  # Default moderate demand
     
     async def get_market_trends(self, timeframe: str = "30d") -> dict:
-        """
-        Get market trends for the specified timeframe.
         
-        Args:
-            timeframe: Time period (7d, 30d, 90d)
-        
-        Returns:
-            dict with market trends
-        """
         days = int(timeframe.replace("d", ""))
         
         return {
@@ -189,31 +181,33 @@ class MarketAnalyzer:
         }
     
     async def compare_roles(self, roles: list[str]) -> dict:
-        """
-        Compare multiple roles side by side.
-        
-        Returns:
-            dict with role comparisons
-        """
-        comparisons = []
-        
-        for role in roles:
-            analysis = await self.analyze_role_demand(role)
-            comparisons.append({
-                "role": role,
-                "demand_score": analysis["demand_score"],
-                "top_skills": analysis["high_demand_skills"][:3]
-            })
-        
-        # Sort by demand score
-        comparisons.sort(key=lambda x: x["demand_score"], reverse=True)
-        
-        return {
-            "roles": comparisons,
-            "highest_demand": comparisons[0] if comparisons else None,
-            "compared_at": datetime.now(timezone.utc).isoformat()
-        }
-    
+        try:
+            comparisons = []
+            
+            for role in roles:
+                analysis = await self.analyze_role_demand(role)
+                
+                comparisons.append({
+                    "role": role,
+                    "demand_score": analysis["demand_score"],
+                    "top_skills": analysis["high_demand_skills"][:3]
+                })
+            
+            # Sort by demand score
+            comparisons.sort(key=lambda x: x["demand_score"], reverse=True)
+            
+            return {
+                "roles": comparisons,
+                "highest_demand": comparisons[0] if comparisons else None,
+                "compared_at": datetime.now(timezone.utc).isoformat()
+            }
+        except Exception:
+            return{
+                "roles": [],
+                "highest_demand": None,
+                "error": "Market analysis temporarily unavailable"
+            }
+
     async def get_career_advice(self, current_skills: list, target_role: str) -> dict:
         """
         Get personalized career advice based on skills and target role.

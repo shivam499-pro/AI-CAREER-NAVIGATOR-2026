@@ -81,7 +81,7 @@ async def create_challenge(request: CreateChallengeRequest,
 
 
 @router.get("/{challenge_code}")
-async def get_challenge(challenge_code: str):
+async def get_challenge(challenge_code: str, current_user: AuthenticatedUser = Depends(get_current_user)):
     """
     Get challenge details by code.
     Returns: { challenge_code, career_path, questions, creator_name }

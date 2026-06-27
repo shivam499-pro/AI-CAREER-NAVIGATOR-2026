@@ -40,17 +40,17 @@ class Settings:
     @classmethod
     def get_supabase_url(cls) -> str:
         """Get Supabase URL."""
-        return cls.SUPABASE_URL
+        return os.getenv("SUPABASE_URL", cls.SUPABASE_URL)
     
     @classmethod
     def get_service_key(cls) -> str:
         """Get Supabase service role key."""
-        return cls.SUPABASE_SERVICE_KEY
+        return os.getenv("SUPABASE_SERVICE_KEY", cls.SUPABASE_SERVICE_KEY)
     
     @classmethod
     def get_anon_key(cls) -> str:
         """Get Supabase anon key."""
-        return cls.SUPABASE_ANON_KEY
+        return os.getenv("SUPABASE_ANON_KEY", cls.SUPABASE_ANON_KEY)
     
     @classmethod
     def is_production(cls) -> bool:

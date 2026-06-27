@@ -1,0 +1,574 @@
+import pytest
+from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock
+import asyncio
+import os
+import httpx
+from services.career_brain_service import fetch_interview_sessions
+from services.career_brain_service import fetch_analysis, fetch_profile
+from services.career_brain_service import get_career_brain
+
+from services.career_brain_service import (
+    analyze_skills,
+    calculate_job_readiness_score,
+    generate_behavioral_insights,
+    generate_recommendations,
+    detect_risks,
+    get_progress_summary,
+    clear_cache,
+)
+
+class MockResponse:
+    def __init__(self, status_code, data):
+        self.status_code = status_code
+        self._data = data
+
+    def json(self):
+        return self._data
+
+
+class MockClient:
+    def __init__(self, response):
+        self.response = response
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def get(self, *args, **kwargs):
+        return self.response
+
+
+@pytest.mark.asyncio
+async def test_fetch_profile_non_200(mocker):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 500
+    mock_resp.json.return_value = []
+
+    mock_client = MagicMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    mocker.patch("services.career_brain_service.httpx.AsyncClient", return_value=mock_client)
+
+    result = await fetch_profile("url", {}, "u1")
+
+    assert result is None
+
+@pytest.mark.asyncio
+async def test_fetch_analysis_empty_list(mocker):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = []
+
+    mock_client = MagicMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    mocker.patch("services.career_brain_service.httpx.AsyncClient", return_value=mock_client)
+
+    result = await fetch_analysis("url", {}, "u1")
+
+    assert result is None
+    
+
+@pytest.mark.asyncio
+async def test_fetch_interview_sessions_failure(mocker):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 500
+    mock_resp.json.return_value = []
+
+    mock_client = MagicMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    mocker.patch("services.career_brain_service.httpx.AsyncClient", return_value=mock_client)
+
+    result = await fetch_interview_sessions("url", {}, "u1")
+
+    assert result == []
+
+@pytest.mark.asyncio
+async def test_fetch_profile_success(mocker):
+    from services.career_brain_service import fetch_profile
+
+    response = MockResponse(
+        200,
+        [{"user_id": "u1"}]
+    )
+
+    mocker.patch(
+        "services.career_brain_service.httpx.AsyncClient",
+        return_value=MockClient(response)
+    )
+
+    result = await fetch_profile(
+        "http://test",
+        {},
+        "u1"
+    )
+
+    assert result["user_id"] == "u1"
+
+
+from services.career_brain_service import fetch_job_applications
+
+@pytest.mark.asyncio
+async def test_fetch_job_applications_empty(mocker):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = []
+
+    mock_client = MagicMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    mocker.patch("services.career_brain_service.httpx.AsyncClient", return_value=mock_client)
+
+    result = await fetch_job_applications("url", {}, "u1")
+
+    assert result == []
+
+from services.career_brain_service import fetch_saved_jobs
+
+@pytest.mark.asyncio
+async def test_fetch_saved_jobs_failure(mocker):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 500
+    mock_resp.json.return_value = []
+
+    mock_client = MagicMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    mocker.patch("services.career_brain_service.httpx.AsyncClient", return_value=mock_client)
+
+    result = await fetch_saved_jobs("url", {}, "u1")
+
+    assert result == []
+
+from services.career_brain_service import fetch_user_rank
+
+@pytest.mark.asyncio
+async def test_fetch_user_rank_empty(mocker):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = []
+
+    mock_client = MagicMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    mocker.patch("services.career_brain_service.httpx.AsyncClient", return_value=mock_client)
+
+    result = await fetch_user_rank("url", {}, "u1")
+
+    assert result is None
+
+
+
+
+@pytest.mark.asyncio
+async def test_fetch_profile_empty(mocker):
+    from services.career_brain_service import fetch_profile
+
+    response = MockResponse(200, [])
+
+    mocker.patch(
+        "services.career_brain_service.httpx.AsyncClient",
+        return_value=MockClient(response)
+    )
+
+    result = await fetch_profile(
+        "http://test",
+        {},
+        "u1"
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_profile_failure(mocker):
+    from services.career_brain_service import fetch_profile
+
+    response = MockResponse(500, [])
+
+    mocker.patch(
+        "services.career_brain_service.httpx.AsyncClient",
+        return_value=MockClient(response)
+    )
+
+    result = await fetch_profile(
+        "http://test",
+        {},
+        "u1"
+    )
+
+    assert result is None
+
+@pytest.mark.asyncio
+async def test_get_career_brain_missing_env(monkeypatch):
+    from services.career_brain_service import get_career_brain
+
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_KEY", raising=False)
+    monkeypatch.delenv("SUPABASE_ANON_KEY", raising=False)
+
+    result = await get_career_brain("u1")
+
+    assert result["error"] == "Database not configured"
+
+@pytest.mark.asyncio
+async def test_get_career_brain_missing_env(monkeypatch):
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_KEY", raising=False)
+    monkeypatch.delenv("SUPABASE_ANON_KEY", raising=False)
+
+    result = await get_career_brain("u1")
+
+    assert result["error"] == "Database not configured"
+
+@pytest.mark.asyncio
+async def test_get_career_brain_success(mocker, monkeypatch):
+    # Fake env
+    monkeypatch.setenv("SUPABASE_URL", "http://test")
+    monkeypatch.setenv("SUPABASE_SERVICE_KEY", "key")
+
+    # Mock fetchers
+    mocker.patch("services.career_brain_service.fetch_profile", return_value={"user_id": "u1"})
+    mocker.patch("services.career_brain_service.fetch_analysis", return_value={"skill_gaps": []})
+    mocker.patch("services.career_brain_service.fetch_job_applications", return_value=[{"status": "applied"}])
+    mocker.patch("services.career_brain_service.fetch_saved_jobs", return_value=[])
+    mocker.patch("services.career_brain_service.fetch_interview_sessions", return_value=[{"total_score": 80}])
+    mocker.patch("services.career_brain_service.fetch_user_streak", return_value={"current_streak": 5})
+    mocker.patch("services.career_brain_service.fetch_user_rank", return_value={"rank_title": "Pro", "level": 2, "xp": 100})
+
+    result = await get_career_brain("u1", use_cache=False)
+
+    assert "job_readiness_score" in result
+    assert "skill_insights" in result
+    assert "recommendations" in result
+    assert result["rank"] == "Pro"
+    assert result["level"] == 2
+
+
+@pytest.mark.asyncio
+async def test_get_career_brain_cache_hit(mocker, monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "http://test")
+    monkeypatch.setenv("SUPABASE_SERVICE_KEY", "key")
+
+    # mock ALL dependencies
+    mocker.patch("services.career_brain_service.fetch_profile", return_value={"user_id": "u1"})
+    mocker.patch("services.career_brain_service.fetch_analysis", return_value={"skill_gaps": []})
+    mocker.patch("services.career_brain_service.fetch_job_applications", return_value=[])
+    mocker.patch("services.career_brain_service.fetch_saved_jobs", return_value=[])
+    mocker.patch("services.career_brain_service.fetch_interview_sessions", return_value=[])
+    mocker.patch("services.career_brain_service.fetch_user_streak", return_value=None)
+    mocker.patch("services.career_brain_service.fetch_user_rank", return_value=None)
+
+    # first call populates cache
+    result1 = await get_career_brain("u1", use_cache=True)
+
+    # second call should hit cache
+    result2 = await get_career_brain("u1", use_cache=True)
+
+    assert result1 == result2
+
+@pytest.mark.asyncio
+async def test_get_career_brain_cache_bypass(mocker, monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "http://test")
+    monkeypatch.setenv("SUPABASE_SERVICE_KEY", "key")
+
+    fetch_profile = mocker.patch(
+        "services.career_brain_service.fetch_profile",
+        return_value={"user_id": "u1"}
+    )
+    mocker.patch("services.career_brain_service.fetch_analysis", return_value={"skill_gaps": []})
+    mocker.patch("services.career_brain_service.fetch_job_applications", return_value=[])
+    mocker.patch("services.career_brain_service.fetch_saved_jobs", return_value=[])
+    mocker.patch("services.career_brain_service.fetch_interview_sessions", return_value=[])
+    mocker.patch("services.career_brain_service.fetch_user_streak", return_value=None)
+    mocker.patch("services.career_brain_service.fetch_user_rank", return_value=None)
+
+    await get_career_brain("u1", use_cache=False)
+    await get_career_brain("u1", use_cache=False)
+
+    assert fetch_profile.call_count == 2
+# ==========================================================
+# analyze_skills
+# ==========================================================
+
+def test_analyze_skills_profile_only():
+    profile = {
+        "current_tech_stack": ["Python", "FastAPI"],
+        "extra_skills": ["React"]
+    }
+
+    result = analyze_skills(profile, None, [])
+
+    assert "python" in result["strong"]
+    assert "fastapi" in result["strong"]
+    assert "react" in result["strong"]
+    assert result["weak"] == []
+    assert result["missing"] == []
+
+
+def test_analyze_skills_with_analysis_and_applications():
+    profile = {"current_tech_stack": ["Python"]}
+
+    analysis = {
+        "strengths": ["System Design"],
+        "skill_gaps": ["Docker", "Kubernetes"]
+    }
+
+    applications = [
+        {"missing_skills": ["Docker", "AWS"]},
+        {"missing_skills": ["Docker"]},
+    ]
+
+    result = analyze_skills(profile, analysis, applications)
+
+    assert "python" in result["strong"]
+    assert "system design" in result["strong"]
+
+    assert "docker" in result["weak"]
+    assert "kubernetes" in result["weak"]
+
+    assert result["missing"][0] == "docker"
+
+
+def test_analyze_skills_skill_gap_dict():
+    analysis = {
+        "skill_gaps": {
+            "backend": ["FastAPI"],
+            "cloud": ["AWS"]
+        }
+    }
+
+    result = analyze_skills(None, analysis, [])
+
+    assert "fastapi" in result["weak"]
+    assert "aws" in result["weak"]
+
+
+# ==========================================================
+# calculate_job_readiness_score
+# ==========================================================
+
+def test_job_readiness_perfect_profile():
+    profile = {
+        "current_tech_stack": ["Python"],
+        "resume_text": "resume",
+        "github_username": "user",
+        "leetcode_username": "user",
+    }
+
+    analysis = {"skill_gaps": []}
+
+    applications = [{"status": "applied"} for _ in range(10)]
+
+    interviews = [{"total_score": 90} for _ in range(5)]
+
+    score = calculate_job_readiness_score(
+        profile,
+        analysis,
+        applications,
+        interviews
+    )
+
+    assert score == 100
+
+
+def test_job_readiness_with_skill_gaps():
+    analysis = {
+        "skill_gaps": [
+            "Docker",
+            "AWS",
+            "Kubernetes"
+        ]
+    }
+
+    score = calculate_job_readiness_score(
+        None,
+        analysis,
+        [],
+        []
+    )
+
+    assert score < 100
+    assert score > 0
+
+
+# ==========================================================
+# behavioral insights
+# ==========================================================
+
+def test_behavioral_insights_high_rejection():
+    applications = [
+        {"status": "rejected"},
+        {"status": "rejected"},
+        {"status": "rejected"},
+        {"status": "rejected"},
+        {"status": "applied"},
+    ]
+
+    insights = generate_behavioral_insights(
+        applications,
+        [],
+        None,
+        []
+    )
+
+    assert any("rejections" in i.lower() for i in insights)
+
+
+def test_behavioral_insights_improving_scores():
+    interviews = [
+        {"total_score": 40},
+        {"total_score": 50},
+        {"total_score": 80},
+    ]
+
+    insights = generate_behavioral_insights(
+        [],
+        interviews,
+        None,
+        []
+    )
+
+    assert any("improving" in i.lower() for i in insights)
+
+
+def test_behavioral_insights_streak():
+    streak = {"current_streak": 10}
+
+    insights = generate_behavioral_insights(
+        [],
+        [],
+        streak,
+        []
+    )
+
+    assert any("10 day streak" in i.lower() for i in insights)
+
+
+# ==========================================================
+# recommendations
+# ==========================================================
+
+def test_generate_recommendations_low_readiness():
+    recommendations = generate_recommendations(
+        {},
+        40,
+        [],
+        ["docker", "aws"],
+        ["communication"]
+    )
+
+    assert len(recommendations) > 0
+
+    joined = " ".join(recommendations).lower()
+
+    assert "docker" in joined
+    assert "communication" in joined
+
+
+def test_generate_recommendations_high_readiness():
+    recommendations = generate_recommendations(
+        {},
+        90,
+        [{"status": "applied"} for _ in range(5)],
+        [],
+        []
+    )
+
+    assert any("job readiness is high" in r.lower()
+               for r in recommendations)
+
+
+# ==========================================================
+# detect_risks
+# ==========================================================
+
+def test_detect_risks_rejection_streak():
+    applications = [
+        {"status": "rejected"},
+        {"status": "rejected"},
+        {"status": "rejected"},
+        {"status": "rejected"},
+        {"status": "applied"},
+    ]
+
+    alerts = detect_risks(
+        applications,
+        [],
+        None,
+        None
+    )
+
+    assert len(alerts) > 0
+
+
+def test_detect_risks_old_interview():
+    old_date = (
+        datetime.utcnow() - timedelta(days=20)
+    ).isoformat()
+
+    alerts = detect_risks(
+        [],
+        [{"created_at": old_date}],
+        None,
+        None
+    )
+
+    assert any("no interview practice" in a.lower()
+               for a in alerts)
+
+
+def test_detect_risks_low_streak():
+    alerts = detect_risks(
+        [{"status": "applied"}],
+        [],
+        {"current_streak": 1},
+        None
+    )
+
+    assert any("low consistency" in a.lower()
+               for a in alerts)
+
+
+# ==========================================================
+# progress summary
+# ==========================================================
+
+def test_progress_summary():
+    apps = [
+        {"status": "applied"},
+        {"status": "interview"},
+        {"status": "offer"},
+        {"status": "rejected"},
+    ]
+
+    result = get_progress_summary(
+        apps,
+        [{}, {}],
+        [{}, {}]
+    )
+
+    assert result["total_applications"] == 4
+    assert result["total_interviews"] == 1
+    assert result["total_offers"] == 1
+    assert result["total_rejections"] == 1
+    assert result["saved_jobs"] == 2
+    assert result["interview_sessions"] == 2
+
+
+# ==========================================================
+# clear cache
+# ==========================================================
+
+def test_clear_cache():
+    clear_cache()

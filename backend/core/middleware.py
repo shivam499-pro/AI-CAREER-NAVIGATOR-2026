@@ -22,6 +22,8 @@ from fastapi import Request, HTTPException, Header, Depends
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
+from starlette.requests import Request
+
 from dotenv import load_dotenv
 import httpx
 
@@ -323,7 +325,7 @@ class JWTVerifier:
             except HTTPException:
                 raise
             except Exception as e:
-                logger.error(f"Token verification error: {str(e)}")
+                logger.error(f"Token verification error:", exc_info=True)
                 raise HTTPException(
                     status_code=401,
                     detail=APIResponse.error_response(
@@ -522,6 +524,15 @@ def require_role(role: UserRole):
 
 
 # ==================== LOGGING MIDDLEWARE ====================
+def log_request(level: str, log_data: dict):
+    message = f"[REQUEST] {json.dumps(log_data)}"
+
+    if level == "info":
+        logger.info(message)
+    elif level == "warning":
+        logger.warning(message)
+    else:
+        logger.error(message)
 
 class StructuredLoggingMiddleware(BaseHTTPMiddleware):
     """
@@ -567,12 +578,9 @@ class StructuredLoggingMiddleware(BaseHTTPMiddleware):
         auth_header = request.headers.get("authorization")
         
         if auth_header:
-            try:
-                # Quick decode without full verification for logging
-                # We'll do full verification in the endpoint
-                user_id = "authenticated"  # Will be overwritten in endpoint
-            except Exception:
-                pass
+            # Mark request as authenticated for logging purposes.
+            # Full JWT verification occurs in endpoint dependencies.
+            user_id = "authenticated"
         
         # Store initial user_id for logging
         request.state.user_id = user_id
@@ -603,11 +611,11 @@ class StructuredLoggingMiddleware(BaseHTTPMiddleware):
             
             # Log based on status
             if response.status_code >= 500:
-                logger.error(f"[REQUEST] {json.dumps(log_data)}")
+                log_request("error", log_data)
             elif response.status_code >= 400:
-                logger.warning(f"[REQUEST] {json.dumps(log_data)}")
+                log_request("warning", log_data)
             else:
-                logger.info(f"[REQUEST] {json.dumps(log_data)}")
+                log_request("info", log_data)
             
             return response
             
@@ -627,7 +635,7 @@ class StructuredLoggingMiddleware(BaseHTTPMiddleware):
                 "error": str(e),
                 "timestamp": datetime.now(timezone.utc).isoformat() + "Z"
             }
-            logger.error(f"[REQUEST] {json.dumps(log_data)}")
+            log_request("error", log_data)
             
             raise
 
@@ -688,7 +696,7 @@ def format_response(success: bool, data: Any = None, error: str = None,
         Standardized response dict
     """
     meta = {
-        "timestamp": datetime.now(timezone.utc).isoformat() + "Z"
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
     if request_id:
         meta["request_id"] = request_id
@@ -797,3 +805,14 @@ def verify_token_sync(token: str) -> bool:
     """
     user = get_current_user_sync(token)
     return user is not None
+
+
+def log_request(level: str, data: dict):
+    message = f"[REQUEST] {json.dumps(data)}"
+
+    if level == "info":
+        logger.info(message)
+    elif level == "warning":
+        logger.warning(message)
+    else:
+        logger.error(message)

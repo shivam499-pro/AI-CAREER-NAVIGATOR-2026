@@ -3,6 +3,7 @@ Resume PDF Parser Service
 Extracts text from uploaded PDF resumes using PyMuPDF
 """
 import fitz  # PyMuPDF
+import re
 
 def extract_text(file_path: str) -> str:
     """
@@ -43,7 +44,9 @@ def extract_skills(text: str) -> list:
     text_lower = text.lower()
     
     for skill in languages + frameworks + tools:
-        if skill.lower() in text_lower:
+        pattern = rf"\b{re.escape(skill.lower())}\b"
+        
+        if re.search(pattern, text_lower):
             found_skills.append(skill)
     
     return found_skills

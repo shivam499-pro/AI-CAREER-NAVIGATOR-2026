@@ -1,17 +1,3 @@
-/**
- * 🎯 CAREER ORCHESTRATOR - Unified Brain Decision System
- * 
- * This is the single source of truth for all AI career decisions.
- * It fuses progress, evolution, readiness, and intelligenceScore into
- * one structured decision system.
- * 
- * Usage:
- *   import { getCareerBrain } from '@/lib/career-orchestrator'
- *   const brain = await getCareerBrain(userId)
- * 
- * DO NOT modify UI - this is pure backend logic layer.
- */
-
 import { 
   fetchCareerIntelligence,
   safeNumber,
@@ -187,33 +173,29 @@ function calculateTrend(progress: ProgressData | null, evolution: EvolutionData 
   return 'Stable'
 }
 
-/**
- * Calculate confidence score (0-100)
- */
+
 function calculateConfidence(evolution: EvolutionData | null, progress: ProgressData | null): number {
-  let score = 50 // Base confidence
-  let weights = 50
-  
-  // Evolution confidence (40%)
+  let score = 0
+
+  // Evolution path confidence (60% of total, fixed)
   if (evolution?.career_paths && evolution.career_paths.length > 0) {
     const avgConfidence = evolution.career_paths.reduce(
       (sum, cp) => sum + safeNumber(cp.confidence, 0.5), 0
     ) / evolution.career_paths.length
-    score += avgConfidence * 40
-    weights += 40
+    score += avgConfidence * 60
   }
-  
-  // Session count bonus (10%)
+
+  // Session-count bonus (40% of total, fixed, tiered)
   const sessionCount = progress?.sessions?.length || 0
   if (sessionCount >= 10) {
-    score += 10
-    weights += 10
+    score += 40
   } else if (sessionCount >= 5) {
-    score += 5
-    weights += 5
+    score += 20
+  } else if (sessionCount > 0) {
+    score += 10
   }
-  
-  return weights > 0 ? Math.round((score / weights) * 100) : 50
+
+  return Math.round(score)
 }
 
 /**

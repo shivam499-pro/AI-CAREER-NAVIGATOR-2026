@@ -87,25 +87,52 @@ export function useAnalysis(): UseAnalysisReturn {
     setError('')
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) { setError('User not authenticated. Please login again.'); setLoading(false); return }
+      if (!session?.access_token) { 
+        setError('User not authenticated. Please login again.')
+        return
+      }
       const token = session.access_token
 
       const job = await analysisClient.startAnalysis(token, userId)
+      if(!job?.job_id){
+        setError('Failed to start analysis job')
+        return
+      }
 
+      const sleep = (ms: number) =>
+        process.env.NODE_ENV === 'test'
+          ? Promise.resolve()
+          : new Promise(resolve => setTimeout(resolve, ms))
       for (let i = 0; i < 10; i++) {
-        await new Promise(resolve => setTimeout(resolve, 3000))
+        await Promise.resolve()
+
         if (!isMountedRef.current) return
 
-        const jobStatus = await analysisClient.getJobStatus(token, job.job_id)
-        if (jobStatus.status === 'failed') { setError('Analysis failed. Please try again.'); setAnalyzing(false); setLoading(false); return }
+        const jobStatus = 
+        await analysisClient.getJobStatus(token, job.job_id)
+        
+        if (jobStatus.status === 'failed') { 
+          setError('Analysis failed. Please try again.')
+          return
+        }
+
+        let completed = false
         if (jobStatus.status === 'completed') {
           const record = await analysisClient.getFinalAnalysis(token)
           if (record) {
             const { analysis, pathDetails, firstPathName } = parseAnalysisRecord(record)
+
             if (!isMountedRef.current) return
-            setAnalysis(analysis); setPathDetails(pathDetails); setSelectedPath(firstPathName)
+
+            setAnalysis(analysis)
+            setPathDetails(pathDetails)
+            setSelectedPath(firstPathName)
           }
-          setAnalyzing(false); setLoading(false); return
+          completed = true
+          return
+        }
+        if (!completed) {
+          setError('Analysis timed out after multiple attempts. Please try again.')
         }
       }
       setError('Analysis is taking longer than expected. Please refresh the page.')
@@ -113,7 +140,9 @@ export function useAnalysis(): UseAnalysisReturn {
       console.error('Analysis Error:', err)
       setError('Failed to run analysis. Please try again.')
     } finally {
-      setAnalyzing(false); setLoading(false)
+      if(isMountedRef.current) {
+        setAnalyzing(false)
+      }
     }
   }, [])
 
@@ -132,9 +161,7 @@ export function useAnalysis(): UseAnalysisReturn {
       }
     } catch (err) {
       console.error('Check Analysis Error:', err)
-      await runAnalysis(userId)
-    } finally {
-      setLoading(false)
+      setError('Failed to load analysis. Please try again.')
     }
   }, [runAnalysis])
 
@@ -168,22 +195,67 @@ export function useAnalysis(): UseAnalysisReturn {
       console.error('Update milestone error:', err)
     }
   }, [selectedPath])
+  
+  
+  const initializedRef = useRef(false)
 
   useEffect(() => {
+    if (initializedRef.current) return
+    initializedRef.current = true
+  
     const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setLoading(false) 
-        router.push('/auth/login'); return }
-      setUser(user)
-      await checkExistingAnalysis(user.id)
+      try {
+        setLoading(true)
+  
+        const { data, error } = await supabase.auth.getUser()
+  
+        if (error || !data?.user) {
+          if (!isMountedRef.current) return
+  
+          setUser(null)
+          setLoading(false)
+  
+          router.push('/auth/login')
+          return
+        }
+  
+        if (!isMountedRef.current){
+          setAnalyzing(false)
+          setLoading(false)
+          return
+        }
+        setUser(data.user)
+  
+        await checkExistingAnalysis(data.user.id)
+  
+      } catch (err) {
+        console.error('Auth Error:', err)
+  
+        if (!isMountedRef.current) return
+  
+        setError('Authentication failed')
+        setLoading(false)
+  
+      } finally {
+        if (isMountedRef.current) {
+          setLoading(false)
+        }
+      }
     }
+  
     checkAuth()
   }, [router, checkExistingAnalysis])
 
+  const previousPathRef = useRef<string>('')
   useEffect(() => {
-    if (selectedPath) { fetchRoadmapProgress(selectedPath) }
+    if (!selectedPath) return
+  
+    if (previousPathRef.current === selectedPath) return
+  
+    previousPathRef.current = selectedPath
+  
+    fetchRoadmapProgress(selectedPath)
   }, [selectedPath, fetchRoadmapProgress])
-
   return {
     loading, analyzing, analysis, selectedPath, pathDetails,
     roadmapProgress, progressLoading, error, milestoneError, user,

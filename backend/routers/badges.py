@@ -1,59 +1,49 @@
 """
 Badges Router
-Handles user achievement badges system
+Handles user achievement badges system.
+GET  /{user_id}  — fetch earned + all badges (paginated)
+POST /check      — trigger badge check, delegates to badge_service
 """
+import logging
+import os
+
+from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
-from supabase import create_client
-import os
-from dotenv import load_dotenv
-from datetime import datetime
-from core.middleware import get_current_user, AuthenticatedUser
+from core.supabase_client import get_supabase
 
-# Load environment variables
+from core.middleware import get_current_user, AuthenticatedUser
+from services.badge_service import check_and_award_badges, BADGES
+
+
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Initialize Supabase client
-supabase_url = os.getenv("SUPABASE_URL")
-supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
-supabase = create_client(supabase_url, supabase_key)
+# ─── Constants ────────────────────────────────────────────────────────────────
+
+VALID_EVENTS = frozenset({
+    "session_complete",
+    "perfect_score",
+    "hard_mode",
+    "simulation",
+    "voice_used",
+    "challenge_created",
+    "challenge_won",
+    "streak_milestone",
+})
 
 
-# Badge definitions (hardcoded list)
-BADGES = [
-    {"id": "first_session", "name": "First Step", "emoji": "🎯", 
-     "description": "Complete your first interview session"},
-    {"id": "perfect_score", "name": "Perfect Score", "emoji": "💯", 
-     "description": "Score 50/50 in any session"},
-    {"id": "streak_7", "name": "Week Warrior", "emoji": "🔥", 
-     "description": "Maintain a 7 day streak"},
-    {"id": "streak_30", "name": "Monthly Legend", "emoji": "🏆", 
-     "description": "Maintain a 30 day streak"},
-    {"id": "sessions_10", "name": "Dedicated", "emoji": "💼", 
-     "description": "Complete 10 interview sessions"},
-    {"id": "sessions_50", "name": "Interview Master", "emoji": "🚀", 
-     "description": "Complete 50 interview sessions"},
-    {"id": "hard_mode", "name": "Hard Mode Hero", "emoji": "😈", 
-     "description": "Complete a Hard difficulty session"},
-    {"id": "simulation", "name": "Under Pressure", "emoji": "⏱️", 
-     "description": "Complete a Simulation Mode session"},
-    {"id": "voice_user", "name": "Voice Pro", "emoji": "🎙️", 
-     "description": "Answer 5 questions using voice input"},
-    {"id": "level_5", "name": "Senior Achiever", "emoji": "⚡", 
-     "description": "Reach Level 5 (Senior)"},
-    {"id": "challenger", "name": "Challenger", "emoji": "🤜", 
-     "description": "Challenge a friend"},
-    {"id": "weekly_winner", "name": "Weekly Champion", "emoji": "🥇", 
-     "description": "Finish #1 in weekly challenge"}
-]
-
+# ─── Request Models ───────────────────────────────────────────────────────────
 
 class CheckBadgeRequest(BaseModel):
     user_id: str
     event: str
 
+
+# ─── Routes ───────────────────────────────────────────────────────────────────
 
 @router.get("/{user_id}")
 async def get_user_badges(
@@ -62,52 +52,53 @@ async def get_user_badges(
     limit: int = Query(10, ge=1, le=50, description="Items per page"),
     current_user: AuthenticatedUser = Depends(get_current_user)
 ):
+    """
+    Fetch user's earned badges with pagination.
+    Returns: { earned, all_badges, pagination }
+    """
     if current_user.user_id != user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
-    
-    """
-    Fetch user's earned badges from "user_badges" table with pagination.
-    Returns: { earned: [...badges], all_badges: [...BADGES], pagination: {...} }
-    """
+
     try:
-        # Get total count of earned badges
-        count_response = supabase.table("user_badges").select(
-            "*",
-            count=True
+        # Total count of earned badges
+        count_response = get_supabase().table("user_badges").select(
+            "*", count=True
         ).eq("user_id", user_id).execute()
-        
+
         total = count_response.count or 0
         total_pages = (total + limit - 1) // limit
-        
-        # Get paginated earned badges
-        response = supabase.table("user_badges").select("*").eq(
+
+        # Paginated earned badges
+        response = get_supabase().table("user_badges").select("*").eq(
             "user_id", user_id
         ).range(
             (page - 1) * limit,
             page * limit - 1
         ).execute()
-        
+
+        # Build earned list — BADGES dict is the single source of truth
         earned_badges = []
         if response.data:
-            for badge_record in response.data:
-                badge_id = badge_record.get("badge_id")
-                # Find badge definition
-                for badge in BADGES:
-                    if badge["id"] == badge_id:
-                        earned_badges.append({
-                            "badge_id": badge_id,
-                            "name": badge["name"],
-                            "emoji": badge["emoji"],
-                            "description": badge["description"],
-                            "earned_at": badge_record.get("earned_at")
-                        })
-                        break
-        
+            for record in response.data:
+                badge_id = record.get("badge_id")
+                badge_def = BADGES.get(badge_id)
+                if badge_def:
+                    earned_badges.append({
+                        "badge_id": badge_id,
+                        "name": badge_def["name"],
+                        "emoji": badge_def["emoji"],
+                        "description": badge_def["description"],
+                        "earned_at": record.get("earned_at")
+                    })
+
+        # Full catalogue — BADGES dict is the single source of truth
+        all_badges = [
+            {**v, "badge_id": v["id"]} for v in BADGES.values()
+        ]
+
         return {
             "earned": earned_badges,
-            "all_badges": [
-                {**b, "badge_id": b["id"]} for b in BADGES
-            ],
+            "all_badges": all_badges,
             "pagination": {
                 "page": page,
                 "limit": limit,
@@ -115,131 +106,37 @@ async def get_user_badges(
                 "total_pages": total_pages
             }
         }
-        
+
     except Exception as e:
-        print(f"Error fetching badges: {e}")
+        logger.error(f"Error fetching badges for user {user_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch badges")
 
 
 @router.post("/check")
-async def check_and_award_badges(
+async def check_and_award_badges_endpoint(
     request: CheckBadgeRequest,
     current_user: AuthenticatedUser = Depends(get_current_user)
 ):
-    if current_user.user_id != request.user_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
     """
-    Check which badges user qualifies for based on event
-    Events: "session_complete", "perfect_score", "hard_mode", "simulation", "voice_used", "challenge_created"
-    Cross check with user_streaks, user_ranks tables
-    Award any new badges by inserting to "user_badges" table
+    Trigger badge check after a user action.
+    Delegates entirely to badge_service.check_and_award_badges.
     Returns: { newly_earned: [...badges] }
     """
-    try:
-        user_id = request.user_id
-        event = request.event
-        newly_earned = []
-        
-        # Get current badges to avoid duplicates
-        existing_response = supabase.table("user_badges").select("badge_id").eq("user_id", user_id).execute()
-        existing_badges = set()
-        if existing_response.data:
-            existing_badges = {b.get("badge_id") for b in existing_response.data}
-        
-        # Get streak data
-        streak_response = supabase.table("user_streaks").select("*").eq("user_id", user_id).execute()
-        streak_data = streak_response.data[0] if streak_response.data else None
-        
-        # Get rank data
-        rank_response = supabase.table("user_ranks").select("*").eq("user_id", user_id).execute()
-        rank_data = rank_response.data[0] if rank_response.data else None
-        
-        # Get challenges created count
-        challenges_response = supabase.table("challenges").select("id").eq("creator_id", user_id).execute()
-        challenges_count = len(challenges_response.data) if challenges_response.data else 0
-        
-        # For voice badge, we'll just award it directly when voice_used event occurs
-        # Simplest fix - track voice usage via user_ranks table instead
-        voice_count = 0
-        
-        # Define badge checks based on event
-        badges_to_check = []
-        
-        if event == "session_complete":
-            total_sessions = streak_data.get("total_sessions", 0) if streak_data else 0
-            if total_sessions >= 1:
-                badges_to_check.append("first_session")
-            if total_sessions >= 10:
-                badges_to_check.append("sessions_10")
-            if total_sessions >= 50:
-                badges_to_check.append("sessions_50")
-                
-        elif event == "perfect_score":
-            badges_to_check.append("perfect_score")
-            
-        elif event == "hard_mode":
-            badges_to_check.append("hard_mode")
-            
-        elif event == "simulation":
-            badges_to_check.append("simulation")
-            
-        elif event == "voice_used":
-            # For voice_pro badge, just award it directly when voice_used event occurs
-            # User doesn't already have the badge
-            if "voice_user" not in existing_badges:
-                badges_to_check.append("voice_user")
-                
-        elif event == "challenge_created":
-            if challenges_count >= 1:
-                badges_to_check.append("challenger")
-        
-        # Check streak badges (can be triggered by any event)
-        if streak_data:
-            current_streak = streak_data.get("current_streak", 0)
-            if current_streak >= 7:
-                badges_to_check.append("streak_7")
-            if current_streak >= 30:
-                badges_to_check.append("streak_30")
-        
-        # Check level badge
-        if rank_data:
-            level = rank_data.get("level", 0)
-            if level >= 5:
-                badges_to_check.append("level_5")
-        
-        # Award new badges
-        for badge_id in badges_to_check:
-            if badge_id not in existing_badges:
-                # Find badge definition
-                badge_def = next((b for b in BADGES if b["id"] == badge_id), None)
-                if badge_def:
-                    # Insert into user_badges
-                    supabase.table("user_badges").insert({
-                        "user_id": user_id,
-                        "badge_id": badge_id,
-                        "earned_at": datetime.utcnow().isoformat()
-                    }).execute()
-                    
-                    newly_earned.append({
-                        "badge_id": badge_id,
-                        "name": badge_def["name"],
-                        "emoji": badge_def["emoji"],
-                        "description": badge_def["description"]
-                    })
-                    existing_badges.add(badge_id)
-        
-        return {"newly_earned": newly_earned}
-        
-    except Exception as e:
-        print(f"Error checking badges: {e}")
-        raise HTTPException(status_code=500, detail="Failed to check badges")
+    if current_user.user_id != request.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
+    # Fix #6 — validate event before hitting the service
+    if request.event not in VALID_EVENTS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid event '{request.event}'. Must be one of: {sorted(VALID_EVENTS)}"
+        )
 
-# # Supabase table (as comment):
-# -- CREATE TABLE user_badges (
-# --   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-# --   user_id uuid REFERENCES auth.users(id),
-# --   badge_id text NOT NULL,
-# --   earned_at timestamp DEFAULT now(),
-# --   UNIQUE(user_id, badge_id)
-# -- );
+    result = check_and_award_badges(
+        user_id=request.user_id,
+        event=request.event
+    )
+
+    return {
+        "newly_earned": result.get("new_badges", [])
+    }

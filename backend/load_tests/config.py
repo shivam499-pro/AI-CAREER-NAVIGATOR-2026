@@ -1,0 +1,5 @@
+BASE_URL = "http://localhost:8000"
+
+USERS_BASE = 10
+USERS_PEAK = 500
+SPAWN_RATE = 5

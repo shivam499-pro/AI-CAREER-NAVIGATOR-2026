@@ -21,8 +21,31 @@ export function getSupabaseClient(): SupabaseClient {
   return supabaseClient
 }
 
-// Export a singleton instance
-export const supabase = getSupabaseClient()
+/**
+ * Export a singleton instance - but LAZILY.
+ *
+ * IMPORTANT: this used to be `export const supabase = getSupabaseClient()`,
+ * which called getSupabaseClient() immediately at module-import time. That
+ * defeated the entire point of getSupabaseClient()'s lazy-singleton design:
+ * simply importing ANYTHING from this module (or from another module that
+ * re-exports from here, e.g. career-safe.ts) would throw immediately if
+ * NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY weren't set -
+ * even for code that never actually touches Supabase. This broke, for
+ * example, unit-testing career-safe.ts's pure helper functions, and would
+ * equally break any environment (local dev without .env.local, preview
+ * deploys, etc.) that imports this module before env vars are configured.
+ *
+ * A Proxy defers the real getSupabaseClient() call until the first actual
+ * property access (e.g. supabase.auth.getSession()), so existing call
+ * sites need no changes, but the throw now only happens when Supabase is
+ * genuinely used - which is the original intent.
+ */
+export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_target, prop, receiver) {
+    const client = getSupabaseClient()
+    return Reflect.get(client, prop, receiver)
+  },
+})
 
 export interface UserProfile {
   id: string

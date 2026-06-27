@@ -249,7 +249,7 @@ async def get_resume_status(current_user: AuthenticatedUser = Depends(get_curren
     Returns resume status including the URL if available.
     """
     try:
-        response = supabase.table("profiles").select("resume_filename, resume_text, resume_url").eq("user_id", current_user.user_id).execute()
+        response = supabase.table("profiles").select("resume_filename, resume_text, resume_url").eq("user_id", current_user.id).execute()
         
         if not response.data:
             return {"has_resume": False}

@@ -1,4 +1,4 @@
-process.env.NEXT_PUBLIC_API_URL = 'http://localhost:8000';
+/** @type {import('jest').Config} */
 
 const nextJest = require('next/jest')
 
@@ -8,15 +8,37 @@ const createJestConfig = nextJest({
 
 const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
-  testEnvironment: 'jest-environment-jsdom',
+  testEnvironment: '<rootDir>/jest.environment.js',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
   },
-  testEnvironmentOptions: {
-    customExportConditions: [' '],
-  },
-  globals: {
-    'process.env.NEXT_PUBLIC_API_URL': 'http://localhost:8000',
+  testPathIgnorePatterns: [
+    '<rootDir>/.next/',
+    '<rootDir>/node_modules/',
+    '<rootDir>/coverage/',
+  ],
+  transformIgnorePatterns: [
+    'node_modules/(?!(@mswjs|msw|rettime|sonner|@supabase)/)',   // ← This is the important line
+  ],
+  coverageDirectory: '<rootDir>/coverage',
+  collectCoverageFrom: [
+    '**/*.{ts,tsx}',
+    '!**/*.d.ts',
+    '!**/node_modules/**',
+    '!**/.next/**',
+    '!**/coverage/**',
+    '!**/*.config.{js,ts}',
+    '!**/jest.setup.js',
+    '!**/test/**',
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 60,
+      functions: 60,
+      lines: 70,
+      statements: 70,
+    },
   },
 }
 

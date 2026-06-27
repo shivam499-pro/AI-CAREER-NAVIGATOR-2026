@@ -105,7 +105,7 @@ async def run_analysis(
 
         resume_text = profile_data.get("resume_text", "")
 
-        result = gemini_service.run_combined_analysis(
+        result = await gemini_service.run_combined_analysis(
             github_data,
             leetcode_data,
             resume_text,

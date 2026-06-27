@@ -607,7 +607,9 @@ export default function InterviewScreen({
                         transition={{ duration: 0.22 }}
                         className="overflow-hidden"
                     >
-                        <div className="space-y-2 max-h-52 overflow-y-auto pr-1 pl-1
+                        <div 
+                        data-testid="conversation-history"
+                        className="space-y-2 max-h-52 overflow-y-auto pr-1 pl-1
                             [&::-webkit-scrollbar]:w-1
                             [&::-webkit-scrollbar-track]:bg-transparent
                             [&::-webkit-scrollbar-thumb]:bg-slate-800

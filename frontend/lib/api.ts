@@ -85,6 +85,13 @@ export interface MatchFit {
   reason: string
 }
 
+export class ApiError extends Error {
+  constructor(message: string, public status: number) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
 // API Client Class
 class ApiClient {
   private supabase = createBrowserClient(
@@ -113,7 +120,9 @@ class ApiClient {
     
     if (!response.ok) {
       const error = await response.json().catch(() => ({}))
-      throw new Error(error.detail || `API Error: ${response.statusText}`)
+      throw new ApiError(error.detail || `API Error: ${response.statusText}`,
+        response.status 
+      )
     }
     
     return response.json()
@@ -134,19 +143,10 @@ class ApiClient {
         lastError = error as Error
         
         // Don't retry on client errors (4xx)
-        if (error instanceof Error && error.message.includes('400')) {
+        if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
           throw error
         }
-        if (error instanceof Error && error.message.includes('401')) {
-          throw error
-        }
-        if (error instanceof Error && error.message.includes('403')) {
-          throw error
-        }
-        if (error instanceof Error && error.message.includes('404')) {
-          throw error
-        }
-        
+
         // Exponential backoff
         if (i < retries - 1) {
           const delay = backoffMs * Math.pow(2, i)

@@ -196,7 +196,7 @@ class TestAuthRouter:
             client = TestClient(app)
             
             response = client.post(
-                "/api/auth/signup",
+                "/api/v1/auth/signup",
                 json={"email": "newuser@example.com", "password": "password123"}
             )
             
@@ -212,7 +212,7 @@ class TestAuthRouter:
             client = TestClient(app)
             
             response = client.post(
-                "/api/auth/login",
+                "/api/v1/auth/login",
                 json={"email": "user@example.com", "password": "password123"}
             )
             
@@ -227,7 +227,7 @@ class TestAuthRouter:
         with patch('supabase.create_client'):
             client = TestClient(app)
             
-            response = client.get("/api/auth/me")
+            response = client.get("/api/v1/auth/me")
             
             assert response.status_code == 401
 
@@ -243,7 +243,7 @@ class TestAuthRouter:
             token = create_access_token("user-123", "test@example.com")
             
             response = client.get(
-                "/api/auth/me",
+                "/api/v1/auth/me",
                 headers={"Authorization": f"Bearer {token}"}
             )
             

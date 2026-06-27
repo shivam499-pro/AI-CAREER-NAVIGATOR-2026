@@ -1,13 +1,3 @@
-"""
-C:\project-2026\Career-navigator\backend\services\profile_service.py
-
-
-Profile Service
-Business logic for profile operations including:
-- Merging resume skills + manual skills
-- Calculating completeness score
-- Preparing enriched profile
-"""
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from core.supabase_client import get_supabase
@@ -37,7 +27,7 @@ def get_profile_by_user_id(user_id: str) -> Optional[Dict[str, Any]]:
         supabase = get_supabase()
         response = supabase.table("profiles").select("*").eq("user_id", user_id).execute()
         
-        if response.data:
+        if response.data and len(response.data) > 0:
             return response.data[0]
         return None
     except Exception as e:
@@ -181,7 +171,76 @@ def calculate_profile_completeness(profile: Optional[Dict[str, Any]], documents:
     
     return min(score, 100)
 
+def test_merge_skills_no_documents(monkeypatch):
+    from services.profile_service import merge_skills_from_documents
 
+    class FakeSupabase:
+        def table(self, name):
+            return self
+
+        def select(self, *args):
+            return self
+
+        def eq(self, *args):
+            return self
+
+        def execute(self):
+            return type("R", (), {"data": []})()
+
+    monkeypatch.setattr("services.profile_service.get_supabase", lambda: FakeSupabase())
+
+    result = merge_skills_from_documents("user-1")
+
+    assert result == []
+
+def test_merge_skills_confidence_and_sort(monkeypatch):
+    from services.profile_service import merge_skills_from_documents
+
+    fake_data = [
+        {
+            "document_type": "resume",
+            "extracted_data": {
+                "skills": ["Python", "FastAPI"]
+            }
+        },
+        {
+            "document_type": "certificate",
+            "extracted_data": {
+                "skills": ["python", "Docker"]
+            }
+        }
+    ]
+
+    class FakeSupabase:
+        def table(self, name):
+            return self
+
+        def select(self, *args):
+            return self
+
+        def eq(self, *args):
+            return self
+
+        def execute(self):
+            return type("R", (), {"data": fake_data})()
+
+    monkeypatch.setattr("services.profile_service.get_supabase", lambda: FakeSupabase())
+
+    result = merge_skills_from_documents("user-1")
+
+    skill_names = [s["name"].lower() for s in result]
+
+    assert "python" in skill_names
+    assert "fastapi" in skill_names
+    assert "docker" in skill_names
+
+
+    # confidence computed
+    for s in result:
+        assert "confidence" in s
+        assert 0 <= s["confidence"] <= 1
+
+        
 def get_enriched_profile(user_id: str) -> Dict[str, Any]:
     """
     Get enriched profile with merged skills and completeness score.
@@ -216,7 +275,7 @@ def get_enriched_profile(user_id: str) -> Dict[str, Any]:
     
     # Merge skills from documents with manual skills
     document_skills = merge_skills_from_documents(user_id)
-    manual_skills = profile.get("extra_skills", [])
+    manual_skills = profile.get("extra_skills") or []
     
     # Combine skills
     all_skills = []

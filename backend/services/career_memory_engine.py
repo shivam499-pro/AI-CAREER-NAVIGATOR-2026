@@ -1,8 +1,3 @@
-"""
-Career Memory Engine
-Tracks user evolution over time for career paths.
-Non-critical feature - failures must not break API.
-"""
 from supabase import create_client
 from typing import Optional, Dict, Any
 import os
@@ -38,14 +33,6 @@ def _get_supabase():
 
 
 def _calculate_trend(scores: list) -> str:
-    """
-    Calculate trend based on the last 3 session scores.
-    
-    Rules:
-    - increasing scores → improving
-    - stable (±5%) → stable
-    - decreasing → declining
-    """
     if not scores or len(scores) < 2:
         return "stable"
     
@@ -94,13 +81,7 @@ def _calculate_trend(scores: list) -> str:
 
 
 def _calculate_confidence(score_variance: float, session_count: int) -> float:
-    """
-    Calculate confidence score based on performance consistency.
-    
-    - Higher session count → higher confidence
-    - Lower variance → higher confidence
-    - Returns float between 0 and 1
-    """
+
     if session_count == 1:
         return 0.5
     
@@ -121,31 +102,6 @@ def _calculate_confidence(score_variance: float, session_count: int) -> float:
 
 
 def update_user_memory(user_id: str, session_data: Dict[str, Any]) -> bool:
-    """
-    Update user career memory based on interview session.
-    
-    This function is non-critical - failures should not break the API.
-    
-    Args:
-        user_id: UUID of the user
-        session_data: Dictionary containing:
-            - career_path: str (required)
-            - score: int/float (required) - interview score
-            - feedback: str (optional) - interview feedback
-            - timestamp: datetime (optional)
-    
-    Returns:
-        bool: True if successful, False otherwise
-    
-    Logic:
-    - If record exists for (user_id + career_path):
-        - Update average performance_score
-        - Increment session_count
-        - Update confidence_score based on consistency
-        - Update trend (improving/stable/declining)
-    - Else:
-        - Create new memory record
-    """
     try:
         supabase = _get_supabase()
         if not supabase:
@@ -181,9 +137,9 @@ def update_user_memory(user_id: str, session_data: Dict[str, Any]) -> bool:
             # Fetch recent scores for trend calculation
             # Get up to last 3 sessions for this career path
             recent_response = supabase.table("interview_sessions").select(
-                "total_score, created_at"
+                "total_score, last_updated"
             ).eq("user_id", user_id).eq("career_path", career_path).order(
-                "created_at", desc=True
+                "last_updated", desc=True
             ).limit(3).execute()
             
             recent_scores = [r["total_score"] for r in recent_response.data] if recent_response.data else []
@@ -232,7 +188,7 @@ def update_user_memory(user_id: str, session_data: Dict[str, Any]) -> bool:
                 "trend": "stable",
                 "session_count": 1,
                 "last_updated": datetime.utcnow().isoformat(),
-                "created_at": datetime.utcnow().isoformat()
+                "last_updated": datetime.utcnow().isoformat()
             }
             
             insert_response = supabase.table("user_career_memory").insert(new_record).execute()
@@ -251,16 +207,6 @@ def update_user_memory(user_id: str, session_data: Dict[str, Any]) -> bool:
 
 
 def get_user_memory(user_id: str, career_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """
-    Get user career memory data.
-    
-    Args:
-        user_id: UUID of the user
-        career_path: Optional career path to filter by
-    
-    Returns:
-        Dictionary with memory data or None if not found/error
-    """
     try:
         supabase = _get_supabase()
         if not supabase:

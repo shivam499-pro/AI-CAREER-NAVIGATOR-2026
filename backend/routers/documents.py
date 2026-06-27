@@ -13,6 +13,8 @@ from pydantic import BaseModel
 from services import document_service
 from core.middleware import get_current_user, AuthenticatedUser
 from supabase import create_client
+from services.certificate_service import CertificateService    # ← ADD THIS
+from core.gemini_transport import AsyncGeminiTransport
 from datetime import datetime, timezone
 import os
 from dotenv import load_dotenv
@@ -20,6 +22,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 router  = APIRouter()
+
+# Certificate service — initialized once, transport injected (DIP)
+_certificate_service = None
+
+def _get_certificate_service():
+    global _certificate_service
+    if _certificate_service is None:
+        _certificate_service = CertificateService(
+            transport=AsyncGeminiTransport.create()
+        )
+    return _certificate_service
 
 # ─── Supabase ─────────────────────────────────────────────────────────────────
 
@@ -39,9 +52,56 @@ ALLOWED_CERT_TYPES = {
     "image/png":       ".png",
 }
 
-MAX_CERT_SIZE = 5 * 1024 * 1024   # 5MB per file
-MAX_CERT_FILES = 10
 
+MAX_CERT_SIZE = 5 * 1024 * 1024
+MAX_FILE_SIZE = MAX_CERT_SIZE
+ALLOWED_TYPES = ALLOWED_CERT_TYPES
+MAX_CERT_FILES = 10
+PDF_MAGIC_BYTES  = b"%PDF"
+JPEG_MAGIC_BYTES = b"\xff\xd8"
+PNG_MAGIC_BYTES  = b"\x89PNG\r\n\x1a\n"
+
+
+def validate_file_content(
+    content: bytes,
+    filename: str,
+    mime_type: str,
+    min_image_size: int = 10
+) -> None:
+    """
+    Validate file content using magic bytes.
+    Raises HTTPException(400) on invalid content.
+    """
+    from fastapi import HTTPException
+    
+    if mime_type == "application/pdf":
+        if not content.startswith(PDF_MAGIC_BYTES):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid PDF: file does not start with %PDF signature"
+            )
+    elif mime_type in ("image/jpeg", "image/jpg"):
+        if not content.startswith(JPEG_MAGIC_BYTES):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid JPEG: incorrect file signature"
+            )
+        if len(content) < min_image_size:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid image: file too small to be a valid JPEG"
+            )
+    elif mime_type == "image/png":
+        if not content.startswith(PNG_MAGIC_BYTES):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid PNG: incorrect file signature"
+            )            
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: {mime_type}"
+        )
 
 # ─── POST /upload-certificates ────────────────────────────────────────────────
 
@@ -101,6 +161,12 @@ async def upload_certificates(
             continue
 
         # ── AI analysis ───────────────────────────────────────────────────────
+        cert_result = await _get_certificate_service().analyze(
+            file_content=content,
+            filename=file.filename or "certificate",
+            mime_type=file.content_type
+        )
+        extracted = cert_result.data
         try:
             extracted = analyze_certificate(
                 file_content=content,

@@ -44,8 +44,8 @@ def _get_mock_supabase_client(url=None, key=None):
     return mock_client
 
 # Patch at the supabase module level before any routers import it
-import supabase
-supabase.create_client = _get_mock_supabase_client
+# import supabase
+# supabase.create_client = _get_mock_supabase_client
 
 
 # =============================================================================
@@ -253,6 +253,24 @@ def mock_gemini_response():
         }
     }
 
+@pytest.fixture(autouse=True)
+def mock_supabase_singleton(request):
+    if request.node.get_closest_marker("integration"):
+        yield None
+        return
+    
+    from core.supabase_client import SupabaseClient
+ 
+    # Always start from a clean slate — eliminates run-order hazards.
+    SupabaseClient._instance = None
+ 
+    mock_client = MagicMock()
+ 
+    with patch("core.supabase_client.create_client", return_value=mock_client):
+        yield mock_client
+ 
+    # Clean up after the test too, so nothing leaks forward.
+    SupabaseClient._instance = None
 
 @pytest.fixture
 def valid_pdf_content():

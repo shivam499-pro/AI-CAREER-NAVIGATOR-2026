@@ -170,6 +170,7 @@ async def send_weekly_report(
         gmail_user = os.getenv("GMAIL_USER")
         gmail_password = os.getenv("GMAIL_APP_PASSWORD")
 
+
         if not gmail_user or not gmail_password:
             raise HTTPException(
                 status_code=500,

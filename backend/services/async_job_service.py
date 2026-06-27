@@ -10,7 +10,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 from enum import Enum
 
-from supabase import create_client
+from core.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +37,11 @@ class AsyncJobService:
     """
     
     def __init__(self):
-        supabase_url = os.getenv("SUPABASE_URL", "")
-        supabase_key = os.getenv("SUPABASE_SERVICE_KEY", "")
-        self._supabase = create_client(supabase_url, supabase_key)
+        pass
+
+    @property
+    def _supabase(self):
+        return get_supabase()
     
     def _generate_idempotency_key(self, job_type: JobType, user_id: str, payload: dict) -> str:
         """
