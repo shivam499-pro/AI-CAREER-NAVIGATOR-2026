@@ -20,7 +20,7 @@ export const BRAND_COLORS: Record<string, string> = {
   netflix: '#E50914',
 }
 
-export const DEFAULT_BRAND_COLOR = '#6C3FC8'
+export const DEFAULT_BRAND_COLOR = '#C2652A'
 
 export function getBrandColor(name: string): string {
   const lower = name.toLowerCase()
@@ -31,7 +31,7 @@ export function getBrandColor(name: string): string {
 export const EXPERIENCE_STYLES: Record<string, string> = {
   beginner: 'bg-sky-500/10 text-sky-400 border-sky-500/25',
   senior: 'bg-amber-500/10 text-amber-400 border-amber-500/25',
-  default: 'bg-primary-violet/10 text-primary-violet border-primary-violet/25',
+  default: 'bg-primary/10 text-primary border-primary/25',
 }
 
 export function getExperienceStyles(level: string): string {
