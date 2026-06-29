@@ -58,6 +58,8 @@ interface UseInterviewSessionProps {
     resumeData?: any | null
     onSaveProgress?: (state: any) => void
     onClearProgress?: () => void
+    onQuestionAdvance?: () => void
+    getUsedVoiceInput?: () => boolean
 }
 
 // ─── Transition message pools (outside hook — no re-creation) ─────────────────
@@ -101,6 +103,8 @@ export function useInterviewSession({
     resumeData = null,
     onSaveProgress,
     onClearProgress,
+    onQuestionAdvance,
+    usedVoiceInput = false,
 }: UseInterviewSessionProps) {
 
     // ── Screen ──────────────────────────────────────────────────────────────────
@@ -324,6 +328,7 @@ export function useInterviewSession({
                     setAnswer('')
                     setTypingBehavior({ startTime: null, keystrokes: 0, typingDuration: 0 })
                     setAuthenticityStatus('analyzing')
+                    onQuestionAdvance?.()
                 }, 500)
             } else {
                 // Last question — finish
@@ -334,8 +339,7 @@ export function useInterviewSession({
             toast.error('Failed to submit answer. Please try again.')
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user, careerPath, isWeeklyMode, onSaveProgress, getRandomTransitionMessage])
-
+    }, [user, careerPath, isWeeklyMode, onSaveProgress, getRandomTransitionMessage, onQuestionAdvance])
     // ── Submit Answer ───────────────────────────────────────────────────────────
 
     const submitAnswer = useCallback(async () => {
@@ -403,7 +407,7 @@ export function useInterviewSession({
                     difficulty,
                     interview_mode: interviewMode,
                     is_simulation: simMode,
-                    is_voice: false,
+                    is_voice: usedVoiceInput,
                 }),
             })
             const sessionData = await sessionRes.json()
@@ -480,7 +484,7 @@ export function useInterviewSession({
 
         setScreen('results')
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user, careerPath, difficulty, interviewMode, simMode, isWeeklyMode, onClearProgress])
+    }, [user, careerPath, difficulty, interviewMode, simMode, isWeeklyMode, onClearProgress, usedVoiceInput])
 
     // ── Start Interview ─────────────────────────────────────────────────────────
 

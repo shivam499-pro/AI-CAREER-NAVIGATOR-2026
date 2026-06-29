@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence } from 'framer-motion'
 import { motion } from 'framer-motion'
@@ -28,12 +28,19 @@ export default function InterviewPage() {
   const weekly = useWeeklyChallenge({ userId: user?.id })
 
   // ── Core session ────────────────────────────────────────────────────────────
+  const voiceRef = useRef<{ resetVoiceState: () => void; usedVoiceInput: boolean }>({
+    resetVoiceState: () => {},
+    usedVoiceInput: false,
+  })
+
   const session = useInterviewSession({
     user,
     isWeeklyMode: weekly.isWeeklyMode,
     resumeData: weekly.resumeData,
     onSaveProgress: weekly.saveProgress,
     onClearProgress: weekly.clearProgress,
+    onQuestionAdvance: () => voiceRef.current.resetVoiceState(),
+    getUsedVoiceInput: () => voiceRef.current.usedVoiceInput,
   })
 
   // ── Voice ───────────────────────────────────────────────────────────────────
@@ -42,6 +49,10 @@ export default function InterviewPage() {
     currentQuestion: session.questions[session.currentQuestion]?.question || '',
     screen: session.screen,
   })
+
+  useEffect(() => {
+    voiceRef.current = { resetVoiceState: voice.resetVoiceState, usedVoiceInput: voice.usedVoiceInput }
+  }, [voice.resetVoiceState, voice.usedVoiceInput])
 
   // ── Simulation timer ────────────────────────────────────────────────────────
   const timer = useSimTimer({
@@ -168,6 +179,7 @@ export default function InterviewPage() {
               isSpeaking={voice.isSpeaking}
               usedVoiceInput={voice.usedVoiceInput}
               commScore={voice.commScore}
+              finalizeVoiceAnswer={voice.finalizeVoiceAnswer}
               toggleVoice={voice.toggleVoice}
               speakQuestion={voice.speakQuestion}
               simTimeLeft={timer.timeLeft}

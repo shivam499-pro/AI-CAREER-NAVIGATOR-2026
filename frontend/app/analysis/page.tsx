@@ -77,18 +77,35 @@ export default function AnalysisPage() {
       </div>
     )
   }
-
-  if (!analysis) {
+  if (error) {
     return (
       <div className="min-h-screen bg-[#0B1120] flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-primary-violet mx-auto mb-3" />
-          <p className="text-sm text-slate-500">Loading analysis…</p>
+          <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-3" />
+          <p className="text-sm text-red-400">{error}</p>
         </div>
       </div>
     )
   }
 
+  if (!analysis) {
+    return (
+      <div className="min-h-screen bg-[#0B1120] flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-white mb-3">
+            No Analysis Found
+          </h2>
+  
+          <button
+            onClick={() => user && runAnalysis(user.id)}
+            className="px-4 py-2 bg-primary-violet text-white rounded-lg"
+          >
+            Run Analysis
+          </button>
+        </div>
+      </div>
+    )
+  }
   const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } }
   const itemVariants = { hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }
 

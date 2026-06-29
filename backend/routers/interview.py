@@ -102,15 +102,19 @@ async def generate_questions(
 @limiter.limit("10/minute")
 async def evaluate_answer(
     request: Request,
-    body: EvaluateAnswerRequest
+    body: EvaluateAnswerRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user)
 ):
+    if current_user.user_id != body.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     result = await get_interview_service().evaluate_answer(
         question=body.question,
         answer=body.answer,
         career_path=body.career_path,
     )
 
-    if not result.get("success", True) and result.get("error") == "evaluation_failed":
+    if not result.get("success", True) and result.get("error") in ("evaluation_failed", "rate_limit", "parse_error", "api_error"):
         raise HTTPException(
             status_code=500,
             detail="AI service is busy. Please wait a moment and try again."

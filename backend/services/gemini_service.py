@@ -218,9 +218,9 @@ async def _generate_with_retry(prompt: str) -> str:
     
 
 
-class RateLimitError(Exception):
-    """Custom exception for rate limit errors."""
-    pass
+# class RateLimitError(Exception):
+#     """Custom exception for rate limit errors."""
+#     pass
 
 
 async def _generate(prompt: str) -> str:
@@ -481,7 +481,7 @@ unique skill_gaps and roadmap — do NOT reuse the same content across paths.
             clean_text = _clean_json(raw_text)
             result = json.loads(clean_text)
             return {"success": True, "data": result}
-        except RateLimitError as e:
+        except TransportRateLimitError as e:
             return {
                 "success": False,
                 "error": str(e),
@@ -749,7 +749,7 @@ async def generate_interview_questions(
         if isinstance(questions, list) and len(questions) > 0:
             return questions
         return []
-    except RateLimitError as e:
+    except TransportRateLimitError as e:
         print(f"Rate limit error in interview questions: {str(e)}")
         return []
     except json.JSONDecodeError as e:
@@ -775,7 +775,7 @@ async def generate_interview_questions(
             if isinstance(questions, list) and len(questions) > 0:
                 return questions
             return []
-        except RateLimitError as e:
+        except TransportRateLimitError as e:
             print(f"Rate limit error on retry: {str(e)}")
             return []
         except Exception as e2:
@@ -808,23 +808,11 @@ Return ONLY valid JSON with exactly these fields:
 No markdown, no extra text, just JSON."""
     try:
         return json.loads(_clean_json(await _generate(prompt)))
-    except RateLimitError as e:
+    except TransportRateLimitError as e:
         return {
             "success": False,
             "error": "rate_limit",
             "message": "Too many request. Please wait a moment and try again"
-        }
-    except json.JSONDecodeError:
-        return{
-            "success": False,
-            "error": "parse_error",
-            "message": "Could not parse AI response. PLease try again."
-        }
-    except RateLimitError as e:
-        return {
-            "success": False,
-            "error": "rate_limit",
-            "message": "Too many requests. Please wait and try again."
         }
     except json.JSONDecodeError:
         return {
@@ -966,7 +954,7 @@ Return ONLY the JSON object. No markdown, no explanation."""
             "document_type":      "certificate"
         }
 
-    except RateLimitError:
+    except TransportRateLimitError:
         # Rate limited — return basic fallback without crashing
         return _certificate_fallback(filename)
     except json.JSONDecodeError:
