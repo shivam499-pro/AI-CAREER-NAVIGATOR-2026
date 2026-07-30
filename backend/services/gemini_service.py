@@ -1,6 +1,6 @@
 """
 AI Service using Google Gemini 2.5 Flash (Free Tier)
-6 calls combined into 1 using smart caching
+6 calls combined into 1 combined analysis call.
 """
 from core.gemini_transport import AsyncGeminiTransport, RateLimitError as TransportRateLimitError
 import os
@@ -8,7 +8,6 @@ import json
 import re
 import random
 import time
-from collections import OrderedDict
 from google import genai
 from dotenv import load_dotenv
 
@@ -136,18 +135,6 @@ if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY is missing from .env file")
 
 
-# Cache configuration
-CACHE_MAX_SIZE = 100  # Maximum number of entries
-CACHE_TTL_SECONDS = 3600  # 1 hour TTL
-
-# Cache state with TTL tracking
-# Using OrderedDict for LRU behavior: most recently used stays at end
-_analysis_cache = OrderedDict()  # {cache_key: (timestamp, data)}
-_cache_timestamps = {}  # {cache_key: timestamp}
-_last_github_data = {}
-_last_leetcode_data = {}
-
-
 def _clean_json(text: str) -> str:
     text = text.strip()
     text = re.sub(r'```json\s*', '', text)
@@ -169,30 +156,6 @@ def _clean_json(text: str) -> str:
                 text = text[:i+1]
                 break
     return text.strip()
-
-
-def _cleanup_cache():
-    """
-    Remove expired entries and enforce max size limit.
-    Uses LRU: removes oldest entries when at capacity.
-    """
-    global _analysis_cache, _cache_timestamps
-    current_time = time.time()
-    
-    # Remove expired entries
-    expired_keys = [
-        key for key, ts in _cache_timestamps.items()
-        if current_time - ts > CACHE_TTL_SECONDS
-    ]
-    for key in expired_keys:
-        _analysis_cache.pop(key, None)
-        _cache_timestamps.pop(key, None)
-    
-    # Enforce max size (LRU: remove oldest entries)
-    while len(_analysis_cache) > CACHE_MAX_SIZE:
-        oldest_key = next(iter(_analysis_cache))
-        _analysis_cache.pop(oldest_key)
-        _cache_timestamps.pop(oldest_key, None)
 
 
 def _is_rate_limit_error(error: Exception) -> bool:
@@ -504,154 +467,6 @@ unique skill_gaps and roadmap — do NOT reuse the same content across paths.
             }
 
 
-def _get_cached_analysis(
-    github_data: dict,
-    leetcode_data: dict,
-    resume_text: str = "",
-    user_profile: dict = {}
-) -> dict:
-    global _last_github_data, _last_leetcode_data, _analysis_cache, _cache_timestamps
-    
-    # Store the most recent inputs
-    if github_data: _last_github_data = github_data
-    if leetcode_data: _last_leetcode_data = leetcode_data
-    
-    # Clean up expired entries and enforce size limit
-    _cleanup_cache()
-    
-    cache_key = str(github_data) + str(leetcode_data) + str(resume_text[:100]) + str(user_profile)
-    current_time = time.time()
-    
-    # Check if valid cache entry exists
-    if cache_key in _analysis_cache:
-        # Check if not expired
-        if cache_key in _cache_timestamps:
-            if current_time - _cache_timestamps[cache_key] <= CACHE_TTL_SECONDS:
-                # Move to end (most recently used) for LRU
-                _analysis_cache.move_to_end(cache_key)
-                return _analysis_cache[cache_key], None
-            else:
-                # Expired - remove it
-                _analysis_cache.pop(cache_key, None)
-                _cache_timestamps.pop(cache_key, None)
-    
-    # Cache miss - run analysis
-    result = run_combined_analysis(
-        github_data,
-        leetcode_data,
-        resume_text,
-        user_profile
-    )
-    if result["success"]:
-        # Clean up before adding new entry
-        _cleanup_cache()
-        # Add to cache with timestamp
-        _analysis_cache[cache_key] = result["data"]
-        _cache_timestamps[cache_key] = current_time
-        # Move to end for LRU
-        _analysis_cache.move_to_end(cache_key)
-    else:
-        return None, result["error"]
-    
-    return _analysis_cache[cache_key], None
-
-
-# ============================================================
-# THESE FUNCTIONS KEEP THE SAME NAMES AND SIGNATURES AS BEFORE
-# The router does not need any changes at all
-# ============================================================
-
-def analyze_profile(
-    github_data: dict,
-    leetcode_data: dict,
-    resume_text: str = "",
-    user_profile: dict = {}
-) -> dict:
-    data, error = _get_cached_analysis(
-        github_data,
-        leetcode_data,
-        resume_text,
-        user_profile
-    )
-    if data:
-        return data.get("analysis", {
-            "strengths": [],
-            "weaknesses": [],
-            "experience_level": "Intermediate",
-            "experience_reason": "Analysis completed"
-        })
-    return {
-        "error": error or "Analysis failed",
-        "strengths": ["Error in analysis"],
-        "weaknesses": [],
-        "experience_level": "Intermediate",
-        "experience_reason": "Could not complete analysis"
-    }
-
-
-def generate_career_paths(
-    analysis: dict,
-    github_data: dict,
-    leetcode_data: dict,
-    resume_text: str = "",
-    user_profile: dict = {}
-) -> list:
-    data, error = _get_cached_analysis(
-        github_data,
-        leetcode_data,
-        resume_text,
-        user_profile
-    )
-    if data:
-        return data.get("career_paths", [])
-    return [{"error": error or "Failed to generate career paths"}]
-
-
-def generate_skill_gaps(
-    analysis: dict,
-    career_path: str,
-    github_data: dict,
-    resume_text: str = "",
-    user_profile: dict = {}
-) -> list:
-    data, error = _get_cached_analysis(
-        github_data=_last_github_data,
-        leetcode_data=_last_leetcode_data,
-        resume_text=resume_text,
-        user_profile=user_profile
-    )
-    if data:
-        return data.get("skill_gaps", [])
-    return [{"error": error or "Failed to generate skill gaps"}]
-
-
-def generate_roadmap(
-    analysis: dict,
-    career_path: str,
-    duration_months: int = 6,
-    resume_text: str = "",
-    user_profile: dict = {}
-) -> dict:
-    data, error = _get_cached_analysis(
-        github_data=_last_github_data,
-        leetcode_data=_last_leetcode_data,
-        resume_text=resume_text,
-        user_profile=user_profile
-    )
-    if data:
-        return data.get("roadmap", {
-            "target_career": career_path,
-            "duration_months": duration_months,
-            "milestones": []
-        })
-    return {
-        "error": error or "Failed to generate roadmap",
-        "target_career": career_path,
-        "duration_months": duration_months,
-        "milestones": []
-    }
-
-
 async def generate_interview_questions(
     profile: dict,
     career_path: str,
@@ -807,14 +622,21 @@ Return ONLY valid JSON with exactly these fields:
 
 No markdown, no extra text, just JSON."""
     try:
-        return json.loads(_clean_json(await _generate(prompt)))
+        result = json.loads(_clean_json(await _generate(prompt)))
+        required_keys = {"score", "good_points", "missing_points", "model_answer"}
+        if not isinstance(result, dict) or not required_keys.issubset(result.keys()):
+            raise ValueError(f"Gemini returned unexpected shape: {result!r}")
+        return result
+    
     except TransportRateLimitError as e:
         return {
             "success": False,
             "error": "rate_limit",
             "message": "Too many request. Please wait a moment and try again"
         }
-    except json.JSONDecodeError:
+    except ValueError:
+        # json.JSONDecodeError is itself a ValueError subclass, so this branch
+        # covers both "not JSON at all" and "valid JSON, wrong/missing schema".
         return {
             "success": False,
             "error": "parse_error",
@@ -965,10 +787,6 @@ Return ONLY the JSON object. No markdown, no explanation."""
 
 
 def _certificate_fallback(filename: str) -> dict:
-    """
-    Fallback when AI analysis fails.
-    Returns minimal structure so the upload still succeeds.
-    """
     return {
         "course_name":        filename.replace(".pdf", "").replace("_", " ").replace("-", " "),
         "provider":           "Unknown",

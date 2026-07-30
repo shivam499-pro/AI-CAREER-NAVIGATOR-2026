@@ -272,6 +272,21 @@ def mock_supabase_singleton(request):
     # Clean up after the test too, so nothing leaks forward.
     SupabaseClient._instance = None
 
+@pytest.fixture(autouse=True)
+def reset_gemini_transport_singleton(request):
+    """Mirrors mock_supabase_singleton above, for the same reason: services.gemini_service._gemini_transport
+    is a process-lifetime singleton. If it's ever left real (e.g. a test forgets to patch _get_transport
+    or _generate), it must not persist and get reused by a later, unrelated test."""
+    if request.node.get_closest_marker("live"):
+        yield
+        return
+
+    import services.gemini_service as gemini_service
+
+    gemini_service._gemini_transport = None
+    yield
+    gemini_service._gemini_transport = None
+
 @pytest.fixture
 def valid_pdf_content():
     """Provide valid PDF file content with magic bytes."""
