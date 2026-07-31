@@ -70,13 +70,13 @@ class TestRetriableErrorDetection:
 
 class TestRateLimitErrorClass:
     def test_rate_limit_error_creation(self):
-        from services.gemini_service import RateLimitError
+        from core.gemini_transport import RateLimitError
         error = RateLimitError("Rate limit exceeded")
         assert str(error) == "Rate limit exceeded"
         assert isinstance(error, Exception)
 
     def test_rate_limit_error_is_exception(self):
-        from services.gemini_service import RateLimitError
+        from core.gemini_transport import RateLimitError
         assert isinstance(RateLimitError("test"), Exception)
 
 
@@ -105,7 +105,7 @@ class TestRunCombinedAnalysisRateLimit:
     async def test_analysis_rate_limit_returns_error(self):
         """Test that rate limit error is properly returned."""
         from services import gemini_service
-        from services.gemini_service import RateLimitError
+        from core.gemini_transport import RateLimitError
 
         with patch.object(
             gemini_service, '_generate',

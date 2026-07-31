@@ -2,6 +2,7 @@
 Tests for critical API endpoints.
 Tests main endpoints for analysis, resume, interview, jobs, etc.
 """
+from fastapi.testclient import TestClient
 import pytest
 import sys
 import os
@@ -295,7 +296,7 @@ class TestInterviewEndpoints:
         # app.dependency_overrides[get_current_user] = lambda: mock_auth
     
         try:
-            with patch('routers.interview.supabase', mock_supabase):
+            with patch('routers.interview.get_supabase', return_value=mock_supabase):
                 client = TestClient(app)
                 response = client.get(
                     "/api/v1/interview/history/test-user-123",
@@ -606,3 +607,126 @@ class TestCORSConfiguration:
 
 
 
+
+# If these aren't already imported at the top of the file, add them:
+# import sys
+# import pytest
+# from unittest.mock import patch
+# from fastapi.testclient import TestClient
+
+
+class TestEnvironmentValidation:
+    """
+    Tests for main.validate_environment(), the bootstrap check that runs
+    before the FastAPI app is constructed. Called directly (not via a fresh
+    `import main`) since the module is already cached in sys.modules by the
+    time these tests run, and validate_environment() has no side effects
+    beyond stdout + sys.exit, so it's safe to invoke standalone.
+    """
+
+    def test_missing_required_var_exits_with_error(self, monkeypatch, capsys):
+        from main import validate_environment
+
+        monkeypatch.setenv("SUPABASE_URL", "https://fake.supabase.co")
+        monkeypatch.delenv("SUPABASE_SERVICE_KEY", raising=False)
+        monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+
+        with pytest.raises(SystemExit) as exc_info:
+            validate_environment()
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Missing required environment variables" in captured.out
+        assert "SUPABASE_SERVICE_KEY" in captured.out
+
+    def test_blank_required_var_counts_as_missing(self, monkeypatch, capsys):
+        """
+        Bonus/optional: doesn't add new line coverage (line 48 is already hit
+        by the test above), but verifies the `value.strip() == ""` half of
+        the OR on line 47 actually does something — a whitespace-only value
+        must be treated as missing, not just None/empty string.
+        """
+        from main import validate_environment
+
+        monkeypatch.setenv("SUPABASE_URL", "   ")
+        monkeypatch.setenv("SUPABASE_SERVICE_KEY", "fake-key")
+        monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+
+        with pytest.raises(SystemExit) as exc_info:
+            validate_environment()
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "SUPABASE_URL" in captured.out
+
+    def test_missing_optional_vars_warns_but_does_not_exit(self, monkeypatch, capsys):
+        from main import validate_environment
+
+        monkeypatch.setenv("SUPABASE_URL", "https://fake.supabase.co")
+        monkeypatch.setenv("SUPABASE_SERVICE_KEY", "fake-key")
+        monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+        for var in ("SUPABASE_ANON_KEY", "GITHUB_TOKEN", "SERPAPI_KEY",
+                    "GMAIL_USER", "GMAIL_APP_PASSWORD", "CORS_ORIGINS"):
+            monkeypatch.delenv(var, raising=False)
+
+        validate_environment()  # must NOT raise / NOT sys.exit
+
+        captured = capsys.readouterr()
+        assert "Optional environment variables not set" in captured.out
+        assert "GMAIL_USER" in captured.out
+        assert "Environment validation passed" in captured.out
+
+
+class TestHealthEndpointExceptionPaths:
+    """
+    Covers the two exception branches in health_check() that the existing
+    health-check tests don't reach, since those only exercise the happy
+    path where both dependencies succeed. (Previously bare `except: pass`;
+    now `except Exception` with a logged warning - behavior here is
+    unchanged, still degrades to False rather than raising.)
+    """
+
+    def test_health_check_reports_database_false_when_supabase_raises(self):
+        with patch('supabase.create_client', side_effect=Exception("connection refused")):
+            from main import app
+            client = TestClient(app)
+            response = client.get("/health")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "healthy"            # route itself never fails
+        assert body["services"]["database"] is False    # but db_ok correctly stayed False
+
+    def test_health_check_reports_gemini_false_when_import_fails(self, monkeypatch):
+        # Standard trick for simulating a missing/broken optional import:
+        # a None entry in sys.modules forces ImportError on that exact import.
+        monkeypatch.setitem(sys.modules, "google.genai", None)
+
+        with patch('supabase.create_client'):
+            from main import app
+            client = TestClient(app)
+            response = client.get("/health")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["services"]["gemini"] is False
+
+
+class TestMetricsEndpoint:
+    """No existing test hits GET /metrics at all — plain gap, not a bug."""
+
+    def test_metrics_endpoint_returns_metrics_payload(self):
+        with patch('supabase.create_client'):
+            from main import app
+            client = TestClient(app)
+            response = client.get("/metrics")
+
+        assert response.status_code == 200
+        body = response.json()
+        # Shape comes from core.metrics.get_metrics() — I read that file's
+        # source directly earlier in this session (it's separately at 100%
+        # coverage already). If a key name below doesn't match, it'll fail
+        # cleanly and is a one-line fix, not a sign of a deeper problem.
+        assert "total_requests" in body
+        assert "total_errors" in body
+        assert "error_rate" in body

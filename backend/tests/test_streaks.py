@@ -50,9 +50,10 @@ class TestGetStreak:
     def teardown_method(self):
         _clear_overrides()
 
-    @patch("routers.streaks.supabase")
-    def test_get_streak_returns_existing_data(self, mock_supabase):
+    @patch("routers.streaks.get_supabase")
+    def test_get_streak_returns_existing_data(self, mock_get_supabase):
         """User has existing streak record — all fields returned correctly."""
+        mock_supabase = mock_get_supabase.return_value
         mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
             data=[
                 {
@@ -73,9 +74,10 @@ class TestGetStreak:
         assert body["last_practice_date"] == YESTERDAY
         assert body["total_sessions"] == 20
 
-    @patch("routers.streaks.supabase")
-    def test_get_streak_returns_zeros_when_no_record(self, mock_supabase):
+    @patch("routers.streaks.get_supabase")
+    def test_get_streak_returns_zeros_when_no_record(self, mock_get_supabase):
         """No DB row for this user — default zero values returned."""
+        mock_supabase = mock_get_supabase.return_value
         mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
             data=[]
         )
@@ -89,9 +91,10 @@ class TestGetStreak:
         assert body["last_practice_date"] is None
         assert body["total_sessions"] == 0
 
-    @patch("routers.streaks.supabase")
-    def test_get_streak_returns_zeros_when_data_is_none(self, mock_supabase):
+    @patch("routers.streaks.get_supabase")
+    def test_get_streak_returns_zeros_when_data_is_none(self, mock_get_supabase):
         """DB response with data=None treated like empty list."""
+        mock_supabase = mock_get_supabase.return_value
         mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
             data=None
         )
@@ -102,9 +105,10 @@ class TestGetStreak:
         body = resp.json()
         assert body["current_streak"] == 0
 
-    @patch("routers.streaks.supabase")
-    def test_get_streak_raises_500_on_db_exception(self, mock_supabase):
+    @patch("routers.streaks.get_supabase")
+    def test_get_streak_raises_500_on_db_exception(self, mock_get_supabase):
         """DB throws — endpoint returns 500."""
+        mock_supabase = mock_get_supabase.return_value
         mock_supabase.table.return_value.select.return_value.eq.return_value.execute.side_effect = Exception(
             "DB connection lost"
         )
@@ -131,9 +135,10 @@ class TestUpdateStreak:
     # New user — no existing record
     # ------------------------------------------------------------------
 
-    @patch("routers.streaks.supabase")
-    def test_update_creates_new_streak_for_first_time_user(self, mock_supabase):
+    @patch("routers.streaks.get_supabase")
+    def test_update_creates_new_streak_for_first_time_user(self, mock_get_supabase):
         """No existing row → insert with streak=1 and return first-time message."""
+        mock_supabase = mock_get_supabase.return_value
         mock_select = MagicMock(data=[])
         mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = (
             mock_select
@@ -159,9 +164,10 @@ class TestUpdateStreak:
     # Already practiced today
     # ------------------------------------------------------------------
 
-    @patch("routers.streaks.supabase")
-    def test_update_returns_same_when_already_practiced_today(self, mock_supabase):
+    @patch("routers.streaks.get_supabase")
+    def test_update_returns_same_when_already_practiced_today(self, mock_get_supabase):
         """last_practice_date == today → no DB write, idempotent response."""
+        mock_supabase = mock_get_supabase.return_value
         mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
             data=[
                 {
@@ -187,9 +193,10 @@ class TestUpdateStreak:
     # Practiced yesterday → increment streak
     # ------------------------------------------------------------------
 
-    @patch("routers.streaks.supabase")
-    def test_update_increments_streak_when_practiced_yesterday(self, mock_supabase):
+    @patch("routers.streaks.get_supabase")
+    def test_update_increments_streak_when_practiced_yesterday(self, mock_get_supabase):
         """last_practice_date == yesterday → streak+1, longest updated if needed."""
+        mock_supabase = mock_get_supabase.return_value
         mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
             data=[
                 {
@@ -211,9 +218,10 @@ class TestUpdateStreak:
         assert body["total_sessions"] == 11
         assert "5 day streak" in body["message"]
 
-    @patch("routers.streaks.supabase")
-    def test_update_does_not_overwrite_longest_if_not_beaten(self, mock_supabase):
+    @patch("routers.streaks.get_supabase")
+    def test_update_does_not_overwrite_longest_if_not_beaten(self, mock_get_supabase):
         """Longest streak stays if current streak doesn't beat it."""
+        mock_supabase = mock_get_supabase.return_value
         mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
             data=[
                 {
@@ -236,9 +244,10 @@ class TestUpdateStreak:
     # Streak broken (last practice older than yesterday)
     # ------------------------------------------------------------------
 
-    @patch("routers.streaks.supabase")
-    def test_update_resets_streak_when_gap_exists(self, mock_supabase):
+    @patch("routers.streaks.get_supabase")
+    def test_update_resets_streak_when_gap_exists(self, mock_get_supabase):
         """last_practice_date is 2+ days ago → streak resets to 1."""
+        mock_supabase = mock_get_supabase.return_value
         mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
             data=[
                 {
@@ -264,9 +273,10 @@ class TestUpdateStreak:
     # Edge: last_practice_date is None in existing record
     # ------------------------------------------------------------------
 
-    @patch("routers.streaks.supabase")
-    def test_update_resets_when_last_practice_date_is_none(self, mock_supabase):
+    @patch("routers.streaks.get_supabase")
+    def test_update_resets_when_last_practice_date_is_none(self, mock_get_supabase):
         """Existing record but no last_practice_date → treated as broken streak."""
+        mock_supabase = mock_get_supabase.return_value
         mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
             data=[
                 {
@@ -289,9 +299,10 @@ class TestUpdateStreak:
     # Edge: invalid date string stored in DB
     # ------------------------------------------------------------------
 
-    @patch("routers.streaks.supabase")
-    def test_update_handles_invalid_date_string_gracefully(self, mock_supabase):
+    @patch("routers.streaks.get_supabase")
+    def test_update_handles_invalid_date_string_gracefully(self, mock_get_supabase):
         """Corrupt date string in DB → treated as None, streak resets to 1."""
+        mock_supabase = mock_get_supabase.return_value
         mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
             data=[
                 {
@@ -314,9 +325,10 @@ class TestUpdateStreak:
     # Exception path
     # ------------------------------------------------------------------
 
-    @patch("routers.streaks.supabase")
-    def test_update_returns_500_on_db_exception(self, mock_supabase):
+    @patch("routers.streaks.get_supabase")
+    def test_update_returns_500_on_db_exception(self, mock_get_supabase):
         """Any unhandled exception → 500 with descriptive message."""
+        mock_supabase = mock_get_supabase.return_value
         mock_supabase.table.return_value.select.return_value.eq.return_value.execute.side_effect = Exception(
             "timeout"
         )

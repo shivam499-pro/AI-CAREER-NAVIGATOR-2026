@@ -237,7 +237,8 @@ def test_get_badges_returns_correct_shape():
     mock_data.data = [{"badge_id": "first_session", "earned_at": "2026-01-01T00:00:00"}]
 
     try:
-        with patch("routers.badges.supabase") as mock_supabase:
+        with patch("routers.badges.get_supabase") as mock_get_supabase:
+            mock_supabase = mock_get_supabase.return_value
             mock_supabase.table.return_value.select.return_value \
                 .eq.return_value.execute.return_value = mock_count
 
@@ -309,5 +310,18 @@ def test_check_endpoint_returns_newly_earned():
         assert "newly_earned" in body
         assert len(body["newly_earned"]) == 1
         assert body["newly_earned"][0]["id"] == "first_session"
+    finally:
+        app.dependency_overrides.clear()
+
+def test_get_badges_service_exception_returns_500():
+    app.dependency_overrides[get_current_user] = override_auth("test-user-123")
+
+    try:
+        with patch("routers.badges.get_supabase", side_effect=Exception("db unavailable")):
+            client = TestClient(app)
+            response = client.get("/api/v1/badges/test-user-123")
+
+        assert response.status_code == 500
+        assert response.json()["detail"] == "Failed to fetch badges"
     finally:
         app.dependency_overrides.clear()
