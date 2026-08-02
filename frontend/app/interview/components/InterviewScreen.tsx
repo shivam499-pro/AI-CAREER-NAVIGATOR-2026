@@ -39,6 +39,7 @@ interface InterviewScreenProps {
     isSpeaking: boolean
     usedVoiceInput: boolean
     commScore: CommScore | null
+    finalizeVoiceAnswer: (answerText: string) => void
     toggleVoice: () => void
     speakQuestion: () => void
     simTimeLeft: number
@@ -185,7 +186,7 @@ export default function InterviewScreen({
     typingBehavior, authenticityStatus,
     setAnswer, setTypingBehavior, setPasteAttempted,
     isRecording, voiceStatus, speechSupported, isSpeaking,
-    usedVoiceInput, commScore, toggleVoice, speakQuestion,
+    usedVoiceInput, commScore,finalizeVoiceAnswer, toggleVoice, speakQuestion,
     simTimeLeft, timerColor, barColor, barWidth, isUrgent, stopTimer,
     weakestPath, aiTip, readinessScore, brainLoaded,
     formatTime, getAiLabel, submitAnswer, handleTimeUp,
@@ -227,8 +228,9 @@ export default function InterviewScreen({
 
     const handleSubmit = useCallback(() => {
         stopTimer()
+        finalizeVoiceAnswer(answer)
         submitAnswer()
-    }, [stopTimer, submitAnswer])
+    }, [stopTimer, finalizeVoiceAnswer, answer, submitAnswer])
 
     const handleAnswerChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const val = e.target.value

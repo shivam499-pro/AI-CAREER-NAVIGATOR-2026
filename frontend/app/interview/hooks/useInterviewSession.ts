@@ -104,7 +104,7 @@ export function useInterviewSession({
     onSaveProgress,
     onClearProgress,
     onQuestionAdvance,
-    usedVoiceInput = false,
+    getUsedVoiceInput,
 }: UseInterviewSessionProps) {
 
     // ── Screen ──────────────────────────────────────────────────────────────────
@@ -407,7 +407,7 @@ export function useInterviewSession({
                     difficulty,
                     interview_mode: interviewMode,
                     is_simulation: simMode,
-                    is_voice: usedVoiceInput,
+                    is_voice: getUsedVoiceInput?.() ?? false,
                 }),
             })
             const sessionData = await sessionRes.json()
@@ -484,7 +484,7 @@ export function useInterviewSession({
 
         setScreen('results')
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user, careerPath, difficulty, interviewMode, simMode, isWeeklyMode, onClearProgress, usedVoiceInput])
+    }, [user, careerPath, difficulty, interviewMode, simMode, isWeeklyMode, onClearProgress, getUsedVoiceInput])
 
     // ── Start Interview ─────────────────────────────────────────────────────────
 

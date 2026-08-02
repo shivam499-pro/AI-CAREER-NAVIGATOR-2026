@@ -85,17 +85,17 @@ export default function InterviewPage() {
 
   if (pageLoading) {
     return (
-      <div className="min-h-screen bg-[#0F172A] flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-purple-500 mx-auto mb-4" />
-          <p className="text-slate-400 font-medium">Initializing Coach...</p>
+          <Loader2 className="w-12 h-12 animate-[spin_2s_linear_infinite] text-primary mx-auto mb-4" />
+          <p className="text-foreground font-bold font-lg">Initializing Coach...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#0F172A] text-white">
+    <div className="min-h-screen bg-background text-foreground">
       <Navbar />
 
       {/* ── Streak + Rank Bar ─────────────────────────────────────────────── */}
@@ -103,33 +103,33 @@ export default function InterviewPage() {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="sticky top-[64px] z-40 flex items-center justify-center gap-6 py-3 px-4 bg-[#1E293B]/80 backdrop-blur-md border-b border-white/5"
+          className="sticky top-[64px] z-40 flex items-center justify-center gap-6 py-3 px-4 bg-card/80 backdrop-blur-md border-b border-border"
         >
           {session.streakData && (
             <div className="flex items-center gap-2">
               <div className={`p-1.5 rounded-full ${session.streakData.current_streak > 0
-                ? 'bg-orange-500/20'
+                ? 'bg-primary/20'
                 : 'bg-slate-700/50'
                 }`}>
                 <span className="text-lg">⚡</span>
               </div>
-              <span className="text-sm font-black uppercase tracking-widest text-slate-300">
+              <span className="text-sm font-black uppercase tracking-widest text-foreground">
                 {session.streakData.current_streak} Day{' '}
-                <span className="text-orange-400">Streak</span>
+                <span className="text-primary">Streak</span>
               </span>
             </div>
           )}
           {session.rankData && (
-            <div className="flex items-center gap-4 border-l border-white/10 pl-6">
+            <div className="flex items-center gap-4 border-l border-border pl-6">
               <span className="text-sm font-black uppercase tracking-widest">
-                <span className="text-purple-400">{session.rankData.rank_title}</span>
-                <span className="text-slate-500 ml-2">Lvl {session.rankData.level}</span>
+                <span className="text-primary">{session.rankData.rank_title}</span>
+                <span className="text-muted-foreground ml-2">Lvl {session.rankData.level}</span>
               </span>
-              <div className="w-28 h-2 bg-slate-800 rounded-full overflow-hidden">
+              <div className="w-28 h-2 bg-muted rounded-full overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${session.rankData.progress_percent}%` }}
-                  className="h-full bg-gradient-to-r from-purple-600 to-violet-400 rounded-full"
+                  className="h-full bg-primary rounded-full"
                 />
               </div>
             </div>
