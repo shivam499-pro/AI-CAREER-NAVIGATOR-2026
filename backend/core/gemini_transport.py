@@ -1,12 +1,3 @@
-"""
-core/gemini_transport.py
-Fix: genai.AsyncClient does not exist in google-genai 1.x.
-
-Correct 1.x API:
-  client = genai.Client(api_key=...)
-  await client.aio.models.generate_content(...)
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -68,7 +59,7 @@ class AsyncGeminiTransport:
     DIP: inject client in production, mock in tests.
     """
 
-    DEFAULT_MODEL = "gemini-2.5-flash"
+    DEFAULT_MODEL = "gemini-3.6-flash"
 
     def __init__(
         self,
@@ -138,4 +129,4 @@ class AsyncGeminiTransport:
                              attempt + 1, self._retry.total_attempts, exc)
                 raise
 
-        raise last_exception  # type: ignore[misc]
+        raise last_exception  # type: ignore[misc]  # pragma: no cover - unreachable: final loop iteration always returns/raises first
