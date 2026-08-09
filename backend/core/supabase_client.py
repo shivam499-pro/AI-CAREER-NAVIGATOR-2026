@@ -71,6 +71,23 @@ def get_supabase() -> Client:
     """Get the centralized Supabase client."""
     return SupabaseClient.get_client()
 
+def get_anon_client() -> Client:
+    """
+    Fresh client for operations that establish a user session
+    (sign_up / sign_in_with_password) via the anon key.
+
+    NEVER use the shared get_supabase() singleton for these -- supabase-py
+    persists the resulting session and swaps the Authorization header used
+    for ALL subsequent requests on that client instance, silently
+    stripping RLS-bypass from the shared service-role client for every
+    other router.
+
+    Defined here, not in routers/auth.py, specifically so it goes through
+    the same `create_client` reference the test suite already patches for
+    get_supabase() -- a router-local import bypasses that protection, as
+    the first version of this fix did.
+    """
+    return create_client(SupabaseClient.get_url(), SupabaseClient.get_anon_key())
 
 # For backward compatibility
 supabase = SupabaseClient.get_client()
