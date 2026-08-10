@@ -4,7 +4,7 @@ Handles weekly AI performance email report system
 """
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from core.supabase_client import supabase
+from core.supabase_client import get_supabase
 from core.middleware import get_current_user, AuthenticatedUser
 import os
 import smtplib
@@ -28,7 +28,6 @@ def build_weekly_report(user_data: dict) -> str:
     rank_title = rank.get("rank_title", "🌱 Fresher")
     xp = rank.get("xp", 0)
 
-    # Fix 1: Handle zero sessions properly
     if sessions:
         best_session = max(sessions, key=lambda s: s.get("total_score", 0))
         best_score = best_session.get("total_score", 0)
@@ -42,7 +41,6 @@ def build_weekly_report(user_data: dict) -> str:
                 career_scores[career] = []
             career_scores[career].append(s.get("total_score", 0))
 
-        # Fix 2: removed unused weakest_avg variable
         weakest_career = min(
             career_scores.keys(),
             key=lambda c: sum(career_scores[c]) / len(career_scores[c])
@@ -74,7 +72,6 @@ def build_weekly_report(user_data: dict) -> str:
             </div>
         """
     else:
-        # Fix 1: Clean no-sessions state instead of broken 0/50 - N/A
         performance_section = """
             <div class="stat-box" style="text-align:center; padding: 30px;">
                 <div class="stat-value" style="font-size:18px;">😴 No practice sessions this week</div>
@@ -147,21 +144,22 @@ async def send_weekly_report(
     User identity comes from JWT token — not request body.
     """
     email = request.email
+    supabase = get_supabase()
 
     try:
         seven_days_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
 
         sessions_response = supabase.table("interview_sessions").select("*") \
-            .eq("user_id", current_user.id) \
+            .eq("user_id", current_user.user_id) \
             .gte("created_at", seven_days_ago).execute()
         sessions = sessions_response.data if sessions_response.data else []
 
         streak_response = supabase.table("user_streaks").select("*") \
-            .eq("user_id", current_user.id).execute()
+            .eq("user_id", current_user.user_id).execute()
         streak = streak_response.data[0] if streak_response.data else {}
 
         rank_response = supabase.table("user_ranks").select("*") \
-            .eq("user_id", current_user.id).execute()
+            .eq("user_id", current_user.user_id).execute()
         rank = rank_response.data[0] if rank_response.data else {}
 
         user_data = {"sessions": sessions, "streak": streak, "rank": rank}
@@ -169,7 +167,6 @@ async def send_weekly_report(
 
         gmail_user = os.getenv("GMAIL_USER")
         gmail_password = os.getenv("GMAIL_APP_PASSWORD")
-
 
         if not gmail_user or not gmail_password:
             raise HTTPException(
@@ -205,20 +202,21 @@ async def get_report_preview(
     Preview weekly report HTML without sending email.
     User identity comes from JWT token.
     """
+    supabase = get_supabase()
     try:
         seven_days_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
 
         sessions_response = supabase.table("interview_sessions").select("*") \
-            .eq("user_id", current_user.id) \
+            .eq("user_id", current_user.user_id) \
             .gte("created_at", seven_days_ago).execute()
         sessions = sessions_response.data if sessions_response.data else []
 
         streak_response = supabase.table("user_streaks").select("*") \
-            .eq("user_id", current_user.id).execute()
+            .eq("user_id", current_user.user_id).execute()
         streak = streak_response.data[0] if streak_response.data else {}
 
         rank_response = supabase.table("user_ranks").select("*") \
-            .eq("user_id", current_user.id).execute()
+            .eq("user_id", current_user.user_id).execute()
         rank = rank_response.data[0] if rank_response.data else {}
 
         user_data = {"sessions": sessions, "streak": streak, "rank": rank}

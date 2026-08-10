@@ -395,7 +395,7 @@ class TestRanksEndpoints:
                 data=[{"xp": 100, "level": 2, "rank_title": "Junior Developer"}]
             )
 
-        with patch('routers.ranks.supabase', mock_supabase):
+        with patch('routers.ranks.get_supabase', return_value=mock_supabase):
             client = TestClient(app)
             response = client.get("/api/v1/ranks/test-user-123")
                 

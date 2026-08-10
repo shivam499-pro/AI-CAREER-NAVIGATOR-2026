@@ -371,3 +371,13 @@ def test_update_profile_exception(mocker):
     result = engine.update_user_evolution_profile("user1")
 
     assert result is False
+def test_calculate_volatility_stdev_error_returns_zero(mocker):
+    """statistics.stdev can only raise StatisticsError for <2 data points,
+    already prevented by the len(scores) < 2 guard above -- forced here to
+    exercise the defensive except branch directly."""
+    import statistics
+    mocker.patch("statistics.stdev", side_effect=statistics.StatisticsError("mocked"))
+
+    result = engine._calculate_volatility([70, 80])
+
+    assert result == 0.0

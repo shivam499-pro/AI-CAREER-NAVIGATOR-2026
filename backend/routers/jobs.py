@@ -104,7 +104,7 @@ async def get_job_recommendations(
                 results = await jobs_service.search_jobs(query, location)
                 if results:
                     jobs_list = results
-            except Exception as e:
+            except ValueError as e:
                 raise HTTPException(status_code=503, detail=str(e))
             except Exception as e:
                 raise HTTPException(status_code=502, detail=f"Job search unavailable: {str(e)}")
@@ -134,6 +134,8 @@ async def get_job_recommendations(
             },
             "match_source": "ai_matching" if user_data["profile"] else "default"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

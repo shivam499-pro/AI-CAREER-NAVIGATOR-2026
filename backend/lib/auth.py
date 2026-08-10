@@ -1,3 +1,25 @@
+"""
+Auth helper used by routers/profile.py and routers/profile_enhanced.py.
+
+This is intentionally a SEPARATE auth path from core/middleware.py's
+JWTVerifier/get_current_user, not a duplicate to be merged blindly:
+
+- core/middleware.get_current_user verifies exclusively against the
+  Supabase Auth API and returns an AuthenticatedUser (".user_id", ".role",
+  ".permissions", ...). It has no offline/custom-token path.
+- lib.auth.get_current_user (below) tries Supabase first, then falls back
+  to decoding a locally-issued JWT (see create_access_token/decode_token)
+  signed with JWT_SECRET_KEY, and returns an object shaped as ".id"/".email"
+  instead. The test suite relies on this fallback to mint tokens for
+  routers/profile*.py without a live Supabase call (see tests/conftest.py's
+  mock_user.user = None, and tests/integration/conftest.py).
+
+If these two are ever unified, the migration has to reconcile the
+".user_id" vs ".id" attribute mismatch across every profile.py/
+profile_enhanced.py call site AND give the middleware verifier an
+equivalent offline-token path (or rewrite those tests to hit a mocked
+Supabase instead) - not something to do as a drive-by edit.
+"""
 from fastapi import HTTPException, Header
 from typing import Optional
 from supabase import create_client
@@ -10,8 +32,27 @@ from datetime import datetime, timedelta, timezone
 load_dotenv()
 
 # JWT Configuration
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-super-secret-key-change-in-production")
+#
+# There is no hardcoded fallback here on purpose: a fallback secret is a
+# secret an attacker can read from source control. If JWT_SECRET_KEY is
+# missing, left at the placeholder from .env.example, or too short, refuse
+# to start rather than silently signing/accepting tokens with a guessable
+# key - this key is also what verifies the custom-JWT fallback branch in
+# get_current_user() below, so a weak value here is directly exploitable
+# as a token-forgery vector.
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 JWT_ALGORITHM = "HS256"
+
+_INSECURE_JWT_SECRETS = {
+    "your-super-secret-key-change-in-production",
+    "your-jwt-secret-key-min-32-chars-change-in-production",
+}
+if not JWT_SECRET_KEY or JWT_SECRET_KEY in _INSECURE_JWT_SECRETS or len(JWT_SECRET_KEY) < 32:
+    raise RuntimeError(
+        "JWT_SECRET_KEY must be set to a random secret of at least 32 "
+        "characters (see .env.example) before the app can start. Refusing "
+        "to start with a missing, placeholder, or too-short JWT signing key."
+    )
 
 # Token expiry times
 ACCESS_TOKEN_EXPIRE_HOURS = 1  # 1 hour

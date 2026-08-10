@@ -91,7 +91,7 @@ def build_user_profile(user_id: str) -> dict:
                 # Round to 2 decimal places
                 skills_map[skill_key]["confidence"] = round(avg_confidence, 2)
             else:
-                skills_map[skill_key]["confidence"] = 0.0
+                skills_map[skill_key]["confidence"] = 0.0  # pragma: no cover - unreachable: sources always populated before this point
         
         # Convert to sorted list (by confidence descending, then count)
         skills_list = list(skills_map.values())

@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, HTTPException, Depends
 from core.supabase_client import supabase
 from core.middleware import get_current_user, AuthenticatedUser
@@ -154,10 +153,11 @@ async def submit_weekly_challenge(request: SubmitWeeklyChallengeRequest, current
             }
             leaderboard.append(entry)
             
-            if row.get("user_id") == current_user.user_id or row.get("user_email") == user_email:
+            if row.get("user_id") == current_user.user_id:
                 user_rank = i + 1
                 if user_rank == 1:
                     is_winner = True
+                break
         
         # =============================================================================
         # BADGE SERVICE INTEGRATION (Non-critical)

@@ -5,6 +5,7 @@ Tests for CertificateService
 
 import pytest
 import json
+import sys
 from unittest.mock import AsyncMock, patch, MagicMock
 
 from services.certificate_service import CertificateService, CertificateResult
@@ -260,3 +261,79 @@ def test_result_to_response_failure():
     resp = result.to_response()
     assert resp["success"] is False
     assert resp["error"] == "File too large"
+
+
+# ── analyze() — scanned / malformed PDF paths ─────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_analyze_pdf_returns_fallback_when_fitz_not_installed(service, mock_transport, monkeypatch):
+    """If PyMuPDF (fitz) can't be imported, analyze() falls back gracefully
+    instead of letting ImportError escape to the caller."""
+    monkeypatch.setitem(sys.modules, "fitz", None)
+
+    result = await service.analyze(
+        file_content=b"fake pdf bytes",
+        filename="cert.pdf",
+        mime_type="application/pdf"
+    )
+
+    assert result.success is True
+    assert result.data["document_type"] == "certificate"
+    mock_transport.generate.assert_not_called()
+    mock_transport.generate_multimodal.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_analyze_pdf_empty_pdf_returns_fallback(service, mock_transport):
+    """A zero-page PDF raises ValueError internally; analyze()'s generic
+    exception handler turns that into a fallback result, not a crash."""
+    mock_doc = MagicMock()
+    mock_doc.__iter__ = MagicMock(return_value=iter([]))   # no pages -> no text
+    mock_doc.__len__ = MagicMock(return_value=0)             # len(doc) == 0
+    mock_doc.__enter__ = MagicMock(return_value=mock_doc)
+    mock_doc.__exit__ = MagicMock(return_value=False)
+
+    with patch("fitz.open", return_value=mock_doc):
+        result = await service.analyze(
+            file_content=b"fake empty pdf",
+            filename="empty.pdf",
+            mime_type="application/pdf"
+        )
+
+    assert result.success is True
+    assert result.data["document_type"] == "certificate"
+    mock_transport.generate.assert_not_called()
+    mock_transport.generate_multimodal.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_analyze_scanned_pdf_rasterizes_and_uses_vision(service, mock_transport):
+    """A PDF with pages but no extractable text (i.e. scanned) rasterizes
+    page 0 and falls through to the multimodal vision path."""
+    mock_page_for_text = MagicMock()
+    mock_page_for_text.get_text.return_value = ""   # no text layer -> scanned
+
+    mock_pixmap = MagicMock()
+    mock_pixmap.tobytes.return_value = b"fake-png-bytes"
+
+    mock_page_zero = MagicMock()
+    mock_page_zero.get_pixmap.return_value = mock_pixmap
+
+    mock_doc = MagicMock()
+    mock_doc.__iter__ = MagicMock(return_value=iter([mock_page_for_text]))
+    mock_doc.__len__ = MagicMock(return_value=1)
+    mock_doc.__getitem__ = MagicMock(return_value=mock_page_zero)  # doc[0]
+    mock_doc.__enter__ = MagicMock(return_value=mock_doc)
+    mock_doc.__exit__ = MagicMock(return_value=False)
+
+    with patch("fitz.open", return_value=mock_doc):
+        result = await service.analyze(
+            file_content=b"fake scanned pdf",
+            filename="scanned.pdf",
+            mime_type="application/pdf"
+        )
+
+    assert result.success is True
+    mock_page_zero.get_pixmap.assert_called_once_with(dpi=150)
+    mock_transport.generate_multimodal.assert_called_once()
+    mock_transport.generate.assert_not_called()

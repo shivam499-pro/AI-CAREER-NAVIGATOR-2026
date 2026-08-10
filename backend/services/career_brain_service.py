@@ -4,11 +4,14 @@ Central intelligence layer that aggregates all user data and generates actionabl
 """
 import httpx
 import os
+import logging
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # In-memory cache (in production, use Redis)
 _career_brain_cache: Dict[str, Dict] = {}
@@ -349,13 +352,12 @@ def detect_risks(
         latest = interview_sessions[0].get("created_at", "")
         if latest:
             try:
-                from datetime import datetime
                 last_practice = datetime.fromisoformat(latest.replace("Z", "+00:00"))
                 days_since = (datetime.now() - last_practice).days
                 if days_since > 14:
                     alerts.append(f"⚠️ No interview practice in {days_since} days. Stay sharp!")
-            except:
-                pass
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Could not parse interview session date {latest!r}: {e}")
     
     # No activity streak
     if streak:
@@ -366,8 +368,8 @@ def detect_risks(
                 days_since = (datetime.now() - last_practice).days
                 if days_since > 7:
                     alerts.append(f"⚠️ No activity in {days_since} days. Start your streak today!")
-            except:
-                pass
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Could not parse streak last_practice_date {last_date!r}: {e}")
     
     # Low streak
     current = streak.get("current_streak", 0) if streak else 0

@@ -102,6 +102,7 @@ async def run_analysis(
 
         github_data = source_data.get("github", {})
         leetcode_data = source_data.get("leetcode", {})
+        linkedin_data = profile_data.get("linkedin", {})
 
         resume_text = profile_data.get("resume_text", "")
 
@@ -109,7 +110,8 @@ async def run_analysis(
             github_data,
             leetcode_data,
             resume_text,
-            profile_data
+            profile_data,
+            linkedin_data=linkedin_data
         )
         print("GEMINI RESULT:", result)
 
@@ -123,6 +125,7 @@ async def run_analysis(
             "user_id": user_id,
             "github_data": github_data,
             "leetcode_data": leetcode_data,
+            "linkedin_data": linkedin_data,
             "analysis": analysis_result,
             "career_paths": analysis_result.get("career_paths", []),
             "skill_gaps": analysis_result.get("skill_gaps", []),

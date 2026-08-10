@@ -2,7 +2,7 @@
 Documents Router
 Unified documents API endpoints.
 
-POST /api/v1/documents/upload-certificates  - Upload + AI analyze certificates
+POST /api/v1/documents/upload-files         - Upload + AI analyze certificates
 GET  /api/v1/documents/list                 - List documents
 GET  /api/v1/documents/{document_id}        - Get single document
 DELETE /api/v1/documents/{document_id}      - Delete document
@@ -124,8 +124,6 @@ async def upload_certificates(
     
     Saves to user_documents + updates profiles.extra_skills
     """
-    from services.gemini_service import analyze_certificate
-
     if not files:
         raise HTTPException(status_code=400, detail="No files provided.")
 
@@ -161,18 +159,13 @@ async def upload_certificates(
             continue
 
         # ── AI analysis ───────────────────────────────────────────────────────
-        cert_result = await _get_certificate_service().analyze(
-            file_content=content,
-            filename=file.filename or "certificate",
-            mime_type=file.content_type
-        )
-        extracted = cert_result.data
         try:
-            extracted = analyze_certificate(
+            cert_result = await _get_certificate_service().analyze(
                 file_content=content,
                 filename=file.filename or "certificate",
                 mime_type=file.content_type
             )
+            extracted = cert_result.data
         except Exception as ai_err:
             print(f"[Cert AI] Failed for {file.filename}: {ai_err}")
             extracted = {

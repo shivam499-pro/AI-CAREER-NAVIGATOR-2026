@@ -572,3 +572,322 @@ def test_progress_summary():
 
 def test_clear_cache():
     clear_cache()
+
+
+# ==========================================================
+# additional coverage: fetch_* non-200 / success branches
+# ==========================================================
+
+@pytest.mark.asyncio
+async def test_fetch_analysis_non_200(mocker):
+    """Line 45: the fallback `return None` when status_code != 200."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 500
+    mock_resp.json.return_value = []
+
+    mock_client = MagicMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    mocker.patch("services.career_brain_service.httpx.AsyncClient", return_value=mock_client)
+
+    result = await fetch_analysis("url", {}, "u1")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_interview_sessions_success(mocker):
+    """Line 56: the success path `return resp.json()` was never hit --
+    the only existing test for this fetcher covered the failure path."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = [{"id": 1, "total_score": 75}]
+
+    mock_client = MagicMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    mocker.patch("services.career_brain_service.httpx.AsyncClient", return_value=mock_client)
+
+    result = await fetch_interview_sessions("url", {}, "u1")
+
+    assert result == [{"id": 1, "total_score": 75}]
+
+
+@pytest.mark.asyncio
+async def test_fetch_job_applications_non_200(mocker):
+    """Line 69: fallback `return []` for a non-200 response."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 500
+    mock_resp.json.return_value = []
+
+    mock_client = MagicMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    mocker.patch("services.career_brain_service.httpx.AsyncClient", return_value=mock_client)
+
+    result = await fetch_job_applications("url", {}, "u1")
+
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_saved_jobs_success(mocker):
+    """Line 80: success path -- only the failure path was tested before."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = [{"job_id": "j1"}]
+
+    mock_client = MagicMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    mocker.patch("services.career_brain_service.httpx.AsyncClient", return_value=mock_client)
+
+    result = await fetch_saved_jobs("url", {}, "u1")
+
+    assert result == [{"job_id": "j1"}]
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_rank_non_200(mocker):
+    """Line 107: fallback `return None` for a non-200 response."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 500
+    mock_resp.json.return_value = []
+
+    mock_client = MagicMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    mocker.patch("services.career_brain_service.httpx.AsyncClient", return_value=mock_client)
+
+    result = await fetch_user_rank("url", {}, "u1")
+
+    assert result is None
+
+
+# ==========================================================
+# fetch_user_streak -- this whole function (lines 86-94) had
+# zero tests at all before this
+# ==========================================================
+
+from services.career_brain_service import fetch_user_streak
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_streak_success(mocker):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = [{"current_streak": 4}]
+
+    mock_client = MagicMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    mocker.patch("services.career_brain_service.httpx.AsyncClient", return_value=mock_client)
+
+    result = await fetch_user_streak("url", {}, "u1")
+
+    assert result == {"current_streak": 4}
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_streak_empty_data(mocker):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = []
+
+    mock_client = MagicMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    mocker.patch("services.career_brain_service.httpx.AsyncClient", return_value=mock_client)
+
+    result = await fetch_user_streak("url", {}, "u1")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_user_streak_non_200(mocker):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 500
+    mock_resp.json.return_value = []
+
+    mock_client = MagicMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.get = AsyncMock(return_value=mock_resp)
+
+    mocker.patch("services.career_brain_service.httpx.AsyncClient", return_value=mock_client)
+
+    result = await fetch_user_streak("url", {}, "u1")
+
+    assert result is None
+
+
+# ==========================================================
+# calculate_job_readiness_score: remaining branch gaps
+# ==========================================================
+
+def test_job_readiness_skill_gaps_as_dict():
+    """Lines 191-194: skill_gaps can arrive as a dict of category -> list,
+    not just a flat list."""
+    analysis = {
+        "skill_gaps": {
+            "backend": ["Docker", "Kubernetes"],
+            "cloud": ["AWS"]
+        }
+    }
+
+    score = calculate_job_readiness_score(None, analysis, [], [])
+
+    # base 50 + skill-gap-dict credit (25 - min(20, 3*3) = 16)
+    # + analysis-completion bonus (10, awarded whenever analysis is truthy)
+    # = 50 + 16 + 10 = 76
+    assert score == 76
+
+
+def test_job_readiness_mid_range_applications():
+    """Line 202: the 5-9 applied applications band."""
+    applications = [{"status": "applied"} for _ in range(6)]
+
+    score = calculate_job_readiness_score(None, None, applications, [])
+
+    # base 50 + 15 (5-9 band) = 65
+    assert score == 65
+
+
+def test_job_readiness_mid_range_interview_scores():
+    """Lines 212-215: the 60-79 and 40-59 average interview score bands."""
+    mid_high = calculate_job_readiness_score(
+        None, None, [], [{"total_score": 65}]
+    )
+    # base 50 + 15 (60-79 band) = 65
+    assert mid_high == 65
+
+    mid_low = calculate_job_readiness_score(
+        None, None, [], [{"total_score": 45}]
+    )
+    # base 50 + 10 (40-59 band) = 60
+    assert mid_low == 60
+
+
+# ==========================================================
+# generate_behavioral_insights: remaining branch gaps
+# ==========================================================
+
+def test_behavioral_insights_low_rejection_ratio():
+    """Lines 253-254: rejection ratio below 0.3 -> positive message."""
+    applications = [
+        {"status": "applied"},
+        {"status": "applied"},
+        {"status": "applied"},
+        {"status": "applied"},
+        {"status": "rejected"},
+    ]
+
+    insights = generate_behavioral_insights(applications, [], None, [])
+
+    assert any("conversion rate" in i.lower() for i in insights)
+
+
+def test_behavioral_insights_declining_scores():
+    """Lines 261-262: latest interview score lower than the first."""
+    interviews = [
+        {"total_score": 80},
+        {"total_score": 60},
+        {"total_score": 40},
+    ]
+
+    insights = generate_behavioral_insights([], interviews, None, [])
+
+    assert any("dropped" in i.lower() for i in insights)
+
+
+def test_behavioral_insights_streak_zero():
+    """Line 268: a streak object present but current_streak is 0."""
+    streak = {"current_streak": 0}
+
+    insights = generate_behavioral_insights([], [], streak, [])
+
+    assert any("start your streak" in i.lower() for i in insights)
+
+
+def test_behavioral_insights_saved_jobs_no_applications():
+    """Line 274: 5+ saved jobs but fewer than 3 applications."""
+    saved_jobs = [{}, {}, {}, {}, {}]
+    applications = [{"status": "applied"}]
+
+    insights = generate_behavioral_insights(applications, [], None, saved_jobs)
+
+    assert any("haven't applied" in i.lower() for i in insights)
+
+
+# ==========================================================
+# detect_risks: exception-swallowing branches + last_practice_date path
+# ==========================================================
+
+def test_detect_risks_malformed_interview_date():
+    """Lines 357-358: a created_at value that datetime.fromisoformat
+    can't parse must be swallowed, not raised."""
+    alerts = detect_risks(
+        [],
+        [{"created_at": "not-a-real-date"}],
+        None,
+        None
+    )
+
+    # Should not raise, and should not produce an interview-practice alert
+    assert isinstance(alerts, list)
+    assert not any("interview practice" in a.lower() for a in alerts)
+
+
+def test_detect_risks_streak_last_practice_date_triggers_alert():
+    """Lines 364-369: streak.last_practice_date parsed and stale (>7 days)."""
+    old_date = (datetime.utcnow() - timedelta(days=10)).strftime("%Y-%m-%d")
+
+    alerts = detect_risks(
+        [],
+        [],
+        {"current_streak": 5, "last_practice_date": old_date},
+        None
+    )
+
+    assert any("no activity in" in a.lower() for a in alerts)
+
+
+def test_detect_risks_streak_last_practice_date_malformed():
+    """Line 370: a last_practice_date that strptime can't parse must be
+    swallowed, not raised."""
+    alerts = detect_risks(
+        [],
+        [],
+        {"current_streak": 5, "last_practice_date": "not-a-date"},
+        None
+    )
+
+    assert isinstance(alerts, list)
+    assert not any("no activity in" in a.lower() for a in alerts)
+
+
+# ==========================================================
+# clear_cache: specific user_id branch
+# ==========================================================
+
+def test_clear_cache_specific_user(mocker):
+    """Line 488: popping a single user's entry rather than wiping the
+    whole cache."""
+    import services.career_brain_service as cbs
+
+    mocker.patch.object(
+        cbs, "_career_brain_cache",
+        {"u1": {"cached_at": 1}, "u2": {"cached_at": 2}}
+    )
+
+    clear_cache("u1")
+
+    assert "u1" not in cbs._career_brain_cache
+    assert "u2" in cbs._career_brain_cache

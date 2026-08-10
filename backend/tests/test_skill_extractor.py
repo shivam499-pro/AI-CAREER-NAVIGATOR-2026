@@ -366,3 +366,14 @@ def test_skill_categories_structure():
         assert isinstance(skills, list)
         assert len(skills) > 0
 
+@pytest.mark.asyncio
+async def test_extract_from_job_description_detects_nice_to_have_keyword(extractor):
+    """When the job text mentions a 'nice to have' marker, the loop's break
+    is hit (current implementation still marks everything as required --
+    see the comment in source about needing more sophisticated parsing)."""
+    job_text = "Required: Python. Bonus: experience with Kubernetes."
+
+    result = await extractor.extract_from_job_description(job_text)
+
+    assert "python" in result["required_skills"]
+    assert result["preferred_skills"] == []

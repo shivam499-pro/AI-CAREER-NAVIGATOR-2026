@@ -150,6 +150,7 @@ async def root():
         "docs": "/docs"
     }
 
+    
 @app.get("/health")
 async def health_check():
     """
@@ -166,8 +167,8 @@ async def health_check():
             supabase = create_client(supabase_url, supabase_key)
             # Simple health check - just verify we can create client
             db_ok = True
-    except:
-        pass
+    except Exception as e:
+        logger.warning(f"Health check: database connectivity check failed: {e}")
     
     # Check Gemini
     gemini_ok = False
@@ -176,8 +177,8 @@ async def health_check():
         api_key = os.getenv("GEMINI_API_KEY")
         if api_key:
             gemini_ok = True
-    except:
-        pass
+    except Exception as e:
+        logger.warning(f"Health check: Gemini availability check failed: {e}")
     
     # Memory engine always OK if backend is running
     memory_ok = True
@@ -232,7 +233,6 @@ async def global_exception_handler(request, exc):
         }
     )
 
-# Run the app
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - entrypoint only, not exercised by unit tests
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

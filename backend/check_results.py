@@ -40,4 +40,4 @@ def check_real_analysis():
             print(f"Sample Week 1 Milestone: {milestones[0].get('title')}")
 
 if __name__ == "__main__":
-    check_real_analysis()
+    check_real_analysis()  # pragma: no cover - entrypoint only, not exercised by unit tests

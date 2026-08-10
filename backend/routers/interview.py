@@ -147,8 +147,10 @@ async def save_session(
             "answers": body.answers,
             "scores": body.scores,
             "total_score": body.total_score,
-            # "difficulty": body.difficulty,
-            # "interview_mode": body.interview_mode,
+            "difficulty": body.difficulty,
+            "interview_mode": body.interview_mode,
+            "is_simulation": body.is_simulation,
+            "is_voice": body.is_voice,
         }
 
         try:
@@ -159,8 +161,10 @@ async def save_session(
             )
 
         except Exception as err:
-            logger.warning(
-                f"[INTERVIEWS_INSERT] Failed: {err}"
+            logger.warning(f"[INTERVIEWS_INSERT] Failed: {err}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to save Interview session data"
             )
 
         # Career Memory Engine

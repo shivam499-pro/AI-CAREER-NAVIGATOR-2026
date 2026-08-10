@@ -301,3 +301,71 @@ async def test_get_problems_malformed_stats(mocker):
 
     assert result["total"] == 200
 
+@pytest.mark.asyncio
+async def test_get_problems_solved_skips_non_dict_entries(mocker):
+    """A malformed non-dict entry mixed into acSubmissionNum is skipped,
+    not allowed to crash the whole aggregation."""
+    payload = {
+        "data": {
+            "matchedUser": {
+                "submitStats": {
+                    "acSubmissionNum": [
+                        "not-a-dict",
+                        {"difficulty": "Easy", "count": 10},
+                    ]
+                }
+            }
+        }
+    }
+
+    mock_resp = mock_response(json_data=payload)
+    mocker.patch("httpx.AsyncClient", return_value=mock_client(mock_resp))
+
+    result = await leetcode_service.get_problems_solved("john")
+
+    assert result["easy"] == 10
+    assert result["total"] == 10
+
+
+@pytest.mark.asyncio
+async def test_get_problems_solved_exception_branch(mocker):
+    async def raise_error(*args, **kwargs):
+        raise Exception("network failure")
+
+    mock_client_patch = mocker.patch("httpx.AsyncClient")
+    mock_client_patch.return_value.__aenter__.return_value.post.side_effect = raise_error
+
+    result = await leetcode_service.get_problems_solved("john")
+
+    assert result == {"error": "LeetCode service unavailable"}
+
+
+@pytest.mark.asyncio
+async def test_get_contest_rating_exception_branch(mocker):
+    async def raise_error(*args, **kwargs):
+        raise Exception("network failure")
+
+    mock_client_patch = mocker.patch("httpx.AsyncClient")
+    mock_client_patch.return_value.__aenter__.return_value.post.side_effect = raise_error
+
+    result = await leetcode_service.get_contest_rating("john")
+
+    assert result == {
+        "rating": 0,
+        "top_percentage": 100,
+        "contests_attended": 0,
+        "history": [],
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_recent_submissions_exception_branch(mocker):
+    async def raise_error(*args, **kwargs):
+        raise Exception("network failure")
+
+    mock_client_patch = mocker.patch("httpx.AsyncClient")
+    mock_client_patch.return_value.__aenter__.return_value.post.side_effect = raise_error
+
+    result = await leetcode_service.get_recent_submissions("john")
+
+    assert result == []

@@ -1,6 +1,10 @@
+import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from core.supabase_client import get_supabase
+
+logger = logging.getLogger(__name__)
+
 
 
 # Document type confidence weights
@@ -171,76 +175,6 @@ def calculate_profile_completeness(profile: Optional[Dict[str, Any]], documents:
     
     return min(score, 100)
 
-def test_merge_skills_no_documents(monkeypatch):
-    from services.profile_service import merge_skills_from_documents
-
-    class FakeSupabase:
-        def table(self, name):
-            return self
-
-        def select(self, *args):
-            return self
-
-        def eq(self, *args):
-            return self
-
-        def execute(self):
-            return type("R", (), {"data": []})()
-
-    monkeypatch.setattr("services.profile_service.get_supabase", lambda: FakeSupabase())
-
-    result = merge_skills_from_documents("user-1")
-
-    assert result == []
-
-def test_merge_skills_confidence_and_sort(monkeypatch):
-    from services.profile_service import merge_skills_from_documents
-
-    fake_data = [
-        {
-            "document_type": "resume",
-            "extracted_data": {
-                "skills": ["Python", "FastAPI"]
-            }
-        },
-        {
-            "document_type": "certificate",
-            "extracted_data": {
-                "skills": ["python", "Docker"]
-            }
-        }
-    ]
-
-    class FakeSupabase:
-        def table(self, name):
-            return self
-
-        def select(self, *args):
-            return self
-
-        def eq(self, *args):
-            return self
-
-        def execute(self):
-            return type("R", (), {"data": fake_data})()
-
-    monkeypatch.setattr("services.profile_service.get_supabase", lambda: FakeSupabase())
-
-    result = merge_skills_from_documents("user-1")
-
-    skill_names = [s["name"].lower() for s in result]
-
-    assert "python" in skill_names
-    assert "fastapi" in skill_names
-    assert "docker" in skill_names
-
-
-    # confidence computed
-    for s in result:
-        assert "confidence" in s
-        assert 0 <= s["confidence"] <= 1
-
-        
 def get_enriched_profile(user_id: str) -> Dict[str, Any]:
     """
     Get enriched profile with merged skills and completeness score.
@@ -270,7 +204,8 @@ def get_enriched_profile(user_id: str) -> Dict[str, Any]:
             "id, document_name, document_type, extracted_data, storage_url, created_at"
         ).eq("user_id", user_id).execute()
         documents = docs_response.data if docs_response.data else []
-    except:
+    except Exception as e:
+        logger.warning(f"Failed to fetch documents for user {user_id}: {e}")
         documents = []
     
     # Merge skills from documents with manual skills

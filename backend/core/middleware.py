@@ -13,6 +13,7 @@ import uuid
 import time
 import logging
 import json
+import hashlib
 from datetime import datetime, timezone
 from typing import Optional, Callable, List, Dict, Any
 from functools import wraps
@@ -154,12 +155,17 @@ class APIResponse:
 
 class JWTVerifier:
     """
-    JWT Token Verifier using Supabase with local caching for performance.
-    
-    Optimizations:
-    - Local JWT decoding without network call for payload extraction
-    - Cached user data with TTL
-    - Fallback to Supabase API for full verification when needed
+    JWT Token Verifier using Supabase, with a verified-result cache for performance.
+
+    Security model:
+    - Every token is fully verified against the Supabase Auth API before it is
+      ever trusted.
+    - The verification result is cached under a key derived from the token
+      itself (a SHA-256 hash of the raw token), so a cache hit is only
+      possible for a token that has already passed full verification.
+      Lookups are never keyed by claims read out of an unverified token —
+      that would let anyone who crafts a token claiming another user's id
+      ride on that user's cache entry without ever proving a valid signature.
     """
     
     def __init__(self):
@@ -167,14 +173,21 @@ class JWTVerifier:
         self.supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_ANON_KEY")
         self.jwt_secret = os.getenv("JWT_SECRET_KEY", "")
         self._cache_ttl = 300  # 5 minutes cache for user data
-    
+
+    @staticmethod
+    def _token_cache_key(token: str) -> str:
+        """Cache key derived from the raw token — never from unverified claims."""
+        return f"jwt:verified:{hashlib.sha256(token.encode('utf-8')).hexdigest()}"
+
     def _decode_jwt_payload(self, token: str) -> Optional[dict]:
         """
         Decode JWT payload locally without verification.
-        This is fast and gives us user_id without network call.
-        
-        Note: This doesn't verify the signature, just extracts payload.
-        Full verification still happens via Supabase API.
+
+        Note: This does NOT verify the signature — it only extracts the
+        payload. It must never be used to make an authentication or
+        authorization decision. It is kept as a low-level utility only;
+        full verification always happens via the Supabase Auth API in
+        verify_token().
         """
         try:
             import base64
@@ -202,10 +215,10 @@ class JWTVerifier:
         """
         Verify Supabase JWT token and extract user info.
         
-        Optimized flow:
-        1. Try to get cached user data
-        2. If not cached, do full verification via Supabase API
-        3. Cache the result
+        Flow:
+        1. Check the verified-result cache, keyed by a hash of the token itself.
+        2. On a miss, perform full verification via the Supabase Auth API.
+        3. Cache the verified result under that same token-derived key.
         
         Args:
             authorization: Authorization header value (Bearer <token>)
@@ -231,23 +244,20 @@ class JWTVerifier:
         else:
             token = authorization
         
-        # Try to get cached user
-        payload = self._decode_jwt_payload(token)
-        if payload:
-            user_id = payload.get("sub")
-            if user_id:
-                cache_key = f"jwt:user:{user_id}"
-                cached_user = cache.get(cache_key)
-                if cached_user:
-                    logger.debug(f"Using cached user data for {user_id}")
-                    return AuthenticatedUser(**cached_user)
+        # Look up a prior verification result. This is keyed by the token
+        # itself, not by any claim read out of it, so a cache hit is only
+        # possible for a token that has already passed full verification.
+        cache_key = self._token_cache_key(token)
+        cached_user = cache.get(cache_key)
+        if cached_user:
+            logger.debug("Using cached verification result")
+            return AuthenticatedUser(**cached_user)
         
         # Validate using Supabase Auth API (full verification)
         user = await self._verify_supabase_token(token)
         
-        # Cache the result
+        # Cache the verified result
         if user and user.user_id:
-            cache_key = f"jwt:user:{user.user_id}"
             cache.set(cache_key, user.to_dict(), self._cache_ttl)
         
         return user
@@ -523,17 +533,6 @@ def require_role(role: UserRole):
     return dependency
 
 
-# ==================== LOGGING MIDDLEWARE ====================
-def log_request(level: str, log_data: dict):
-    message = f"[REQUEST] {json.dumps(log_data)}"
-
-    if level == "info":
-        logger.info(message)
-    elif level == "warning":
-        logger.warning(message)
-    else:
-        logger.error(message)
-
 class StructuredLoggingMiddleware(BaseHTTPMiddleware):
     """
     Middleware for structured request/response logging.
@@ -643,17 +642,11 @@ class StructuredLoggingMiddleware(BaseHTTPMiddleware):
 # ==================== AUTH MIDDLEWARE ====================
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """
-    Middleware for JWT authentication on all protected routes.
-    
-    Validates Supabase JWT token and attaches user context to request state.
-    """
-    
+
     def __init__(self, app: ASGIApp, public_paths: List[str] = None):
         super().__init__(app)
         # Paths that don't require authentication
         self.public_paths = public_paths or [
-            "/",
             "/health",
             "/docs",
             "/openapi.json",

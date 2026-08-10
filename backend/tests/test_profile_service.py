@@ -337,3 +337,128 @@ def test_merge_skills_confidence_and_sort(monkeypatch):
     for s in result:
         assert "confidence" in s
         assert 0 <= s["confidence"] <= 1
+
+
+# -----------------------
+# merge_skills_from_documents: blank-skill guard (line 92-93)
+# -----------------------
+
+def test_merge_skills_skips_blank_skill_names(mocker):
+    """A skill that is empty or whitespace-only after strip() must be
+    dropped, not counted as a real skill."""
+    mock_supabase(mocker, return_data=[
+        {
+            "document_type": "resume",
+            "extracted_data": {"skills": ["Python", "   ", ""]}
+        }
+    ])
+
+    result = profile_service.merge_skills_from_documents("u1")
+
+    skill_names = [s["name"].lower() for s in result]
+
+    assert skill_names == ["python"]
+
+
+# -----------------------
+# merge_skills_from_documents: exception path (line 121-123)
+# -----------------------
+
+def test_merge_skills_from_documents_exception(mocker):
+    """If the documents query blows up, the function must swallow the
+    error and return an empty list rather than propagate."""
+    mock_supabase(mocker, side_effect=Exception("DB down"))
+
+    result = profile_service.merge_skills_from_documents("u1")
+
+    assert result == []
+
+
+# -----------------------
+# calculate_profile_completeness: resume_text fallback (line 169-170)
+# -----------------------
+
+def test_profile_completeness_resume_text_fallback():
+    """When there's no uploaded resume DOCUMENT, a resume_text field on
+    the profile itself should still grant the resume credit."""
+    profile = {
+        "college_name": "ABC",
+        "resume_text": "Experienced engineer with 5 years..."
+    }
+
+    # No documents at all -> has_resume stays False -> must fall through
+    # to the elif branch on profile.resume_text
+    score = profile_service.calculate_profile_completeness(profile, documents=[])
+
+    # college_name (10) + resume_text fallback (20) = 30
+    assert score == 30
+
+
+def test_profile_completeness_no_resume_anywhere():
+    """Sanity check for the same branch: no document AND no resume_text
+    means neither path awards the 20 points."""
+    profile = {"college_name": "ABC"}
+
+    score = profile_service.calculate_profile_completeness(profile, documents=[])
+
+    assert score == 10
+
+
+# -----------------------
+# get_enriched_profile: documents-fetch exception path (line 202-204)
+# -----------------------
+
+def test_enriched_profile_documents_fetch_exception(mocker):
+    """If fetching user_documents blows up, get_enriched_profile should
+    degrade gracefully to an empty documents list instead of crashing."""
+    mocker.patch(
+        "services.profile_service.get_profile_by_user_id",
+        return_value={"user_id": "u1"}
+    )
+    mocker.patch(
+        "services.profile_service.get_supabase",
+        side_effect=Exception("Supabase unreachable")
+    )
+
+    result = profile_service.get_enriched_profile("u1")
+
+    assert result["exists"] is True
+    assert result["documents_count"] == 0
+    assert result["skills"] == []
+
+
+# -----------------------
+# get_enriched_profile: document-skill and manual-skill merge loops
+# (line 216-217 and 224-225)
+# -----------------------
+
+def test_enriched_profile_merges_document_and_manual_skills(mocker):
+    """Document-sourced skills should be tagged 'document'; manual
+    skills not already present should be tagged 'manual'; a manual
+    skill that duplicates a document skill must NOT be added twice."""
+    mocker.patch(
+        "services.profile_service.get_profile_by_user_id",
+        return_value={"user_id": "u1", "extra_skills": ["Python", "SQL"]}
+    )
+    mock_supabase(mocker, return_data=[
+        {
+            "document_type": "resume",
+            "extracted_data": {"skills": ["Python", "Docker"]}
+        }
+    ])
+
+    result = profile_service.get_enriched_profile("u1")
+
+    by_name = {s["name"].lower(): s for s in result["skills"]}
+
+    # document-sourced skills came through the doc_skill loop
+    assert by_name["python"]["source"] == "document"
+    assert by_name["docker"]["source"] == "document"
+
+    # "SQL" is genuinely new -> added via the manual-skill loop
+    assert by_name["sql"]["source"] == "manual"
+    assert by_name["sql"]["confidence"] == 0.8
+
+    # "Python" already existed as a document skill -> not duplicated
+    assert sum(1 for s in result["skills"] if s["name"].lower() == "python") == 1
+    assert result["documents_count"] == 1

@@ -94,6 +94,17 @@ class TestPDFValidation:
         validate_pdf_file(valid_pdf, "Resume.Pdf")
         validate_pdf_file(valid_pdf, "resume.PDF")
         validate_pdf_file(valid_pdf, "RESUME.PDF")
+    def test_content_under_four_bytes_raises_400(self):
+        """Genuinely under 4 bytes -- the size check itself, not the magic-byte
+        check that test_file_too_small actually exercises."""
+        from routers.resume import validate_pdf_file
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc_info:
+            validate_pdf_file(b"%PD", "resume.pdf")   # 3 bytes
+
+        assert exc_info.value.status_code == 400
+        assert "too small" in exc_info.value.detail.lower()
 
 
 class TestDocumentsValidation:
@@ -161,6 +172,29 @@ class TestDocumentsValidation:
         
         # Should raise for invalid content, not "too small"
         assert exc_info.value.status_code == 400
+    
+    def test_invalid_png_signature_raises_400(self):
+        """PNG magic bytes wrong -> 400, not silently accepted."""
+        from routers.documents import validate_file_content
+        from fastapi import HTTPException
+
+        invalid_png = b"not a real png"
+
+        with pytest.raises(HTTPException) as exc_info:
+            validate_file_content(invalid_png, "photo.png", "image/png")
+
+        assert exc_info.value.status_code == 400
+
+    def test_unsupported_mime_type_raises_400(self):
+        """A mime type outside pdf/jpeg/jpg/png is rejected outright."""
+        from routers.documents import validate_file_content
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc_info:
+            validate_file_content(b"whatever bytes", "file.gif", "image/gif")
+
+        assert exc_info.value.status_code == 400
+        assert "Unsupported file type" in exc_info.value.detail
 
 
 class TestFileSizeLimits:

@@ -222,6 +222,16 @@ def live_test_user(live_supabase):
     })
     user_id = created.user.id
 
+    # Seed initial profile row to satisfy foreign key relationships & profile queries
+    try:
+        live_supabase.table("profiles").upsert({
+            "user_id": user_id,
+            "career_goal": "Full Stack Developer",
+            "extra_skills": ["Python", "React"],
+        }).execute()
+    except Exception as e:
+        print(f"[live_test_user profile seed warning]: {e}")
+
     user = {
         "id": user_id,
         "email": unique_email,

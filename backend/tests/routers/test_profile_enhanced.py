@@ -443,3 +443,41 @@ def test_get_match_fit_failure(mocker):
 
     assert data["score"] == 0
     assert "error" in data
+
+def test_save_enhanced_profile_no_data_returned_raises_500(mocker):
+    """upsert() succeeds without error but returns no data -- treated as a
+    failure, not silently reported as success."""
+    mock_supabase = mocker.patch("routers.profile_enhanced.supabase")
+    mock_supabase.table.return_value.upsert.return_value.execute.return_value = MagicMock(data=None)
+
+    payload = {"user_id": "user-123", "user_type": "student"}
+    response = client.post("/enhanced", json=payload)
+
+    assert response.status_code == 500
+    assert "Failed to save profile" in response.json()["detail"]
+
+def test_get_match_fit_defaults_to_first_path_when_no_name_match(mocker):
+    """target_goal is set but doesn't match any career_path name -- falls
+    back to the first career path rather than returning 'No Data'."""
+    profile_res = MagicMock()
+    profile_res.data = [{"career_goal": "Backend Engineer"}]
+
+    analysis_res = MagicMock()
+    analysis_res.data = [{
+        "career_paths": [
+            {"name": "Frontend Engineer", "match_percentage": 60, "reason": "Some overlap"}
+        ]
+    }]
+
+    mock_supabase = mocker.patch("routers.profile_enhanced.supabase")
+    table_mock = mock_supabase.table.return_value
+    table_mock.select.return_value.eq.return_value.execute.side_effect = [
+        profile_res,
+        analysis_res
+    ]
+
+    response = client.get("/match-fit")
+
+    data = response.json()
+    assert data["score"] == 60
+    assert data["role"] == "Frontend Engineer"

@@ -112,7 +112,7 @@ async def run_my_analysis(
 
 
 @router.get("/job/{job_id}")
-async def get_job_status(
+async def get_analysis_job_status(
     job_id: str,
     user: AuthenticatedUser = Depends(get_current_user)
 ):

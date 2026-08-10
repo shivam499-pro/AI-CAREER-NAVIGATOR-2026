@@ -39,8 +39,6 @@ def _calculate_trend(scores: list) -> str:
     # Get last up to 3 scores (most recent)
     recent_scores = scores[-3:] if len(scores) >= 3 else scores
     
-    if len(recent_scores) < 2:
-        return "stable"
     
     # Calculate difference between first and last score
     first_score = recent_scores[0]
@@ -188,7 +186,6 @@ def update_user_memory(user_id: str, session_data: Dict[str, Any]) -> bool:
                 "trend": "stable",
                 "session_count": 1,
                 "last_updated": datetime.utcnow().isoformat(),
-                "last_updated": datetime.utcnow().isoformat()
             }
             
             insert_response = supabase.table("user_career_memory").insert(new_record).execute()
