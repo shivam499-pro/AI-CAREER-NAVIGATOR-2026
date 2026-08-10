@@ -19,7 +19,11 @@ fresh, bound to that test's own event loop.
 """
 import pytest
 
-
+def pytest_collection_modifyitems(config, items):
+    for item in items:
+        if "integration/live" in str(item.fspath).replace("\\", "/"):
+            item.add_marker(pytest.mark.live)
+            
 @pytest.fixture(autouse=True)
 def _reset_gemini_singletons():
     import services.gemini_service as gemini_service

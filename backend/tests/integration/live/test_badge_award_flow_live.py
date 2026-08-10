@@ -3,6 +3,8 @@ import pytest
 from fastapi.testclient import TestClient
 from main import app
 
+pytestmark = pytest.mark.live
+
 client = TestClient(app, raise_server_exceptions=False)
 
 
