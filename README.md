@@ -58,6 +58,8 @@ Most career platforms rely on self-reported forms susceptible to inflation and o
 
 ### 🧠 Core AI Intelligence
 
+![Core AI Intelligence](images/Core%20AI%20Intelligence.png)
+
 | Feature | Description | Implementation Details |
 |---|---|---|
 | **Profile Integration Engine** | Fetches live metrics from external developer profiles and documents. | GitHub REST API, LeetCode GraphQL, PyMuPDF PDF parser. |
@@ -68,6 +70,8 @@ Most career platforms rely on self-reported forms susceptible to inflation and o
 | **Multi-Category Skill Extractor** | Normalizes and categorizes extracted skills from raw text and certificates. | Groups skills into Languages, Frameworks, Databases, Tools, and Concepts. |
 
 ### 🎙️ AI Interview Coach & Voice Studio
+
+![AI Interview Coach & Voice Studio](images/AI%20Interview%20Coach%20%26%20Voice%20Studio.png)
 
 | Feature | Description | Implementation Details |
 |---|---|---|
@@ -80,6 +84,8 @@ Most career platforms rely on self-reported forms susceptible to inflation and o
 
 ### 🏆 Gamification & Social Challenges
 
+![Gamification & Social Challenges](images/Gamification%20%26%20Social%20Challenges.png)
+
 | Feature | Description | Implementation Details |
 |---|---|---|
 | **Daily Streak System** | Daily practice tracking encouraging consistent preparation habits. | Duolingo-style streak counter with longest streak and freeze tracking in `user_streaks`. |
@@ -90,6 +96,8 @@ Most career platforms rely on self-reported forms susceptible to inflation and o
 
 ### 💼 Job Intelligence & Application Pipeline
 
+![Job Intelligence & Application Pipeline](images/Job%20Intelligence%20%26%20Application%20Pipeline.png)
+
 | Feature | Description | Implementation Details |
 |---|---|---|
 | **Skill Match Algorithm** | Quantitative matching scoring user skills against job requirements. | Weighted skill vector overlap in `job_matching_service.py`. |
@@ -98,6 +106,8 @@ Most career platforms rely on self-reported forms susceptible to inflation and o
 | **Market Demand Analyzer** | Aggregates role-specific market demand metrics and skill trends. | Highlights High Demand, Growing, and Stable skill requirements per role. |
 
 ### 📄 Document Processing & Security
+
+![Document Processing & Security](images/Document%20Processing%20%26%20Security.png)
 
 | Feature | Description | Implementation Details |
 |---|---|---|
