@@ -1,798 +1,764 @@
 # AI Career Navigator 2026
 
-> **Your Personal AI-Powered Career Mentor** — Built for Indian CS Students & Fresh Graduates
+> **Your Personal AI-Powered Career Mentor & Intelligence Platform** — Built for CS Students, Fresh Graduates & Software Engineers
 
-AI Career Navigator is a full-stack, AI-driven career intelligence platform that reads your **real** GitHub, LeetCode, LinkedIn, and Resume profiles to deliver honest, data-driven career guidance. No self-reported forms. No mock results. Just hard metrics from your actual profiles.
-
----
-
-## Table of Contents
-
-1. [Why This Exists](#why-this-exists)
-2. [Features](#features)
-3. [Tech Stack](#tech-stack)
-4. [Architecture Overview](#architecture-overview)
-5. [Database Schema](#database-schema)
-6. [Project Structure](#project-structure)
-7. [Getting Started](#getting-started)
-8. [Environment Variables](#environment-variables)
-9. [API Reference](#api-reference)
-10. [Design System](#design-system)
-11. [Testing](#testing)
-12. [Documentation](#documentation)
-13. [License](#license)
+**AI Career Navigator** is a production-ready, full-stack career intelligence system that ingests **verifiable, multi-source developer profiles** — GitHub repositories, LeetCode contest ratings, uploaded PDF resumes, and AI-extracted certificates — to produce data-driven career paths, skill gap analysis, personalized roadmaps, and real-time voice interview coaching.
 
 ---
 
-## Why This Exists
-
-Most career platforms ask you to manually fill in skills, projects, and experience — data that is often incomplete, outdated, or simply inaccurate. **AI Career Navigator** solves this by:
-
-- **Reading your real GitHub** — repos, languages, stars, forks, and commit activity
-- **Reading your real LeetCode** — problems solved, difficulty breakdown, contest rating
-- **Reading your real Resume** — PDF upload with AI-powered skill extraction
-- **Reading your real Certificates** — AI analysis of course and certification documents
-- **Fusing all of the above** into a single, unified career intelligence profile
-
-The result is a career mentor that knows you better than you know yourself.
+![AI Career Navigation Scene](images/Vibrant%203D%20Career%20Navigation%20Scene.png)
 
 ---
 
-## Features
+## 📸 Platform Interface
 
-### Core Intelligence
-
-| Feature | Description |
-|---|---|
-| **Profile Reading Engine** | Fetches real data from GitHub REST API, LeetCode GraphQL API, and uploaded PDF resumes/certificates |
-| **AI Analysis Engine** | Powered by **Google Gemini 2.5 Flash** (Free Tier). Combines all profile data into a single AI call with smart caching (1-hour TTL, LRU eviction) |
-| **Career Path Recommender** | Suggests personalized career paths with match percentages, salary insights, top target companies, and recommended certifications |
-| **Skill Gap Analyzer** | Visual breakdown of skills you **have** vs. skills you **need** for each recommended career path, with learning resources |
-| **Roadmap Generator** | AI-generated, time-bound 24-week action plan with weekly milestones, skills to learn, and deliverables |
-| **Resume Score** | AI-evaluated resume quality score (0–100) with breakdown across skills match, GitHub activity, LeetCode strength, certifications, and resume quality |
-| **Career Brain** | Central intelligence layer that aggregates profile, analysis, interview sessions, job applications, streaks, and rank into a single `CareerBrain` object with job readiness score, trend analysis, and actionable recommendations |
-| **Career Evolution Engine** | Predictive intelligence that detects long-term skill evolution patterns — volatility, growth state, and per-career-path trajectory |
-| **Career Memory Engine** | Tracks user evolution over time across career paths with trend detection (improving / stable / declining) |
-
-### Interview Preparation
-
-| Feature | Description |
-|---|---|
-| **AI Interview Coach** | Generates role-specific interview questions (HR, Technical, System Design) with AI-generated model answers and scoring |
-| **4 Interview Packs** | Warm Up (friendly HR), Technical Round (strict engineering), FAANG Prep (Google/Meta/Amazon pressure simulation), System Design (architecture & scalability) |
-| **Voice Interview** | Full voice input support via Web Speech API — speak your answers naturally. Includes text-to-speech for question reading |
-| **Communication Score** | AI analyzes filler words (`um`, `uh`, `like`, etc.) and gives a real-time communication effectiveness score |
-| **AI Coaching Hints** | Per-question AI hints showing what the interviewer is looking for, how to structure your answer, and a sample response |
-| **AI Coach Panel** | Live sidebar during interviews showing your weakest career path, a personalized AI tip, and your job readiness score |
-| **Simulation Mode** | Timed interview — 2 minutes per question. Timer turns red in the last 30 seconds. Auto-submits on timeout |
-| **Anti-Cheat System** | Paste detection, typing behavior analysis (keystroke rate, start time), and authenticity status tracking |
-| **AI Personas** | Friendly, Strict, FAANG, and Google-style interviewer personalities with distinct messaging styles |
-| **Detailed Feedback** | Per-question score (0–10), good points, missing points, model answer, and improvement tip |
-
-### Gamification
-
-| Feature | Description |
-|---|---|
-| **Daily Streaks** | Duolingo-style streak tracking. Maintain your practice streak to build consistency |
-| **XP & Ranks** | 7-level progression system: 🌱 Fresher → 📚 Beginner → 💼 Junior → ⚡ Mid-level → 🚀 Senior → 👑 Principal → 🏆 Legend |
-| **Achievement Badges** | 12+ auto-awarded badges including First Step, Perfect Score, Week Warrior, Monthly Legend, Interview Master, Hard Mode Hero, Voice Pro, and Weekly Champion |
-| **Weekly Challenge** | ISO-week-based coding challenge with a live countdown timer, leaderboard, and shareable results |
-| **Challenge a Friend** | Create custom interview challenges with 8-character shareable codes. Friends can accept and compete on the leaderboard |
-| **Progress Tracker** | Visual progress bar showing profile completeness across all onboarding steps |
-
-### Job & Career Tools
-
-| Feature | Description |
-|---|---|
-| **Job Matching** | AI-powered job matching engine that calculates match scores based on your verified skill set against real job descriptions |
-| **Job Search** | Real-time job search via SerpAPI (Google Jobs) with location and role filtering |
-| **Save & Apply** | Bookmark jobs, track application statuses (Applied → Interview → Offer / Rejected), and manage your job pipeline |
-| **Market Analyzer** | Analyzes job market demand for specific roles — high-demand, growing, and stable skills per role category |
-| **Recommendation Engine** | Personalized job and career recommendations scored by skill match and experience level fit |
-| **Career Copilot** | AI decision layer that generates your next action, skill gap roadmap, and job readiness status (Not Ready / Almost Ready / Ready) |
-| **Weekly Email Reports** | AI-generated HTML weekly performance reports sent via Gmail — best session, average score, weakest career path, streak, rank, and personalized AI tip |
-
-### Profile & Document Management
-
-| Feature | Description |
-|---|---|
-| **Unified Profile** | Comprehensive profile supporting students, professionals, freshers, and career switchers with academic, professional, and goal fields |
-| **Onboarding Flow** | Multi-step onboarding wizard that adapts questions based on user type (student / professional / fresher / career_switch) |
-| **Resume Upload** | PDF-only upload with magic-byte validation (max 10MB). Text extracted via PyMuPDF. Skills auto-extracted and merged into profile |
-| **Certificate Upload** | Upload PDF, JPG, or PNG certificates (max 5MB each, up to 10 files). Gemini AI extracts course name, provider, score, date, skills unlocked, and credibility rating |
-| **Document Management** | Unified `user_documents` table with confidence-weighted skill merging across all uploaded documents |
-| **Profile Completeness Score** | Real-time 0–100 completeness score based on GitHub, LeetCode, Resume, academic info, skills, experience, and career goal |
-
-### Infrastructure & Reliability
-
-| Feature | Description |
-|---|---|
-| **Supabase Auth** | Full authentication with JWT verification middleware and role-based access control (RBAC) |
-| **Circuit Breaker** | Fault tolerance pattern for all external service calls (GitHub, LeetCode, Gemini) — prevents cascading failures |
-| **Rate Limiting** | API rate limiting via `slowapi` with per-IP tracking |
-| **Redis Caching** | Redis-backed caching layer with in-memory fallback, per-user keys, and TTL-based expiry |
-| **Structured Logging** | JSON-structured request/response logging middleware |
-| **Metrics** | Real-time request counters, error rates, and slow-request tracking exposed at `/metrics` |
-| **WebSocket** | Real-time push notifications for job status, market updates, and recommendations |
-| **Async Job Processing** | Background job queue for long-running AI analysis with idempotency keys to prevent duplicate jobs |
-| **Input Sanitization** | Prompt injection detection and neutralization (30+ patterns) before all Gemini API calls |
-| **Global Error Handler** | Catches all unhandled exceptions and returns safe JSON — never leaks stack traces to the frontend |
-| **Health Check** | `/health` endpoint reports real-time status of database, Gemini AI, and memory engine |
+| Platform Landing Page | AI Core Capabilities |
+| :---: | :---: |
+| ![Landing Page](images/landing%20page.png) | ![AI Platform Capabilities](images/Gemini_Generated_Image_jy2j7hjy2j7hjy2j.png) |
 
 ---
 
-## Tech Stack
+## 📑 Table of Contents
 
-### Frontend
-
-| Layer | Technology |
-|---|---|
-| Framework | Next.js 14 (App Router) |
-| Language | TypeScript |
-| Styling | Tailwind CSS |
-| Animations | Framer Motion |
-| Charts | Recharts |
-| Auth | Supabase Auth (client-side) |
-| Package Manager | pnpm |
-
-### Backend
-
-| Layer | Technology |
-|---|---|
-| Framework | FastAPI (Python) |
-| AI Model | Google Gemini 2.5 Flash (Free Tier) |
-| Database | Supabase (PostgreSQL) |
-| Auth | Supabase Auth (JWT verification) |
-| Caching | Redis (with in-memory fallback) |
-| Rate Limiting | slowapi |
-| Task Queue | Supabase-backed async job system |
-| PDF Parsing | PyMuPDF (fitz) |
-| Testing | pytest |
-
-### External APIs
-
-| Service | Purpose |
-|---|---|
-| GitHub REST API | User profile, repos, coding activity |
-| LeetCode GraphQL API | Problems solved, difficulty breakdown, skill tags |
-| SerpAPI (Google Jobs) | Real-time job and internship search |
-| Gmail SMTP | Weekly AI performance email reports |
+1. [Executive Summary](#executive-summary)
+2. [System Architecture & Design Patterns](#system-architecture--design-patterns)
+3. [Feature Matrix](#feature-matrix)
+4. [Data Flow & Sequence Diagrams](#data-flow--sequence-diagrams)
+5. [Database Schema & Entity-Relationship Diagram](#database-schema--entity-relationship-diagram)
+6. [Project Structure & Codebase Map](#project-structure--codebase-map)
+7. [API Reference](#api-reference)
+8. [Testing & Verification](#testing--verification)
+9. [Getting Started & Local Setup](#getting-started--local-setup)
+10. [Environment Configuration](#environment-configuration)
+11. [Design System & Frontend Aesthetics](#design-system--frontend-aesthetics)
+12. [License](#license)
 
 ---
 
-## Architecture Overview
+## Executive Summary
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         FRONTEND (Next.js)                       │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │
-│  │ Dashboard│ │ Analysis │ │Interview │ │   Jobs & More    │  │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────────────┘  │
-│         │              │             │              │           │
-│         │    ┌─────────┴──────┐     │     ┌────────┴──────┐    │
-│         │    │Career Orchestrator│   │     │Career Safe    │    │
-│         │    │(Single Brain)    │   │     │(Safe Accessors)│   │
-│         │    └─────────────────┘   │     └───────────────┘    │
-│         │                          │                           │
-│  ┌──────▼──────────────────────────▼────────────────────────┐  │
-│  │              Supabase Client (Auth + DB)                  │  │
-│  └───────────────────────────────────────────────────────────┘  │
-└────────────────────────────┬────────────────────────────────────┘
-                             │ REST API (JWT Bearer)
-┌────────────────────────────▼────────────────────────────────────┐
-│                      BACKEND (FastAPI)                           │
-│                                                                  │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
-│  │   Routers   │  │  Services   │  │      Core Layer         │ │
-│  │             │  │             │  │                         │ │
-│  │ auth        │  │ gemini      │  │ middleware (JWT, RBAC)  │ │
-│  │ analysis    │  │ github      │  │ cache (Redis/Memory)    │ │
-│  │ interview   │  │ leetcode    │  │ circuit_breaker         │ │
-│  │ jobs        │  │ analysis_svc│  │ metrics                 │ │
-│  │ resume      │  │ job_match   │  │ websocket               │ │
-│  │ profile     │  │ career_brain│  │ supabase_client         │ │
-│  │ streaks     │  │ evolution   │  │ config                  │ │
-│  │ ranks       │  │ memory      │  │                         │ │
-│  │ badges      │  │ badge_svc   │  │                         │ │
-│  │ challenges  │  │ resume_svc  │  │                         │ │
-│  │ weekly_chal │  │ document    │  │                         │ │
-│  │ email       │  │ skill_extr  │  │                         │ │
-│  │ career      │  │ profile_svc │  │                         │ │
-│  │ roadmap     │  │ recommender │  │                         │ │
-│  │ documents   │  │ market      │  │                         │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────────┘ │
-│         │                  │                                     │
-│         └──────────────────┼─────────────────────────────────────┘
-│                             │
-│                    ┌────────▼────────┐
-│                    │   Supabase      │
-│                    │  (PostgreSQL)   │
-│                    └─────────────────┘
-└──────────────────────────────────────────────────────────────────┘
+Most career platforms rely on self-reported forms susceptible to inflation and outdated data. **AI Career Navigator** eliminates manual forms by directly querying verified third-party developer APIs and extracting structured data from user uploaded files:
+
+- **GitHub REST API Ingestion**: Pulls total repositories, language distributions, star counts, forks, topic tags, and commit velocity.
+- **LeetCode GraphQL API Ingestion**: Fetches total problems solved, difficulty breakdown (Easy / Medium / Hard), ranking, and skill tags.
+- **PyMuPDF Resume Parsing**: Validates PDF magic bytes (`%PDF-`), extracts raw text, and neutralizes prompt injections before AI processing.
+- **AI Certificate Extraction**: Extracts course title, issuer, completion date, unlocked skill tags, and document credibility ratings using Google Gemini.
+- **Multi-Source Skill Fusion Matrix**: Combines all ingested signals using confidence-weighted aggregation into a single `CareerBrain` payload.
+
+### Core Metrics
+
+- **Backend Test Suite**: **1,434 passed** tests across 64 test modules (`pytest`).
+- **Frontend Unit Suite**: **1,249 passed** tests across 63 test suites (`jest`).
+- **Database Architecture**: **16 relational tables** on Supabase PostgreSQL with full Row Level Security (RLS).
+- **AI Engine Efficiency**: Single 6-in-1 prompt call structure minimizing latency and API token usage.
+
+---
+
+## System Architecture & Design Patterns
+
+The system adopts a decoupled, event-driven architecture combining a **Next.js 14 App Router** frontend with a **FastAPI** microservice backend.
+
+```mermaid
+graph TD
+    subgraph Client Layer (Next.js 14 App Router)
+        UI[User Interface & Dashboard]
+        CO[Career Orchestrator - Single Source of Truth]
+        CS[Career Safe - Null-Safe Accessors]
+        SC[Supabase Auth Client]
+    end
+
+    subgraph API Gateway & Middleware Layer (FastAPI)
+        RL[slowapi Rate Limiter]
+        CORS[CORS Middleware]
+        AUTH[Supabase JWT Verification & RBAC]
+        LOG[Structured JSON Logging]
+        MET[Metrics Collector /metrics]
+        WS[WebSocket Manager /ws]
+    end
+
+    subgraph Service & AI Core Layer
+        GS[Gemini 2.5 Flash Service - 6-in-1 Engine]
+        CBS[Career Brain Service - Aggregator]
+        CEE[Career Evolution Engine]
+        CME[Career Memory Engine]
+        JMS[Job Matching Engine - Skill Vector Overlap]
+        SA[SerpAPI Job Search Service]
+        PE[PyMuPDF Resume & Document Service]
+        GH[GitHub REST API Client]
+        LC[LeetCode GraphQL API Client]
+    end
+
+    subgraph Data & Storage Layer
+        PG[(Supabase PostgreSQL - 16 Tables + RLS)]
+        RC[(Redis Cache / In-Memory Fallback)]
+        AJ[Async Jobs Queue - analysis_jobs]
+    end
+
+    UI --> CO
+    CO --> CS
+    UI --> SC
+    CO --> AUTH
+    
+    AUTH --> CORS --> RL --> LOG --> MET
+    AUTH --> Router[FastAPI Routers /api/v1/]
+    
+    Router --> CBS
+    Router --> GS
+    Router --> JMS
+    Router --> PE
+    Router --> WS
+    
+    CBS --> CEE
+    CBS --> CME
+    GS --> RC
+    JMS --> SA
+    PE --> GS
+    
+    Router --> GH
+    Router --> LC
+    Router --> AJ
+    AJ --> PG
+    CBS --> PG
 ```
 
-### Request Flow — AI Analysis
+### Architectural Decisions
 
-```
-User clicks "Run Analysis"
-        │
-        ▼
-Frontend: POST /api/v1/analysis/run
-        │
-        ▼
-Backend: Creates async job (idempotent)
-        │
-        ▼
-Background Task:
-  1. Fetch enriched profile from Supabase
-  2. Fetch GitHub data (REST API)
-  3. Fetch LeetCode data (GraphQL API)
-  4. Get resume text from profile
-  5. Call Gemini 2.5 Flash (single combined call, 6-in-1)
-     → Strengths, Weaknesses, Career Paths, Skill Gaps,
-       Roadmap, Resume Score, Salary Insights, Certifications
-  6. Save results to Supabase (upsert)
-  7. Update job status → completed
-        │
-        ▼
-Frontend: Polls GET /api/v1/analysis/job/{job_id}
-        │
-        ▼
-Frontend: Renders Analysis Dashboard
+1. **Career Orchestrator Pattern (`career-orchestrator.ts`)**: Acts as the single frontend brain state manager. It aggregates raw profile data, execution history, and evolution statistics into a unified `CareerBrain` object to prevent inconsistent UI states across pages.
+2. **Career Safe Accessor Pattern (`career-safe.ts`)**: Shields React components from null pointer exceptions by wrapping optional and nested AI responses in zero-cost, type-safe fallback getters.
+3. **Async Idempotent Job Queue (`analysis_jobs`)**: Long-running AI processing (10–30s) executes asynchronously via background tasks. Requests submitted within a 5-minute window with matching parameters return the existing job ID rather than spawning duplicate AI calls.
+4. **Circuit Breaker Pattern (`circuit_breaker.py`)**: Protects external integrations (GitHub, LeetCode, Gemini) by monitoring failure rates, opening circuits during outages, and returning degraded fallback states without crashing application endpoints.
+
+---
+
+## Feature Matrix
+
+### 🧠 Core AI Intelligence
+
+| Feature | Description | Implementation Details |
+|---|---|---|
+| **Profile Integration Engine** | Fetches live metrics from external developer profiles and documents. | GitHub REST API, LeetCode GraphQL, PyMuPDF PDF parser. |
+| **Gemini 2.5 Flash 6-in-1 Call** | Evaluates 6 major career vectors in a single prompt execution to reduce token overhead. | Yields strengths, weaknesses, career paths, skill gaps, 24-week roadmap, and resume score. |
+| **Career Brain Engine** | Central aggregator compiling user metrics into a unified job readiness score. | Combines profile data, interview history, streaks, and ranks in `career_brain_service.py`. |
+| **Skill Evolution Engine** | Analyzes skill growth trajectory, volatility metrics, and per-role adaptability. | Pattern detection implemented in `career_evolution_engine.py`. |
+| **Long-Term Career Memory** | Records historical evaluation sessions to infer stability trends. | Persisted in `user_career_memory` with `improving`, `stable`, or `declining` status. |
+| **Multi-Category Skill Extractor** | Normalizes and categorizes extracted skills from raw text and certificates. | Groups skills into Languages, Frameworks, Databases, Tools, and Concepts. |
+
+### 🎙️ AI Interview Coach & Voice Studio
+
+| Feature | Description | Implementation Details |
+|---|---|---|
+| **4 Interview Packs** | Specialized interview simulations covering different engineering domains. | Warm Up (HR), Technical Round, FAANG Prep (Google/Meta), and System Design. |
+| **Voice Input & TTS Engine** | Full hands-free voice answering and question narration. | Web Speech API (`webkitSpeechRecognition` STT + `SpeechSynthesis` TTS). |
+| **Per-Question AI Evaluation** | Detailed score breakdown (0–10) with targeted feedback per question. | Analyzes response quality, missing concepts, model answer, and improvement tips. |
+| **Anti-Cheat System** | Behavioral telemetry monitoring candidate response integrity. | Monitors paste events, typing speed anomalies (WPM), and window focus shifts. |
+| **AI Coach Sidebar** | Real-time panel providing personalized guidance during live sessions. | Displays weakest career path, current job readiness score, and targeted coaching tips. |
+| **Simulation Countdown Timer** | Per-question timer with dynamic color alerts and auto-submission. | 2-minute countdown shifting from Blue → Orange → Red (last 30s) → Auto-submit. |
+
+### 🏆 Gamification & Social Challenges
+
+| Feature | Description | Implementation Details |
+|---|---|---|
+| **Daily Streak System** | Daily practice tracking encouraging consistent preparation habits. | Duolingo-style streak counter with longest streak and freeze tracking in `user_streaks`. |
+| **7-Tier XP & Level Progression** | Level progression framework based on accumulated interview and challenge XP. | Levels: 🌱 Fresher → 📚 Beginner → 💼 Junior → ⚡ Mid-level → 🚀 Senior → 👑 Principal → 🏆 Legend. |
+| **Automated Badges (12+)** | Automated achievement system awarding badges upon meeting milestone criteria. | Badges: First Step, Perfect Score, Week Warrior, Monthly Legend, Interview Master, Hard Mode Hero, Voice Pro, Weekly Champion, etc. |
+| **ISO-Week Challenge Hub** | Weekly interview challenges with live countdown timers and global leaderboards. | Auto-generated per ISO week number with state persistence in `weekly_challenges`. |
+| **Peer Challenge Rooms** | Peer-to-peer custom interview challenges via 8-character invite codes. | Create, share, attempt, and compare scores on dedicated challenge leaderboards. |
+
+### 💼 Job Intelligence & Application Pipeline
+
+| Feature | Description | Implementation Details |
+|---|---|---|
+| **Skill Match Algorithm** | Quantitative matching scoring user skills against job requirements. | Weighted skill vector overlap in `job_matching_service.py`. |
+| **Real-Time Job Search** | Real-time software engineering job index integration. | Powered by SerpAPI (Google Jobs) with fallback search URLs for LinkedIn and Internshala. |
+| **Job Application Pipeline** | Kanban-style application management tracking application statuses. | Tracks status through `applied` → `interview` → `rejected` → `offer` with custom notes. |
+| **Market Demand Analyzer** | Aggregates role-specific market demand metrics and skill trends. | Highlights High Demand, Growing, and Stable skill requirements per role. |
+
+### 📄 Document Processing & Security
+
+| Feature | Description | Implementation Details |
+|---|---|---|
+| **PDF Magic-Byte Validation** | File validation enforcing strict header checks prior to disk write. | Validates `%PDF-` signature bytes (max 10MB) to block file spoofing. |
+| **Certificate AI Parsing** | Automated certificate processing extracting verified metadata. | Supports PDF, JPG, PNG (max 5MB, up to 10 files). Extracts title, provider, score, and skill tags. |
+| **Unified Document Schema** | Document repository storing extracted document attributes. | Managed via `user_documents` table with confidence-weighted skill merging. |
+| **Prompt Injection Neutralization** | Defense layer scanning input strings before sending queries to Gemini LLM. | Filters 30+ injection patterns (e.g., `ignore previous instructions`, `system prompt override`). |
+
+---
+
+## Data Flow & Sequence Diagrams
+
+### 1. AI Career Analysis Flow (Async Job Queue)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant FE as Next.js Frontend
+    participant API as FastAPI Router (/api/v1/analysis)
+    participant JS as Async Job Service
+    participant DB as Supabase PostgreSQL
+    participant AI as Gemini 2.5 Flash Engine
+
+    User->>FE: Click "Run AI Analysis"
+    FE->>API: POST /api/v1/analysis/run
+    API->>JS: Create job request (Check idempotency 5m TTL)
+    JS->>DB: INSERT into analysis_jobs (status='pending')
+    API-->>FE: Return 202 Accepted { job_id, status: 'pending' }
+    
+    par Async Processing
+        JS->>DB: Fetch user profile, GitHub data, LeetCode data, Resume text
+        JS->>AI: 6-in-1 Combined Prompt (Strengths, Paths, Gaps, Roadmap, Resume Score)
+        AI-->>JS: Structured JSON Analysis Payload
+        JS->>DB: UPSERT into analyses table
+        JS->>DB: UPDATE analysis_jobs (status='completed', result=payload)
+    and Client Polling
+        loop Every 2 Seconds
+            FE->>API: GET /api/v1/analysis/job/{job_id}
+            API->>DB: SELECT status, result FROM analysis_jobs
+            DB-->>API: Job Record
+            API-->>FE: { status: 'completed' / 'pending', result }
+        end
+    end
+    
+    FE->>User: Render Career Analysis Dashboard
 ```
 
-### Request Flow — Interview Session
+### 2. Live AI Voice Interview Session Flow
 
-```
-User selects interview pack (Warm Up / Technical / FAANG / System Design)
-        │
-        ▼
-Frontend: POST /api/v1/interview/generate-questions
-        │
-        ▼
-Backend: Returns AI-generated questions (cached 15 min, throttled 20 sec/user)
-        │
-        ▼
-User answers questions (text or voice)
-        │
-        ▼
-Per-question: POST /api/v1/interview/evaluate
-  → AI scores answer (0–10), gives good points, missing points,
-    model answer, and improvement tip
-        │
-        ▼
-Session complete → POST /api/v1/interview/complete
-  → Updates streak, XP, rank, badges
-  → If weekly mode → submits to weekly leaderboard
-        │
-        ▼
-Frontend: Results screen with score breakdown, XP earned,
-          new badges, streak update, rank progress
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Candidate
+    participant FE as Interview Screen UI
+    participant STT as Web Speech API (STT)
+    participant API as FastAPI Backend
+    participant AI as Gemini Coach Engine
+    participant DB as Supabase DB
+
+    Candidate->>FE: Select Pack (Warm Up / Technical / FAANG / System Design)
+    FE->>API: POST /api/v1/interview/generate-questions
+    API->>AI: Prompt question generation for pack & role
+    AI-->>API: 5 Domain-Specific Questions + Hints
+    API-->>FE: Return Questions (Cached 15m)
+    
+    loop For Each Question (2 min Timer)
+        FE->>Candidate: Display Question + Play TTS Audio
+        Candidate->>STT: Speak Answer (Voice Mode)
+        STT-->>FE: Transcript Text Stream
+        FE->>FE: Anti-Cheat Checks (Paste count, WPM rate, blur events)
+        FE->>API: POST /api/v1/interview/evaluate
+        API->>AI: Evaluate Answer (0-10 score, missing concepts, model answer)
+        AI-->>API: Evaluation Object
+        API-->>FE: Display Question Feedback
+    end
+
+    FE->>API: POST /api/v1/interview/complete
+    API->>DB: Save session in interview_sessions
+    API->>DB: Update user_streaks, user_ranks (XP), check & award user_badges
+    API-->>FE: Return Final Session Summary + Earned Badges
+    FE->>Candidate: Render Results Screen with XP & Level Up Modal
 ```
 
 ---
 
-## Database Schema
+## Database Schema & Entity-Relationship Diagram
 
-The project uses **Supabase (PostgreSQL)** with 15+ tables and full Row Level Security (RLS).
+The application uses **Supabase PostgreSQL** containing **16 core tables**, equipped with Row Level Security (RLS) policies and strategic indexing on `user_id` and score fields.
 
-### Core Tables
+```mermaid
+erDiagram
+    profiles ||--o{ analyses : "has"
+    profiles ||--o{ interview_sessions : "completes"
+    profiles ||--o| user_streaks : "maintains"
+    profiles ||--o| user_ranks : "holds"
+    profiles ||--o{ user_badges : "earns"
+    profiles ||--o{ user_documents : "uploads"
+    profiles ||--o{ user_career_memory : "tracks"
+    profiles ||--o{ analysis_jobs : "triggers"
+    profiles ||--o{ saved_jobs : "bookmarks"
+    profiles ||--o{ job_applications : "manages"
+    profiles ||--o{ challenges : "creates"
+    challenges ||--o{ challenge_results : "receives"
+    weekly_challenges ||--o{ weekly_results : "receives"
+    profiles ||--o{ challenge_attempts : "starts"
 
-| Table | Purpose |
-|---|---|
-| `profiles` | User profile data — academic, professional, career goals, GitHub/LeetCode usernames, resume text |
-| `analyses` | AI-generated career analysis — strengths, weaknesses, career paths, skill gaps, roadmap, resume score |
-| `interview_sessions` | Interview practice session data — questions, answers, scores, career path |
-| `user_streaks` | Daily practice streak tracking (Duolingo-style) — current streak, longest streak, last practice date |
-| `user_ranks` | User XP and ranking — XP points, level (1–7), rank title |
-| `user_badges` | Earned achievement badges — badge ID, earned timestamp |
-| `user_documents` | Unified document storage — resume, certificates, cover letters with AI-extracted data |
-| `user_career_memory` | Career evolution tracking — per-career-path performance scores and trends |
-| `analysis_jobs` | Async job tracking — background AI analysis job status (pending/processing/completed/failed) |
+    profiles {
+        uuid user_id PK
+        text email
+        text github_username
+        text leetcode_username
+        text resume_text
+        text user_type
+        text college_name
+        text degree
+        text current_job_title
+        jsonb target_companies
+        text[] extra_skills
+    }
 
-### Social & Challenge Tables
+    analyses {
+        uuid id PK
+        uuid user_id FK
+        jsonb github_data
+        jsonb leetcode_data
+        jsonb analysis
+        jsonb career_paths
+        jsonb skill_gaps
+        jsonb roadmap
+        timestamp created_at
+    }
 
-| Table | Purpose |
-|---|---|
-| `challenges` | Shared interview challenges — 8-character code, creator, career path, questions |
-| `challenge_results` | Challenge submission results and leaderboard entries |
-| `weekly_challenges` | Weekly challenge definitions — ISO week number, year, theme, career path, questions |
-| `weekly_results` | Weekly challenge submissions and leaderboard |
-| `challenge_attempts` | Tracks when users start weekly challenges (resume support) |
+    interview_sessions {
+        uuid id PK
+        uuid user_id FK
+        text career_path
+        jsonb questions
+        jsonb answers
+        jsonb scores
+        float total_score
+        timestamp created_at
+    }
 
-### Job Tracking Tables
+    user_streaks {
+        uuid id PK
+        uuid user_id FK
+        integer current_streak
+        integer longest_streak
+        date last_practice_date
+        integer total_sessions
+    }
 
-| Table | Purpose |
-|---|---|
-| `saved_jobs` | Bookmarked/saved job listings |
-| `job_applications` | Job application pipeline — status tracking (applied/interview/rejected/offer) |
+    user_ranks {
+        uuid id PK
+        uuid user_id FK
+        integer xp
+        integer level
+        text rank_title
+    }
 
-### Key Indexes
+    user_badges {
+        uuid id PK
+        uuid user_id FK
+        text badge_id
+        timestamp earned_at
+    }
 
-All user-facing tables have indexes on `user_id`, and leaderboard tables have indexes on `score DESC` for efficient ranking queries.
+    user_documents {
+        uuid id PK
+        uuid user_id FK
+        text document_name
+        text document_type
+        jsonb extracted_data
+        text storage_url
+    }
+
+    user_career_memory {
+        uuid id PK
+        uuid user_id FK
+        text career_path
+        integer performance_score
+        text trend
+        timestamp last_updated
+    }
+
+    saved_jobs {
+        uuid id PK
+        uuid user_id FK
+        text job_id
+        text title
+        text company
+        float match_score
+    }
+
+    job_applications {
+        uuid id PK
+        uuid user_id FK
+        text job_id
+        text title
+        text status
+        timestamp applied_at
+    }
+```
+
+### Table Summary
+
+| Table Name | Primary Purpose | Row Level Security (RLS) | Key Indexes |
+|---|---|---|---|
+| `profiles` | User contact info, academic details, goals, and social handles | `auth.uid() = user_id` | `user_id`, `github_username`, `leetcode_username` |
+| `analyses` | AI career analysis (strengths, gaps, roadmaps) | `auth.uid() = user_id` | `user_id`, `created_at DESC` |
+| `interview_sessions` | Logs interview questions, answers, and scores | `auth.uid() = user_id` | `user_id`, `created_at DESC` |
+| `user_streaks` | Daily practice streak counter and practice timestamps | `auth.uid() = user_id` | `user_id` (UNIQUE) |
+| `user_ranks` | User XP total, progression level (1–7), and rank title | `auth.uid() = user_id` | `user_id` (UNIQUE), `xp DESC` |
+| `user_badges` | Record of earned achievement badges | `auth.uid() = user_id` | `user_id`, `(user_id, badge_id)` (UNIQUE) |
+| `user_documents` | Certificate & document metadata + extracted skills | `auth.uid() = user_id` | `user_id`, `(user_id, document_type)` |
+| `user_career_memory` | Role performance history tracking over time | `auth.uid() = user_id` | `user_id`, `career_path` |
+| `analysis_jobs` | Background task tracking for async analysis jobs | `auth.uid() = user_id` | `user_id`, `status` |
+| `challenges` | Custom shared peer challenges | Public SELECT, Creator INSERT | `challenge_code` (UNIQUE) |
+| `challenge_results` | Results and leaderboards for peer challenges | Public SELECT, Owner INSERT | `challenge_code`, `score DESC` |
+| `weekly_challenges` | Global weekly challenge questions per ISO week | Public SELECT, Service Role write | `(week_number, year)` (UNIQUE) |
+| `weekly_results` | Submissions for global weekly challenges | Public SELECT, Owner INSERT | `(week_number, year)`, `score DESC` |
+| `challenge_attempts` | In-progress attempt markers for weekly challenges | `auth.uid() = user_id` | `(user_id, week_number, year)` (UNIQUE) |
+| `saved_jobs` | Bookmarked job listings | `auth.uid() = user_id` | `user_id`, `(user_id, job_id)` (UNIQUE) |
+| `job_applications` | Kanban application tracking (`applied` / `interview` / `offer`) | `auth.uid() = user_id` | `user_id`, `status`, `applied_at DESC` |
 
 ---
 
-## Project Structure
+## Project Structure & Codebase Map
 
 ```
 career-navigator/
-├── README.md                          # This file
-├── package.json                       # Root workspace config
-├── pnpm-lock.yaml                     # Lock file
-├── .gitignore
+├── README.md                            # Comprehensive Technical Readme
+├── package.json                         # Root Workspace Config
+├── pnpm-lock.yaml                       # PNPM Lock File
+├── images/                              # Project Visual Assets & Diagrams
+│   ├── Vibrant 3D Career Navigation Scene.png
+│   ├── landing page.png
+│   ├── Gemini_Generated_Image_jy2j7hjy2j7hjy2j.png
+│   └── Instagram Post - MEET  JAISUUU.png
 │
-├── frontend/                          # Next.js 14 Frontend
-│   ├── app/                           # App Router pages
-│   │   ├── page.tsx                   # Landing page (hero, features, testimonials)
-│   │   ├── layout.tsx                 # Root layout
-│   │   ├── globals.css                # Global styles + Tailwind
-│   │   ├── auth/                      # Authentication
+├── frontend/                            # Next.js 14 App Router Frontend
+│   ├── app/                             # App Router Routing Hierarchy
+│   │   ├── page.tsx                     # Landing Page (Hero, Features, Testimonials)
+│   │   ├── layout.tsx                   # Root Layout & Providers
+│   │   ├── globals.css                  # Modern Tailwind CSS & CSS Variables
+│   │   ├── manifest.ts                  # Web App Manifest
+│   │   ├── robots.ts                    # SEO Robots Directive
+│   │   ├── sitemap.ts                   # Dynamic Sitemap Generator
+│   │   ├── auth/                        # Authentication Pages
 │   │   │   ├── login/page.tsx
 │   │   │   ├── signup/page.tsx
-│   │   │   └── callback/route.ts      # OAuth callback
-│   │   ├── dashboard/page.tsx         # Main dashboard (Career Brain, Progress, Match Fit)
-│   │   ├── analysis/page.tsx          # AI Career Analysis (paths, gaps, roadmap, salary)
-│   │   ├── interview/page.tsx         # AI Interview Coach (4 packs, voice, sim mode)
-│   │   │   ├── components/
-│   │   │   │   ├── SetupScreen.tsx    # Interview pack selection
-│   │   │   │   ├── InterviewScreen.tsx# Live interview with AI coach panel
-│   │   │   │   ├── ResultsScreen.tsx  # Score breakdown, feedback, badges
-│   │   │   │   └── AICoachPanel.tsx   # Weak area, AI tip, readiness score
-│   │   │   └── hooks/
-│   │   │       ├── useInterviewSession.ts  # Core session state machine
-│   │   │       ├── useVoiceInput.ts        # Web Speech API (STT + TTS)
-│   │   │       ├── useSimTimer.ts          # 2-min countdown per question
-│   │   │       └── useWeeklyChallenge.ts   # Weekly challenge + localStorage resume
-│   │   ├── challenges/page.tsx        # Weekly challenge hub (countdown, leaderboard)
-│   │   ├── challenge/[code]/page.tsx  # Shared challenge view + submission
-│   │   ├── jobs/page.tsx              # Job search, save, apply, pipeline
-│   │   ├── applications/page.tsx      # Job application tracker (kanban-style)
-│   │   ├── resume/page.tsx            # Resume upload + certificate management
-│   │   ├── profile/page.tsx           # Profile editor (academic, professional, goals)
-│   │   ├── onboarding/page.tsx        # Multi-step onboarding wizard
-│   │   ├── badges/page.tsx            # Achievement gallery (earned + locked)
-│   │   ├── progress/page.tsx          # Progress charts + Career Copilot insights
-│   │   └── ...
-│   ├── components/                    # Shared React components
-│   │   ├── Navbar.tsx                 # Main navigation (10 routes)
-│   │   ├── CareerCoach.tsx            # AI Career Coach widget (dashboard)
-│   │   ├── CareerRoadmap.tsx          # Visual 24-week roadmap timeline
-│   │   ├── ProgressTracker.tsx        # Profile completeness progress bar
-│   │   ├── MatchFitScore.tsx          # Radial match-fit score gauge
-│   │   └── ui/                        # shadcn/ui components
-│   ├── lib/                           # Shared utilities
-│   │   ├── supabase.ts                # Supabase client singleton
-│   │   ├── api.ts                     # API client with retry logic
-│   │   ├── career-orchestrator.ts     # Single brain decision system
-│   │   ├── career-safe.ts             # Safe data accessors (null-safe)
-│   │   └── utils.ts
-│   ├── public/                        # Static assets
-│   ├── next.config.js
-│   ├── tailwind.config.js
-│   └── tsconfig.json
+│   │   │   └── callback/route.ts        # OAuth Callback Handler
+│   │   ├── dashboard/page.tsx           # Main Dashboard (Career Brain Overview)
+│   │   ├── analysis/page.tsx            # AI Career Analysis & Skill Gap Matrix
+│   │   ├── interview/                  # AI Interview Coach Engine
+│   │   │   ├── page.tsx                 # Main Interview Hub
+│   │   │   ├── components/              # Interview Sub-Components
+│   │   │   │   ├── SetupScreen.tsx      # Domain & Pack Selection
+│   │   │   │   ├── InterviewScreen.tsx  # Live Interview Interface & Speech Handler
+│   │   │   │   ├── ResultsScreen.tsx    # Score Breakdown & XP/Badge Modal
+│   │   │   │   └── AICoachPanel.tsx     # Live AI Coaching Sidebar
+│   │   │   └── hooks/                   # Custom Interview Hooks
+│   │   │       ├── useInterviewSession.ts
+│   │   │       ├── useVoiceInput.ts     # Speech-to-Text & Text-to-Speech Engine
+│   │   │       ├── useSimTimer.ts       # Per-Question Countdown Timer
+│   │   │       └── useWeeklyChallenge.ts# ISO-Week State Manager
+│   │   ├── challenges/page.tsx          # Weekly Challenge Hub & Leaderboard
+│   │   ├── challenge/[code]/page.tsx    # Shareable Custom Challenge Room
+│   │   ├── jobs/page.tsx                # Job Search & Match Recommendations
+│   │   ├── applications/page.tsx        # Kanban Job Application Tracker
+│   │   ├── resume/page.tsx              # PDF Resume & Certificate Storage Hub
+│   │   ├── profile/page.tsx             # Profile Management & Goals
+│   │   ├── onboarding/page.tsx          # User Onboarding Wizard
+│   │   ├── badges/page.tsx              # Achievement Badge Gallery
+│   │   └── progress/page.tsx            # Skill Evolution Analytics
+│   ├── components/                      # Shared UI Components
+│   │   ├── Navbar.tsx                   # Navigation Bar
+│   │   ├── CareerCoach.tsx              # Floating AI Assistant Widget
+│   │   ├── CareerRoadmap.tsx            # Visual 24-Week Timeline Component
+│   │   ├── ProgressTracker.tsx          # Profile Completeness Gauge
+│   │   ├── MatchFitScore.tsx            # Radial Role Match Gauge
+│   │   └── ui/                          # Radix UI & Primitives
+│   ├── lib/                             # Core Frontend Services & Helpers
+│   │   ├── supabase.ts                  # Supabase Browser & SSR Clients
+│   │   ├── api.ts                       # Axios/Fetch API Wrapper
+│   │   ├── career-orchestrator.ts       # Central Decision Engine (Single Brain)
+│   │   └── career-safe.ts               # Type-Safe Null Accessor Helpers
+│   ├── __tests__/                       # Jest React Unit & Integration Tests
+│   └── tests/e2e/                       # Playwright End-to-End Suite
 │
-├── backend/                           # FastAPI Backend
-│   ├── main.py                        # App entry point, router registration, middleware
-│   ├── requirements.txt               # Python dependencies
-│   ├── schema.sql                     # Complete Supabase database schema + RLS policies
-│   ├── celery_config.py               # Celery configuration (for async tasks)
-│   ├── check_results.py               # Result checking utility
-│   ├── utils.py
-│   │
-│   ├── routers/                       # API Route Handlers (v1 prefix)
-│   │   ├── auth.py                    # Signup, login, me (Supabase Auth)
-│   │   ├── analysis.py                # Run analysis, job status, job history
-│   │   ├── interview.py               # Generate questions, evaluate, complete session
-│   │   ├── jobs.py                    # Job recommendations, save, apply, applications
-│   │   ├── resume.py                  # Resume PDF upload + text extraction
-│   │   ├── profile.py                 # Get/save profile, progress
-│   │   ├── profile_enhanced.py        # Enhanced profile (academic, skills, goals)
-│   │   ├── documents.py               # Certificate upload + AI analysis
-│   │   ├── streaks.py                 # Get/update daily practice streak
-│   │   ├── ranks.py                   # Get/update XP and level
-│   │   ├── badges.py                  # Get user badges, check/award badges
-│   │   ├── challenges.py              # Create challenge, submit, leaderboard
-│   │   ├── weekly_challenge.py        # Current week challenge, start, submit, leaderboard
-│   │   ├── email_report.py            # Send weekly AI performance email
-│   │   ├── career.py                  # Career evolution data
-│   │   ├── career_brain.py            # Central career intelligence endpoint
-│   │   └── roadmap.py                 # Milestone progress tracking
-│   │
-│   ├── services/                      # Business Logic & AI
-│   │   ├── gemini_service.py          # Google Gemini 2.5 Flash client (6-in-1, caching, sanitization)
-│   │   ├── analysis_service.py        # Run AI analysis, save/load results
-│   │   ├── async_job_service.py       # Background job queue with idempotency
-│   │   ├── career_brain_service.py    # Aggregates all user data → CareerBrain
-│   │   ├── career_evolution_engine.py # Predictive skill evolution analysis
-│   │   ├── career_memory_engine.py    # Long-term career memory tracking
-│   │   ├── badge_service.py           # Auto badge checking and awarding
-│   │   ├── resume_service.py          # PDF text extraction + skill extraction
-│   │   ├── document_service.py        # Document CRUD + basic skill extraction
-│   │   ├── profile_service.py         # Profile CRUD + completeness scoring
-│   │   ├── profile_builder.py         # Merges all documents into unified skill profile
-│   │   ├── skill_extractor.py         # AI-powered skill extraction by category
-│   │   ├── github_service.py          # GitHub REST API client
-│   │   ├── leetcode_service.py        # LeetCode GraphQL API client
-│   │   ├── job_matching_service.py    # Skill-based job matching engine
-│   │   ├── jobs_service.py            # SerpAPI job search + LinkedIn/Internshala URLs
-│   │   ├── recommendation_engine.py   # Personalized job/career recommendations
-│   │   └── market_analyzer.py         # Job market demand analysis by role
-│   │
-│   ├── core/                          # Infrastructure & Cross-Cutting Concerns
-│   │   ├── middleware.py              # JWT verification, RBAC, structured logging, API response format
-│   │   ├── cache.py                   # Redis caching client with in-memory fallback
-│   │   ├── circuit_breaker.py         # Circuit breaker pattern for external calls
-│   │   ├── metrics.py                 # Request metrics collector (counts, errors, slow requests)
-│   │   ├── websocket.py               # WebSocket manager for real-time updates
-│   │   ├── supabase_client.py         # Centralized Supabase singleton client
-│   │   └── config.py                  # Environment variable management (Settings class)
-│   │
-│   ├── lib/                           # Shared libraries
-│   │   └── auth.py                    # JWT verification utilities
-│   │
-│   ├── models/                        # Pydantic Data Models
-│   │   ├── analysis.py
-│   │   └── user.py
-│   │
-│   ├── tests/                         # pytest Test Suite
-│   │   ├── conftest.py
-│   │   ├── test_api_endpoints.py
-│   │   ├── test_auth.py
-│   │   ├── test_cache.py
-│   │   ├── test_file_validation.py
-│   │   ├── test_gemini_rate_limit.py
-│   │   └── test_input_sanitization.py
-│   │
-│   └── docs/
-│       └── response_contract.md       # API response format specification
-│
-└── docs/
-    └── uml_diagrams.md                # Architecture UML diagrams
+└── backend/                             # FastAPI Microservice Backend
+    ├── main.py                          # FastAPI Application Entry & Middleware
+    ├── requirements.txt                 # Python Dependencies
+    ├── schema.sql                       # PostgreSQL Database DDL & RLS Policies
+    ├── celery_config.py                 # Async Celery Worker Configuration
+    ├── core/                            # Infrastructure Layer
+    │   ├── middleware.py                # JWT Auth, RBAC, & Structured JSON Logger
+    │   ├── cache.py                     # Redis Client with In-Memory Fallback
+    │   ├── circuit_breaker.py           # Fault Tolerance Pattern Wrapper
+    │   ├── metrics.py                   # Custom Metrics Collector
+    │   ├── websocket.py                 # WebSocket Connection Manager
+    │   ├── supabase_client.py           # Supabase Singleton Instance
+    │   └── config.py                    # Environment Configuration (Pydantic)
+    ├── routers/                         # API Endpoint Modules (/api/v1/)
+    │   ├── auth.py                      # Authentication Management
+    │   ├── analysis.py                  # AI Career Analysis & Job Polling
+    │   ├── interview.py                 # Question Generation & Evaluation
+    │   ├── jobs.py                      # Skill Matching & Job Pipeline
+    │   ├── resume.py                    # PDF Upload & Extraction
+    │   ├── profile.py                   # Profile CRUD Operations
+    │   ├── profile_enhanced.py          # Academic & Skill Matrix Attributes
+    │   ├── documents.py                 # Certificate Upload & OCR Engine
+    │   ├── streaks.py                   # Practice Streak Handler
+    │   ├── ranks.py                     # XP & Level Mechanics
+    │   ├── badges.py                    # Badge Verification & Awarding
+    │   ├── challenges.py                # Peer Challenge Room Operations
+    │   ├── weekly_challenge.py          # ISO Weekly Competitions
+    │   ├── email_report.py              # Gmail SMTP Performance Reports
+    │   ├── career.py                    # Predictive Evolution Metrics
+    │   ├── career_brain.py              # Aggregated Career Brain Payload
+    │   └── roadmap.py                   # Milestone State Operations
+    ├── services/                        # Business Logic & External Integrations
+    │   ├── gemini_service.py            # Google Gemini 2.5 Flash SDK Integration
+    │   ├── analysis_service.py          # Async Career Processing Logic
+    │   ├── async_job_service.py         # Job Queue & Idempotency Engine
+    │   ├── career_brain_service.py      # Career Brain Aggregation Engine
+    │   ├── career_evolution_engine.py   # Skill Trajectory Forecasting
+    │   ├── career_memory_engine.py      # Long-Term Trend Detection
+    │   ├── badge_service.py             # Event Badge Evaluator
+    │   ├── certificate_service.py       # Certificate Data Extractor
+    │   ├── document_service.py          # Multi-Document Manager
+    │   ├── github_service.py            # GitHub REST API Client
+    │   ├── leetcode_service.py          # LeetCode GraphQL Client
+    │   ├── job_matching_service.py      # TF-IDF Skill Match Engine
+    │   ├── jobs_service.py              # SerpAPI Google Jobs Search
+    │   ├── market_analyzer.py           # Demand Metric Evaluator
+    │   ├── profile_builder.py           # Confidence-Weighted Skill Merger
+    │   ├── profile_service.py           # Profile Completeness Calculation
+    │   ├── recommendation_engine.py     # Role Recommendation Engine
+    │   ├── resume_service.py            # PDF Magic-Byte & PyMuPDF Text Extractor
+    │   └── skill_extractor.py           # AI Skill Extraction Engine
+    ├── models/                          # Pydantic Schemas & Data Contracts
+    └── tests/                           # Complete Pytest Test Suite (1,434 Tests)
 ```
 
 ---
 
-## Getting Started
+## API Reference
+
+The backend exposes **30+ REST Endpoints** prefixed with `/api/v1/`, alongside WebSocket and health monitoring routes. Interactive Swagger documentation is available at `/docs`.
+
+### Health & Monitoring
+
+| Endpoint | Method | Auth Required | Description |
+|---|---|---|---|
+| `/` | GET | No | Returns API version and link to docs |
+| `/health` | GET | No | Service status monitor (Database, Gemini, Memory Engine) |
+| `/metrics` | GET | No | Application performance metrics (request rates, latency, errors) |
+| `/ws` | WS | No | Real-time WebSocket connection for background alerts |
+
+### Authentication & Profile
+
+| Endpoint | Method | Auth Required | Description |
+|---|---|---|---|
+| `/api/v1/auth/me` | GET | Yes | Retrieve authenticated user metadata |
+| `/api/v1/profile/me` | GET | Yes | Get comprehensive user profile details |
+| `/api/v1/profile/save` | POST | Yes | Save or update profile attributes |
+| `/api/v1/profile/progress` | GET | Yes | Retrieve profile completeness score (0–100) |
+| `/api/v1/profile/enhanced` | GET | Yes | Get enhanced profile data including academic and target goals |
+
+### Career Intelligence & Analysis
+
+| Endpoint | Method | Auth Required | Description |
+|---|---|---|---|
+| `/api/v1/analysis/` | GET | Yes | Fetch active career analysis payload |
+| `/api/v1/analysis/run` | POST | Yes | Trigger async AI career analysis job |
+| `/api/v1/analysis/job/{job_id}` | GET | Yes | Poll status of an active analysis job |
+| `/api/v1/analysis/jobs` | GET | Yes | Retrieve user's historical job executions |
+| `/api/v1/career-brain` | GET | Yes | Get unified `CareerBrain` payload (Readiness score, recommendations) |
+| `/api/v1/career/evolution/{user_id}` | GET | Yes | Fetch predictive skill trajectory metrics |
+| `/api/v1/roadmap/milestone` | PATCH | Yes | Update 24-week roadmap milestone status |
+
+### AI Interview Coach
+
+| Endpoint | Method | Auth Required | Description |
+|---|---|---|---|
+| `/api/v1/interview/generate-questions` | POST | Yes | Generate role-specific interview questions |
+| `/api/v1/interview/evaluate` | POST | Yes | Evaluate candidate response and return feedback |
+| `/api/v1/interview/complete` | POST | Yes | Finalize session, calculate XP, and update streaks |
+| `/api/v1/interview/question-hint` | POST | Yes | Fetch real-time AI hint for a question |
+| `/api/v1/interview/sessions` | GET | Yes | Retrieve candidate's interview session history |
+
+### Job Intelligence & Application Tracking
+
+| Endpoint | Method | Auth Required | Description |
+|---|---|---|---|
+| `/api/v1/jobs/recommendations` | GET | Yes | Fetch skill-matched job recommendations |
+| `/api/v1/jobs/search` | GET | Yes | Search live jobs via SerpAPI (Google Jobs) |
+| `/api/v1/jobs/save` | POST | Yes | Bookmark job listing |
+| `/api/v1/jobs/saved` | GET | Yes | List saved job bookmarks |
+| `/api/v1/jobs/apply` | POST | Yes | Create job application entry |
+| `/api/v1/jobs/applications` | GET | Yes | Get job application pipeline entries |
+
+### Document Processing
+
+| Endpoint | Method | Auth Required | Description |
+|---|---|---|---|
+| `/api/v1/resume/upload` | POST | Yes | Upload PDF resume with magic-byte validation (max 10MB) |
+| `/api/v1/resume/status/{user_id}` | GET | Yes | Get status of processed resume |
+| `/api/v1/documents/upload-files` | POST | Yes | Upload and parse certificates (PDF/JPG/PNG, max 5MB) |
+| `/api/v1/documents/list` | GET | Yes | List user documents |
+| `/api/v1/documents/{id}` | DELETE | Yes | Remove document entry |
+
+### Gamification & Challenges
+
+| Endpoint | Method | Auth Required | Description |
+|---|---|---|---|
+| `/api/v1/streaks/{user_id}` | GET | Yes | Get user practice streak statistics |
+| `/api/v1/ranks/{user_id}` | GET | Yes | Retrieve XP total, level, and rank title |
+| `/api/v1/badges/{user_id}` | GET | Yes | List earned achievement badges |
+| `/api/v1/challenges/create` | POST | Yes | Create peer-to-peer challenge room |
+| `/api/v1/challenges/{code}` | GET | Yes | Fetch custom challenge questions by code |
+| `/api/v1/challenges/{code}/submit` | POST | Yes | Submit responses for peer challenge room |
+| `/api/v1/weekly-challenge/current` | GET | Yes | Get current ISO week challenge |
+| `/api/v1/weekly-challenge/submit` | POST | Yes | Submit ISO week challenge attempt |
+| `/api/v1/weekly-challenge/leaderboard` | GET | Yes | View global weekly challenge leaderboard |
+
+---
+
+## Testing & Verification
+
+The repository enforces strict quality standards through multi-layered automated test suites.
+
+### Backend Test Suite (`pytest`)
+
+Execution command:
+```bash
+cd backend
+.\venv\Scripts\pytest
+```
+
+- **Total Tests Passed**: **1,434 tests** (0 failures).
+- **Test Modules**: **64 test files** across unit, router, integration, and security layers.
+- **Coverage Areas**:
+  - `test_api_endpoints.py`: Router status codes and contract payloads.
+  - `test_auth.py` & `test_auth_router.py`: Supabase JWT verification and RBAC middleware.
+  - `test_badge_service.py` & `test_badges.py`: Event-driven badge verification.
+  - `test_career_brain_service.py`: Decision aggregation correctness.
+  - `test_file_validation.py`: PDF magic-byte checks and upload bounds.
+  - `test_input_sanitization.py`: Prompt injection detection (30+ malicious test vectors).
+  - `test_gemini_service_coverage.py`: Transport retries and rate-limit backoff logic.
+  - `test_job_matching_service.py`: TF-IDF skill matching algorithms.
+
+### Frontend Unit & Component Suite (`jest`)
+
+Execution command:
+```bash
+cd frontend
+pnpm test
+```
+
+- **Unit & Component Tests Passed**: **1,249 tests** across **63 test suites**.
+- **Coverage Areas**: Component rendering, custom hooks (`useInterviewSession`, `useVoiceInput`, `useSimTimer`), Orchestrator state logic, and safe accessor utility functions.
+
+---
+
+## Getting Started & Local Setup
 
 ### Prerequisites
 
-| Requirement | Version | Notes |
-|---|---|---|
-| Node.js | 18+ | Frontend runtime |
-| pnpm | Latest | Package manager (faster than npm) |
-| Python | 3.10+ | Backend runtime |
-| Supabase Account | — | Database + Auth |
-| Google AI Studio API Key | — | Free tier Gemini 2.5 Flash |
-| GitHub Personal Access Token | — | Optional — higher API rate limits |
-| SerpAPI Key | — | Optional — real-time job search |
-| Gmail + App Password | — | Optional — weekly email reports |
-| Redis | — | Optional — falls back to in-memory cache |
+- **Node.js**: v18.0.0 or higher
+- **pnpm**: v8.0.0 or higher
+- **Python**: v3.10 or higher
+- **Supabase Account**: Project URL, Service Role Key, and Anon Key
+- **Google Gemini API Key**: API key from Google AI Studio (`gemini-2.5-flash`)
 
-### 1. Clone the Repository
+---
+
+### 1. Repository Setup
 
 ```bash
-cd career-navigator
+git clone https://github.com/shivam499-pro/AI-CAREER-NAVIGATOR-2026.git
+cd AI-CAREER-NAVIGATOR-2026
 ```
 
-### 2. Frontend Setup
+---
+
+### 2. Frontend Installation & Execution
 
 ```bash
 cd frontend
 pnpm install
 ```
 
-Create a `.env.local` file:
-
+Create `.env.local` in `frontend/`:
 ```env
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_SUPABASE_URL=https://your-supabase-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-Run the development server:
-
+Start the Next.js development server:
 ```bash
 pnpm dev
 ```
+Access frontend at **`http://localhost:3000`**
 
-Visit **http://localhost:3000**
+---
 
-### 3. Backend Setup
+### 3. Backend Setup & Execution
 
 ```bash
 cd backend
 python -m venv venv
+
 # Windows:
 venv\Scripts\activate
+
 # macOS / Linux:
 source venv/bin/activate
 
 pip install -r requirements.txt
 ```
 
-Create a `.env` file:
-
+Create `.env` in `backend/`:
 ```env
-# ── Supabase (Required) ──────────────────────────────────────────────
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_SERVICE_KEY=your_supabase_service_role_key
-SUPABASE_ANON_KEY=your_supabase_anon_key
-
-# ── AI (Required) ────────────────────────────────────────────────────
-GEMINI_API_KEY=your_google_gemini_api_key
-
-# ── External APIs (Optional) ─────────────────────────────────────────
-GITHUB_TOKEN=your_github_personal_access_token
-SERPAPI_KEY=your_serpapi_key
-
-# ── Email (Optional) ─────────────────────────────────────────────────
-GMAIL_USER=your_email@gmail.com
-GMAIL_APP_PASSWORD=your_gmail_app_password
-
-# ── Server ───────────────────────────────────────────────────────────
+SUPABASE_URL=https://your-supabase-project.supabase.co
+SUPABASE_SERVICE_KEY=your-supabase-service-role-key
+SUPABASE_ANON_KEY=your-supabase-anon-key
+GEMINI_API_KEY=your-google-gemini-api-key
 CORS_ORIGINS=http://localhost:3000
 ```
 
-Run the backend server:
-
+Start the FastAPI application:
 ```bash
 python main.py
-# or with uvicorn directly:
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
+Access backend API documentation at **`http://localhost:8000/docs`**
 
-API will be available at **http://localhost:8000**
+---
 
 ### 4. Database Setup
 
-1. Open your Supabase project → **SQL Editor**
-2. Copy and paste the entire contents of [`backend/schema.sql`](backend/schema.sql)
-3. Execute the SQL to create all 15+ tables, indexes, and RLS policies
+1. Open your Supabase Project Dashboard -> **SQL Editor**.
+2. Copy the entire contents of [`backend/schema.sql`](backend/schema.sql).
+3. Execute the script to instantiate all 16 tables, indexes, and Row Level Security policies.
 
 ---
 
-## Environment Variables
+## Environment Configuration
 
-### Required
+### Required Variables
 
-| Variable | Description |
-|---|---|
-| `SUPABASE_URL` | Your Supabase project URL |
-| `SUPABASE_SERVICE_KEY` | Supabase service role key (backend-only, never expose to frontend) |
-| `SUPABASE_ANON_KEY` | Supabase anon/public key (frontend-safe) |
-| `GEMINI_API_KEY` | Google AI Studio API key for Gemini 2.5 Flash |
+| Variable Name | Component | Description |
+|---|---|---|
+| `SUPABASE_URL` | Backend & Frontend | Your Supabase project HTTP URL |
+| `SUPABASE_SERVICE_KEY` | Backend Only | Supabase admin service role key (Never expose to frontend) |
+| `SUPABASE_ANON_KEY` | Backend & Frontend | Supabase public anonymous key |
+| `GEMINI_API_KEY` | Backend Only | Google AI Studio API Key for Gemini 2.5 Flash |
 
-### Optional
+### Optional Variables
 
-| Variable | Description |
-|---|---|
-| `GITHUB_TOKEN` | GitHub Personal Access Token — raises API rate limits from 60 → 5000 req/hr |
-| `SERPAPI_KEY` | SerpAPI key — enables real-time job search via Google Jobs |
-| `GMAIL_USER` | Gmail address for sending weekly AI performance reports |
-| `GMAIL_APP_PASSWORD` | Gmail app password (not your regular password) |
-| `CORS_ORIGINS` | Comma-separated allowed origins (default: `http://localhost:3000`) |
-| `REDIS_URL` | Redis connection URL (default: `redis://localhost:6379/0`) |
-| `ENV` | Set to `production` for production mode |
+| Variable Name | Component | Default Value | Description |
+|---|---|---|---|
+| `GITHUB_TOKEN` | Backend | `None` | GitHub Personal Access Token (Raises rate limit from 60 to 5000 req/hr) |
+| `SERPAPI_KEY` | Backend | `None` | SerpAPI Key enabling real-time Google Jobs search |
+| `GMAIL_USER` | Backend | `None` | Sender Gmail address for weekly AI summary email reports |
+| `GMAIL_APP_PASSWORD` | Backend | `None` | Gmail App Password for SMTP authentication |
+| `CORS_ORIGINS` | Backend | `http://localhost:3000` | Comma-separated list of allowed CORS origins |
+| `REDIS_URL` | Backend | `redis://localhost:6379/0` | Connection string for Redis caching (Falls back to in-memory) |
 
 ---
 
-## API Reference
+## Design System & Frontend Aesthetics
 
-### Base URL
+The frontend interface incorporates modern design principles to provide an engaging user experience:
 
-```
-http://localhost:8000
-```
-
-All API routes are prefixed with `/api/v1/` (except `/health`, `/metrics`, and `/`).
-
-### Interactive Docs
-
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-
-### Health & Monitoring
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/` | GET | API root — version and docs link |
-| `/health` | GET | Health check with per-service status (database, Gemini, memory engine) |
-| `/metrics` | GET | Application metrics — request counts, error rates, slow requests |
-
-### Authentication
-
-All protected endpoints require a `Bearer` token from Supabase Auth in the `Authorization` header.
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/v1/auth/signup` | POST | User signup (Supabase Auth handles this client-side) |
-| `/api/v1/auth/login` | POST | User login (Supabase Auth handles this client-side) |
-| `/api/v1/auth/me` | GET | Get current authenticated user |
-
-### Analysis
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/v1/analysis/` | GET | Get current user's AI analysis |
-| `/api/v1/analysis/run` | POST | Trigger AI analysis (async with background processing) |
-| `/api/v1/analysis/job/{job_id}` | GET | Get async job status |
-| `/api/v1/analysis/jobs` | GET | Get user's job history |
-
-### Interview
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/v1/interview/generate-questions` | POST | Generate AI interview questions (cached 15 min, throttled 20 sec/user) |
-| `/api/v1/interview/evaluate` | POST | Evaluate a single answer (score 0–10 + feedback) |
-| `/api/v1/interview/complete` | POST | Complete session — updates streak, XP, rank, badges |
-| `/api/v1/interview/question-hint` | POST | Get AI coaching hint for a specific question |
-| `/api/v1/interview/sessions` | GET | Get user's interview session history |
-
-### Profile
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/v1/profile/me` | GET | Get current user's enriched profile |
-| `/api/v1/profile/save` | POST | Save/update user profile |
-| `/api/v1/profile/progress` | GET | Get profile completeness progress |
-| `/api/v1/profile/enhanced` | GET | Get enhanced profile (academic, skills, experience, goals) |
-| `/api/v1/profile/match-fit` | GET | Get match-fit score for target role |
-
-### Jobs
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/v1/jobs/recommendations` | GET | Get AI-matched job recommendations |
-| `/api/v1/jobs/search` | GET | Search jobs via SerpAPI |
-| `/api/v1/jobs/save` | POST | Save/bookmark a job |
-| `/api/v1/jobs/apply` | POST | Apply to a job (track in pipeline) |
-| `/api/v1/jobs/applications` | GET | Get user's job application pipeline |
-| `/api/v1/jobs/saved` | GET | Get user's saved jobs |
-
-### Resume & Documents
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/v1/resume/upload` | POST | Upload PDF resume (max 10MB, magic-byte validated) |
-| `/api/v1/resume/status/{user_id}` | GET | Get resume upload status |
-| `/api/v1/documents/upload-files` | POST | Upload + AI-analyze certificates (PDF/JPG/PNG, max 5MB each, 10 files) |
-| `/api/v1/documents/list` | GET | List all user documents |
-| `/api/v1/documents/{id}` | GET | Get single document |
-| `/api/v1/documents/{id}` | DELETE | Delete document |
-
-### Gamification
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/v1/streaks/{user_id}` | GET | Get user's current streak |
-| `/api/v1/streaks/update` | POST | Update streak after session completion |
-| `/api/v1/ranks/{user_id}` | GET | Get user's rank and XP |
-| `/api/v1/ranks/update` | POST | Update XP and level |
-| `/api/v1/badges/{user_id}` | GET | Get user's earned badges (paginated) |
-| `/api/v1/badges/check` | POST | Check and award badges for an event |
-
-### Challenges
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/v1/challenges/create` | POST | Create a shareable interview challenge |
-| `/api/v1/challenges/{code}` | GET | Get challenge by code |
-| `/api/v1/challenges/{code}/submit` | POST | Submit challenge answers |
-| `/api/v1/challenges/{code}/leaderboard` | GET | Get challenge leaderboard |
-| `/api/v1/weekly-challenge/current` | GET | Get current week's challenge (auto-creates if missing) |
-| `/api/v1/weekly-challenge/start` | POST | Start weekly challenge attempt |
-| `/api/v1/weekly-challenge/submit` | POST | Submit weekly challenge |
-| `/api/v1/weekly-challenge/leaderboard` | GET | Weekly challenge leaderboard |
-| `/api/v1/weekly-challenge/attempt` | GET | Check user's attempt status |
-
-### Career Intelligence
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/v1/career-brain` | GET | Get full Career Brain (job readiness, skill insights, recommendations, alerts) |
-| `/api/v1/career/evolution/{user_id}` | GET | Get career evolution profile |
-| `/api/v1/roadmap/milestone` | PATCH | Update roadmap milestone status (with 3-day time-gate) |
-
-### Email
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/v1/email/send-report` | POST | Send weekly AI performance email report |
-
-### WebSocket
-
-| Endpoint | Description |
-|---|---|
-| `/ws` | WebSocket for real-time job status, notifications, and market updates |
-
----
-
-## Design System
-
-### Color Palette
-
-| Color | Hex | Usage |
-|---|---|---|
-| Primary Blue | `#1E3A5F` | Headers, primary buttons, navbar |
-| Accent Blue | `#2E6CB8` | Links, highlights |
-| Electric Violet | `#6C3FC8` | Accents, badges, branding, primary CTA |
-| Success Green | `#22C55E` | Skills you have, positive feedback |
-| Warning Orange | `#F59E0B` | Skills to improve, streak fire |
-| Error Red | `#EF4444` | Missing skills, negative feedback |
-| Background Dark | `#0F172A` / `#001F5B` | Page backgrounds |
-
-### Typography
-
-- **Display**: `Dancing Script` (brand wordmark "Jaisuuu...")
-- **Body**: System sans-serif with Tailwind defaults
-- **Weights**: Bold/ExtraBold for headings, Medium for body
-
-### Component Patterns
-
-- **Cards**: `rounded-2xl`, `border border-white/5`, `bg-slate-900/30` with hover lift
-- **Buttons**: `rounded-xl`, `bg-primary-violet`, `shadow-lg` with hover transitions
-- **Progress bars**: Gradient fills (`from-purple-600 to-violet-400`)
-- **Animations**: Framer Motion — `fadeIn`, `staggerChildren`, `layout` animations
-
----
-
-## Testing
-
-The backend includes a comprehensive pytest test suite:
-
-```bash
-cd backend
-pytest
-```
-
-### Test Files
-
-| File | Coverage |
-|---|---|
-| `tests/test_api_endpoints.py` | All API route integration tests |
-| `tests/test_auth.py` | JWT verification and authentication |
-| `tests/test_cache.py` | Redis + in-memory cache behavior |
-| `tests/test_file_validation.py` | PDF magic-byte and size validation |
-| `tests/test_gemini_rate_limit.py` | Gemini API rate limit handling |
-| `tests/test_input_sanitization.py` | Prompt injection detection and neutralization |
-
----
-
-## Documentation
-
-| Document | Description |
-|---|---|
-| [`docs/uml_diagrams.md`](docs/uml_diagrams.md) | Architecture UML diagrams — component, sequence, and deployment views |
-| [`backend/docs/response_contract.md`](backend/docs/response_contract.md) | Standardized API response format specification |
-| [`backend/schema.sql`](backend/schema.sql) | Complete Supabase database schema with RLS policies |
-
----
-
-## Key Architectural Decisions
-
-### Why FastAPI + Next.js?
-
-FastAPI provides automatic OpenAPI docs, async/await native support, and Pydantic validation — ideal for the many AI service integrations. Next.js App Router gives file-based routing, server components, and a rich ecosystem for the interactive frontend.
-
-### Why Supabase?
-
-Supabase provides PostgreSQL with real-time subscriptions, built-in Auth (JWT), and a generous free tier — eliminating the need to manage a separate auth server or database connection pool.
-
-### Why Gemini 2.5 Flash?
-
-The free tier provides 15 RPM with no credit card required. The 6-in-1 combined analysis call (strengths + weaknesses + career paths + skill gaps + roadmap + resume score in one prompt) minimizes API calls and maximizes cost efficiency.
-
-### Why the Career Orchestrator Pattern?
-
-The frontend [`career-orchestrator.ts`](frontend/lib/career-orchestrator.ts) is a **single source of truth** for all AI decisions. It fuses progress data, evolution data, and career memory into one `CareerBrain` object. All pages (interview, progress, dashboard) consume this single object — eliminating scattered decision logic and ensuring consistent AI behavior across the entire app.
-
-### Why Async Job Processing?
-
-AI analysis can take 10–30 seconds. Rather than blocking the HTTP request, the backend creates an async job and returns a `job_id` immediately. The frontend polls for status. This also enables idempotent job creation — duplicate requests within a 5-minute window return the existing job instead of creating a new one.
+- **Tailwind CSS Styling**: Custom color palette utilizing Deep Navy (`#0F172A`), Electric Violet (`#6C3FC8`), Success Emerald (`#22C55E`), and Accent Blue (`#2E6CB8`).
+- **Glassmorphism**: Subtle translucent background layers (`bg-slate-900/30`, `backdrop-blur-md`, `border-white/5`).
+- **Smooth Animations**: Powered by `framer-motion` for page transitions, tab switches, and badge unlocking feedback.
+- **Interactive Visualizations**: Data rendering using `recharts` for progress tracking, skill gap comparisons, and radar readiness metrics.
 
 ---
 
 ## License
 
-MIT License
+This project is open-source software licensed under the **MIT License**.
