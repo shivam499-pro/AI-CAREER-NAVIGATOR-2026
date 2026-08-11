@@ -4,17 +4,11 @@
 
 **AI Career Navigator** is a production-ready, full-stack career intelligence system that ingests **verifiable, multi-source developer profiles** — GitHub repositories, LeetCode contest ratings, uploaded PDF resumes, and AI-extracted certificates — to produce data-driven career paths, skill gap analysis, personalized roadmaps, and real-time voice interview coaching.
 
----
-
-![AI Career Navigation Scene](images/Vibrant%203D%20Career%20Navigation%20Scene.png)
-
----
 
 ## 📸 Platform Interface
 
 | Platform Landing Page | AI Core Capabilities |
-| :---: | :---: |
-| ![Landing Page](images/landing%20page.png) | ![AI Platform Capabilities](images/Gemini_Generated_Image_jy2j7hjy2j7hjy2j.png) |
+| ![Landing Page](images/landing%20page.png) |
 
 ---
 
@@ -56,70 +50,9 @@ Most career platforms rely on self-reported forms susceptible to inflation and o
 
 ## System Architecture & Design Patterns
 
+![System Architecture & Design Patterns](images/System%20Architecture%20%26%20Design%20Patterns.png)
+
 The system adopts a decoupled, event-driven architecture combining a **Next.js 14 App Router** frontend with a **FastAPI** microservice backend.
-
-```mermaid
-graph TD
-    subgraph Client Layer (Next.js 14 App Router)
-        UI[User Interface & Dashboard]
-        CO[Career Orchestrator - Single Source of Truth]
-        CS[Career Safe - Null-Safe Accessors]
-        SC[Supabase Auth Client]
-    end
-
-    subgraph API Gateway & Middleware Layer (FastAPI)
-        RL[slowapi Rate Limiter]
-        CORS[CORS Middleware]
-        AUTH[Supabase JWT Verification & RBAC]
-        LOG[Structured JSON Logging]
-        MET[Metrics Collector /metrics]
-        WS[WebSocket Manager /ws]
-    end
-
-    subgraph Service & AI Core Layer
-        GS[Gemini 2.5 Flash Service - 6-in-1 Engine]
-        CBS[Career Brain Service - Aggregator]
-        CEE[Career Evolution Engine]
-        CME[Career Memory Engine]
-        JMS[Job Matching Engine - Skill Vector Overlap]
-        SA[SerpAPI Job Search Service]
-        PE[PyMuPDF Resume & Document Service]
-        GH[GitHub REST API Client]
-        LC[LeetCode GraphQL API Client]
-    end
-
-    subgraph Data & Storage Layer
-        PG[(Supabase PostgreSQL - 16 Tables + RLS)]
-        RC[(Redis Cache / In-Memory Fallback)]
-        AJ[Async Jobs Queue - analysis_jobs]
-    end
-
-    UI --> CO
-    CO --> CS
-    UI --> SC
-    CO --> AUTH
-    
-    AUTH --> CORS --> RL --> LOG --> MET
-    AUTH --> Router[FastAPI Routers /api/v1/]
-    
-    Router --> CBS
-    Router --> GS
-    Router --> JMS
-    Router --> PE
-    Router --> WS
-    
-    CBS --> CEE
-    CBS --> CME
-    GS --> RC
-    JMS --> SA
-    PE --> GS
-    
-    Router --> GH
-    Router --> LC
-    Router --> AJ
-    AJ --> PG
-    CBS --> PG
-```
 
 ### Architectural Decisions
 
