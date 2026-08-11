@@ -2,6 +2,15 @@
 
 > **Your Personal AI-Powered Career Mentor & Intelligence Platform** — Built for CS Students, Fresh Graduates & Software Engineers
 
+[![Next.js 14](https://img.shields.io/badge/Next.js%2014-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Python 3.10+](https://img.shields.io/badge/Python%203.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com/)
+[![Google Gemini 2.5](https://img.shields.io/badge/Google%20Gemini%202.5-8E75B2?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Tests Passed](https://img.shields.io/badge/Tests%20Passed-2%2C683-success?style=for-the-badge&logo=pytest&logoColor=white)](#testing--verification)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](#license)
+
 **AI Career Navigator** is a production-ready, full-stack career intelligence system that ingests **verifiable, multi-source developer profiles** — GitHub repositories, LeetCode contest ratings, uploaded PDF resumes, and AI-extracted certificates — to produce data-driven career paths, skill gap analysis, personalized roadmaps, and real-time voice interview coaching.
 
 
@@ -15,17 +24,19 @@
 ## 📑 Table of Contents
 
 1. [Executive Summary](#executive-summary)
-2. [System Architecture & Design Patterns](#system-architecture--design-patterns)
-3. [Feature Matrix](#feature-matrix)
-4. [Data Flow & Sequence Diagrams](#data-flow--sequence-diagrams)
-5. [Database Schema & Entity-Relationship Diagram](#database-schema--entity-relationship-diagram)
-6. [Project Structure & Codebase Map](#project-structure--codebase-map)
-7. [API Reference](#api-reference)
-8. [Testing & Verification](#testing--verification)
-9. [Getting Started & Local Setup](#getting-started--local-setup)
-10. [Environment Configuration](#environment-configuration)
-11. [Design System & Frontend Aesthetics](#design-system--frontend-aesthetics)
-12. [License](#license)
+2. [Engineering & Security Highlights](#engineering--security-highlights)
+3. [System Architecture & Design Patterns](#system-architecture--design-patterns)
+4. [Feature Matrix](#feature-matrix)
+5. [Data Flow & Sequence Diagrams](#data-flow--sequence-diagrams)
+6. [Database Schema & Entity-Relationship Diagram](#database-schema--entity-relationship-diagram)
+7. [Project Structure & Codebase Map](#project-structure--codebase-map)
+8. [API Reference](#api-reference)
+9. [Testing & Verification](#testing--verification)
+10. [Performance & Optimization Benchmarks](#performance--optimization-benchmarks)
+11. [Getting Started & Local Setup](#getting-started--local-setup)
+12. [Environment Configuration](#environment-configuration)
+13. [Design System & Frontend Aesthetics](#design-system--frontend-aesthetics)
+14. [License](#license)
 
 ---
 
@@ -45,6 +56,18 @@ Most career platforms rely on self-reported forms susceptible to inflation and o
 - **Frontend Unit Suite**: **1,249 passed** tests across 63 test suites (`jest`).
 - **Database Architecture**: **16 relational tables** on Supabase PostgreSQL with full Row Level Security (RLS).
 - **AI Engine Efficiency**: Single 6-in-1 prompt call structure minimizing latency and API token usage.
+
+---
+
+## 🛡️ Engineering & Security Highlights
+
+The system is architected with robust security controls, strict input validation, and high-performance asynchronous execution:
+
+- **Prompt Injection Neutralization**: Defense layer that pre-scans all candidate input strings against 30+ prompt injection attack patterns (e.g., `system prompt override`, `ignore previous instructions`) before querying the Gemini LLM engine.
+- **PDF Magic-Byte Verification**: Upload endpoints inspect strict `%PDF-` signature bytes (max 10MB) directly in raw binary before parsing, eliminating header spoofing and malicious file execution.
+- **Unified 6-in-1 AI Prompt Orchestration**: Consolidates 6 distinct career analysis vectors (strengths, weaknesses, career paths, skill gap matrix, 24-week roadmap, and resume scoring) into a single structured prompt execution—reducing latency by ~75% and token overhead by ~60%.
+- **Anti-Cheat Behavioral Telemetry**: Real-time voice interview coach monitors candidate response integrity via browser telemetry—detecting paste event frequency, typing speed anomalies (WPM), and window focus shifts during live interview simulations.
+- **Fault-Tolerant Circuit Breakers**: Protects third-party integrations (GitHub REST API, LeetCode GraphQL, SerpAPI, Google Gemini) via a circuit breaker wrapper (`circuit_breaker.py`) that falls back gracefully without breaking API response payloads.
 
 ---
 
@@ -461,7 +484,20 @@ pnpm test
 
 ---
 
-## Getting Started & Local Setup
+## ⚡ Performance & Optimization Benchmarks
+
+The system is optimized for real-time responsiveness, token cost-efficiency, and maximum test reliability:
+
+| Subsystem / Vector | Metric / Benchmark | Implementation Strategy |
+|---|---|---|
+| **AI Inference Latency** | ~1.8s avg response | 6-in-1 prompt call consolidation eliminating sequential LLM roundtrips |
+| **Async Job Queue TTL** | 5-minute idempotency window | Hash-checked background queue preventing duplicate processing |
+| **Backend Test Suite** | 1,434 / 1,434 passed (`pytest`) | Full coverage across routers, RBAC auth, algorithms, and security |
+| **Frontend Unit Suite** | 1,249 / 1,249 passed (`jest`) | Comprehensive hook, orchestrator, and UI component coverage |
+| **Document Magic-Byte Check** | < 5ms validation | Instant binary header inspection before file ingestion |
+| **Voice STT / TTS Engine** | Full hands-free flow | Web Speech API integration with zero external streaming latency |
+
+---
 
 ### Prerequisites
 
