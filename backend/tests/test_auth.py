@@ -2,6 +2,8 @@
 Tests for authentication and authorization.
 Tests JWT token creation, validation, and user authentication.
 """
+from unittest import result
+
 import pytest
 import jwt
 import subprocess
@@ -419,14 +421,21 @@ class TestJWTSecretFailFast:
         env = os.environ.copy()
         env.update(env_overrides)
         repo_root = os.path.join(os.path.dirname(__file__), "..")
-        return subprocess.run(
-            [sys.executable, "-c", "import lib.auth"],
+        result = subprocess.run(
+            [sys.executable, "-c",
+             "import os; print('SEEN:', repr(os.getenv('JWT_SECRET_KEY'))); "
+             "import lib.auth; print('IMPROTED ok')"],
             cwd=repo_root,
             env=env,
             capture_output=True,
             text=True,
             timeout=15,
         )
+        print("---- subprocess stdout ----")
+        print(result.stdout)
+        print("---- subprocess stderr ----")
+        print(result.stderr)
+        return result
 
     def test_missing_secret_refuses_to_import(self):
         # An empty string must be treated the same as "unset".
